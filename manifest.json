@@ -6,10 +6,10 @@
     "entrypoint": "app"
   },
   "python": {
-    "version": ">3.11",
+    "version": ">3.11.5",
     "package_manager": {
       "name": "pip",
-      "version": ">23.0",
+      "version": "23.2.1",
       "package_file": "requirements.txt"
     }
   },
