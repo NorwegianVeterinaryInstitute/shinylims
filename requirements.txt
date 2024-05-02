@@ -1,0 +1,5 @@
+shiny
+seaborn
+pandas
+itables
+rsconnect-python
