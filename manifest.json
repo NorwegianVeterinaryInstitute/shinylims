@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "locale": "mk_MK.UTF-8",
+  "metadata": {
+    "appmode": "python-shiny",
+    "entrypoint": "app"
+  },
+  "python": {
+    "version": "3.12.3",
+    "package_manager": {
+      "name": "pip",
+      "version": "24.0",
+      "package_file": "requirements.txt"
+    }
+  },
+  "files": {
+    "requirements.txt": {
+      "checksum": "8da70a035046b0ce81ba228f4975cf54"
+    },
+    ".gitignore": {
+      "checksum": "15b8e24e3c893c0198bc78414fa9fbca"
+    },
+    "app.py": {
+      "checksum": "472e35ce0840f4bc608fd967e7a1869e"
+    },
+    "penguins.csv": {
+      "checksum": "15d47d23d10f2f2f842439a2abdb771d"
+    },
+    "shared.py": {
+      "checksum": "9e64655dfa945c561367da98de358709"
+    }
+  }
+}
