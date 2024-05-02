@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "locale": "mk_MK.UTF-8",
+  "locale": "en_US.UTF-8",
   "metadata": {
     "appmode": "python-shiny",
     "entrypoint": "app"
   },
   "python": {
-    "version": "3.12.3",
+    "version": ">3.11",
     "package_manager": {
       "name": "pip",
-      "version": "24.0",
+      "version": ">23.0",
       "package_file": "requirements.txt"
     }
   },
