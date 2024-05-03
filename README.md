@@ -1,8 +1,8 @@
-### Shinylmis
+### Shinylims
 
-A Python Shiny app for LIMS reporting. 
+A Python Shiny app for LIMS reporting.
 
-Enviroment setup:
+Environment setup:
 
 ```
 python -m venv pyshiny-env
