@@ -3,3 +3,4 @@ seaborn
 pandas
 itables
 rsconnect-python
+pins
