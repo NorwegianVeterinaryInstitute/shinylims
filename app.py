@@ -13,7 +13,7 @@ from shinyswatch import theme, theme_picker_ui, theme_picker_server
 wgs_df['Received Date'] = pd.to_datetime(wgs_df['Received Date'])
 
 # Hardcode the column order
-desired_order = [
+wgs_desired_order = [
     'Received Date', 'Progress', 'Species','Name',  'Project Name', 'Submitter', 
     'Submitting Lab','Project Account', 'Experiment Name', 'Extraction Number', 
     'Reagent Label', 'Concentration Absorbance (ng/µl)', 'A260/280 ratio', 
@@ -25,8 +25,8 @@ desired_order = [
     ]
 
 # Reorder the columns in the DataFrame
-wgs_df = wgs_df[[col for col in desired_order if col in wgs_df.columns] + 
-        [col for col in wgs_df.columns if col not in desired_order]]
+wgs_df = wgs_df[[col for col in wgs_desired_order if col in wgs_df.columns] + 
+        [col for col in wgs_df.columns if col not in wgs_desired_order]]
 
 # Get column names from the dataframe
 column_names = wgs_df.columns.tolist()

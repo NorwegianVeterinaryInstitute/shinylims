@@ -1,33 +1,39 @@
 {
   "version": 1,
-  "locale": "en_US.UTF-8",
+  "locale": "English_United States.1252",
   "metadata": {
     "appmode": "python-shiny",
     "entrypoint": "app"
   },
   "python": {
-    "version": "3.11.5",
+    "version": "3.11.9",
     "package_manager": {
       "name": "pip",
-      "version": "23.2.1",
+      "version": "24.0",
       "package_file": "requirements.txt"
     }
   },
   "files": {
     "requirements.txt": {
-      "checksum": "8da70a035046b0ce81ba228f4975cf54"
+      "checksum": "1ec8c191258b8b05b69873f797e76019"
     },
     ".gitignore": {
-      "checksum": "15b8e24e3c893c0198bc78414fa9fbca"
+      "checksum": "6c96ff0ac9efaf927e671c50eaa636ee"
+    },
+    "README.md": {
+      "checksum": "821ab8e54317dac3660c9695fc90eedc"
     },
     "app.py": {
-      "checksum": "472e35ce0840f4bc608fd967e7a1869e"
+      "checksum": "e8f50a6b9c9c29e43eff3b02b795ec91"
+    },
+    "debug.py": {
+      "checksum": "69ad5f5c0daba7cd220a43dd0adc874f"
     },
     "penguins.csv": {
-      "checksum": "15d47d23d10f2f2f842439a2abdb771d"
+      "checksum": "6844ce3439c0c20c2c05a00368e8c240"
     },
     "shared.py": {
-      "checksum": "9e64655dfa945c561367da98de358709"
+      "checksum": "10f3bb08ff4037953a6bef01cae086dc"
     }
   }
 }
