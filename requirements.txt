@@ -4,6 +4,5 @@ pandas
 itables
 rsconnect-python
 pins
-fastapi==0.108.0
 faicons
 shinyswatch
