@@ -12,6 +12,22 @@ from shinyswatch import theme, theme_picker_ui, theme_picker_server
 # Ensure 'Received Date' is in datetime format
 df['Received Date'] = pd.to_datetime(df['Received Date'])
 
+# Hardcode the column order
+desired_order = [
+    'Received Date', 'Progress', 'Species','Name',  'Project Name', 'Submitter', 
+    'Submitting Lab','Project Account', 'Experiment Name', 'Extraction Number', 
+    'Reagent Label', 'Concentration Absorbance (ng/µl)', 'A260/280 ratio', 
+    'A260/230 ratio', 'Concentration Fluorescence (ng/µl)', 'Storage (Box)', 
+    'Storage (Well)', 'Billing Description', 'Price', 'Invoice ID', 'Sample Type', 
+    'nd_limsid', 'qubit_limsid', 'prep_limsid', 'seq_limsid', 'billed_limsid', 
+    'Increased Pooling (%)', 
+    'Gram Stain', 'LIMSID', 'Project LIMSID' 
+    ]
+
+# Reorder the columns in the DataFrame
+df = df[[col for col in desired_order if col in df.columns] + 
+        [col for col in df.columns if col not in desired_order]]
+
 # Get column names from the dataframe
 column_names = df.columns.tolist()
 
@@ -21,7 +37,7 @@ wgs_samples_page = ui.page_fluid(
         ui.accordion(
             ui.accordion_panel(
                 ui.output_text("filters_title"),  # Filter icon
-                ui.row(ui.column(4,
+                ui.row(ui.column(3,
                     ui.input_date_range(
                         id="date_range", 
                         label="Received Date Range",
@@ -32,14 +48,21 @@ wgs_samples_page = ui.page_fluid(
                         id="reset_date", 
                         label="Reset Date Filter",
                     ),),
-                    ui.column(4,
+                    ui.column(3,
+                    ui.input_selectize(
+                        id="filter_progress", 
+                        label="Progress", 
+                        choices=[],  # Will be populated in the server, 
+                        multiple=True, 
+                    ),),
+                    ui.column(3,
                     ui.input_selectize(
                         id="filter_project_account", 
                         label="Project Account", 
                         choices=[],  # Will be populated in the server, 
                         multiple=True, 
                     ),),
-                    ui.column(4,   
+                    ui.column(3,   
                     ui.input_selectize(
                         id="filter_experiment_name", 
                         label="Experiment Name", 
@@ -111,7 +134,7 @@ def server(input, output, session):
 
     # Define a reactive value to store the filtered dataframe
     filtered_data = reactive.Value(df)
-    
+
     @reactive.Effect
     def update_project_account_choices():
         unique_project_accounts = sorted(df['Project Account'].unique().tolist())
@@ -121,6 +144,11 @@ def server(input, output, session):
     def update_experiment_name_choices():
         unique_experiment_names = df['Experiment Name'].unique().tolist()
         ui.update_selectize("filter_experiment_name", choices=unique_experiment_names)
+    
+    @reactive.Effect
+    def update_progress_choices():
+        unique_progress = df['Progress'].unique().tolist()
+        ui.update_selectize("filter_progress", choices=unique_progress)
 
     def get_selected_columns(preset, custom_columns, all_columns):
         if preset == "All":
@@ -150,6 +178,11 @@ def server(input, output, session):
         if selected_experiment_names:
             filtered_df = filtered_df[filtered_df['Experiment Name'].isin(selected_experiment_names)]
 
+        #Progress filtering
+        selected_progress = input.filter_progress()
+        if selected_progress:
+            filtered_df = filtered_df[filtered_df['Progress'].isin(selected_progress)]
+
         selected_columns = get_selected_columns(input.presets(), list(input.fields_to_display()), column_names)
 
         dat = filtered_df.reset_index(drop=True)
@@ -167,6 +200,7 @@ def server(input, output, session):
                           scrollY=True,
                           maxBytes=0, 
                           autoWidth=True,
+                          keys= True,
                           buttons=["pageLength", 
                                    "copyHtml5",
                                   {"extend": "csvHtml5", "title": "WGS Sample Data"},
