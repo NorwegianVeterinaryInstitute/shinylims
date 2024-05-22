@@ -1,5 +1,5 @@
 import seaborn as sns
-from shared import df, date_created
+from shared import wgs_df, wgs_date_created
 from shiny import App, render, ui, req, reactive
 from itables.shiny import DT
 import pandas as pd
@@ -10,7 +10,7 @@ from faicons import icon_svg
 from shinyswatch import theme, theme_picker_ui, theme_picker_server
 
 # Ensure 'Received Date' is in datetime format
-df['Received Date'] = pd.to_datetime(df['Received Date'])
+wgs_df['Received Date'] = pd.to_datetime(wgs_df['Received Date'])
 
 # Hardcode the column order
 desired_order = [
@@ -25,11 +25,11 @@ desired_order = [
     ]
 
 # Reorder the columns in the DataFrame
-df = df[[col for col in desired_order if col in df.columns] + 
-        [col for col in df.columns if col not in desired_order]]
+wgs_df = wgs_df[[col for col in desired_order if col in wgs_df.columns] + 
+        [col for col in wgs_df.columns if col not in desired_order]]
 
 # Get column names from the dataframe
-column_names = df.columns.tolist()
+column_names = wgs_df.columns.tolist()
 
 # The contents of the WGS samples page
 wgs_samples_page = ui.page_fluid(
@@ -41,7 +41,7 @@ wgs_samples_page = ui.page_fluid(
                     ui.input_date_range(
                         id="date_range", 
                         label="Received Date Range",
-                        start=pd.to_datetime(df['Received Date']).min().date(),
+                        start=pd.to_datetime(wgs_df['Received Date']).min().date(),
                         end=datetime.date.today(),
                     ),
                     ui.input_action_button(
@@ -133,21 +133,21 @@ app_ui = ui.page_navbar(
 def server(input, output, session):
 
     # Define a reactive value to store the filtered dataframe
-    filtered_data = reactive.Value(df)
+    filtered_data = reactive.Value(wgs_df)
 
     @reactive.Effect
     def update_project_account_choices():
-        unique_project_accounts = sorted(df['Project Account'].unique().tolist())
+        unique_project_accounts = sorted(wgs_df['Project Account'].unique().tolist())
         ui.update_selectize("filter_project_account", choices=unique_project_accounts)
 
     @reactive.Effect
     def update_experiment_name_choices():
-        unique_experiment_names = df['Experiment Name'].unique().tolist()
+        unique_experiment_names = wgs_df['Experiment Name'].unique().tolist()
         ui.update_selectize("filter_experiment_name", choices=unique_experiment_names)
     
     @reactive.Effect
     def update_progress_choices():
-        unique_progress = df['Progress'].unique().tolist()
+        unique_progress = wgs_df['Progress'].unique().tolist()
         ui.update_selectize("filter_progress", choices=unique_progress)
 
     def get_selected_columns(preset, custom_columns, all_columns):
@@ -166,7 +166,7 @@ def server(input, output, session):
 
         # Date filtering
         start_date, end_date = input.date_range()
-        filtered_df = df[(df['Received Date'] >= pd.to_datetime(start_date)) & (df['Received Date'] <= pd.to_datetime(end_date))]
+        filtered_df = wgs_df[(wgs_df['Received Date'] >= pd.to_datetime(start_date)) & (wgs_df['Received Date'] <= pd.to_datetime(end_date))]
 
         # Project Account filtering
         selected_project_accounts = input.filter_project_account()
@@ -250,7 +250,7 @@ def server(input, output, session):
     def reset_date_range():
         ui.update_date_range(
             "date_range",
-            start=pd.to_datetime(df['Received Date']).min().date(),
+            start=pd.to_datetime(wgs_df['Received Date']).min().date(),
             end=datetime.date.today()
         )
 
@@ -269,17 +269,20 @@ def server(input, output, session):
         start_date, end_date = input.date_range()
         project_account = input.filter_project_account()
         experiment_name = input.filter_experiment_name()
-        
+        progress = input.filter_progress()
+
         num_filters = 0
-        if start_date != pd.to_datetime(df['Received Date']).min().date() or end_date != datetime.date.today():
+        if start_date != pd.to_datetime(wgs_df['Received Date']).min().date() or end_date != datetime.date.today():
             num_filters += 1
         if project_account:
             num_filters += 1
         if experiment_name:
             num_filters += 1
-        
+        if progress:
+            num_filters += 1
+
         # Calculate the number of entries filtered out
-        total_entries = len(df)
+        total_entries = len(wgs_df)
         filtered_entries = len(filtered_data())
         filtered_out = total_entries - filtered_entries
         
@@ -298,7 +301,7 @@ def server(input, output, session):
     @render.text
     def metadata_info():
         # Convert ISO format to datetime object
-        iso_date = datetime.datetime.fromisoformat(date_created)
+        iso_date = datetime.datetime.fromisoformat(wgs_date_created)
     
         # Define the CEST/CET time zone
         cet = pytz.timezone('Europe/Berlin')  # CEST/CET time zone
@@ -323,39 +326,5 @@ def server(input, output, session):
 
         return ui.p(f"Last update from Clarity: {human_readable_date}")
     
-    @render.text
-    def header_text():
-        # Convert ISO format to datetime object
-        iso_date = datetime.datetime.fromisoformat(date_created)
-    
-        # Define the CEST/CET time zone
-        cet = pytz.timezone('Europe/Berlin')  # CEST/CET time zone
-
-        # Convert the ISO date to CEST/CET
-        if iso_date.tzinfo is None:
-            # If iso_date is naive (no tzinfo), assume it's in GMT and localize it
-            gmt = pytz.timezone('GMT')
-            gmt_date = gmt.localize(iso_date)
-        else:
-            # If iso_date is already timezone-aware, assume it's in GMT
-            gmt_date = iso_date
-    
-        # Convert GMT date to CEST/CET
-        cet_date = gmt_date.astimezone(cet)
-
-        # Format the datetime object into a human-readable string
-        human_readable_date = cet_date.strftime("%Y-%m-%d (kl %H:%M:%S %Z)")
-
-        # Access the filtered dataframe from the reactive value
-        current_filtered_df = filtered_data()
-
-        return ui.div(
-            ui.span("WGS Samples", class_='fw-bold fs-5'),
-            ui.span(f"   updated: {human_readable_date}"), 
-            #ui.HTML("<br>"),
-            #ui.p(f"Samples total: {len(df)}, "),
-            #ui.p(f"Filtered samples total: {len(current_filtered_df)}",)
-            
-        )
 
 app = App(app_ui, server)
