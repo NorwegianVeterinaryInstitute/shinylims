@@ -1,5 +1,5 @@
 import seaborn as sns
-#from shared import wgs_df, wgs_date_created
+from shared import wgs_df, wgs_date_created
 from shiny import App, render, ui, req, reactive
 from itables.shiny import DT
 import pandas as pd
@@ -8,7 +8,28 @@ import datetime
 import pytz
 from faicons import icon_svg
 from shinyswatch import theme, theme_picker_ui, theme_picker_server
-from pins import board_connect
+
+# Ensure 'Received Date' is in datetime format
+wgs_df['Received Date'] = pd.to_datetime(wgs_df['Received Date'])
+
+# Hardcode the column order
+wgs_desired_order = [
+    'Received Date', 'Progress', 'Species','Name',  'Project Name', 'Submitter', 
+    'Submitting Lab','Project Account', 'Experiment Name', 'Extraction Number', 
+    'Reagent Label', 'Concentration Absorbance (ng/µl)', 'A260/280 ratio', 
+    'A260/230 ratio', 'Concentration Fluorescence (ng/µl)', 'Storage (Box)', 
+    'Storage (Well)', 'Billing Description', 'Price', 'Invoice ID', 'Sample Type', 
+    'nd_limsid', 'qubit_limsid', 'prep_limsid', 'seq_limsid', 'billed_limsid', 
+    'Increased Pooling (%)', 
+    'Gram Stain', 'LIMSID', 'Project LIMSID' 
+    ]
+
+# Reorder the columns in the DataFrame
+wgs_df = wgs_df[[col for col in wgs_desired_order if col in wgs_df.columns] + 
+        [col for col in wgs_df.columns if col not in wgs_desired_order]]
+
+# Get column names from the dataframe
+column_names = wgs_df.columns.tolist()
 
 # The contents of the WGS samples page
 wgs_samples_page = ui.page_fluid(
@@ -110,33 +131,6 @@ app_ui = ui.page_navbar(
 
 # Server function
 def server(input, output, session):
-    board = board_connect()
-    wgs_df = board.pin_read("vi2172/wgs_samples_limsshiny")
-    meta = board.pin_meta("vi2172/wgs_samples_limsshiny")
-    wgs_date_created = meta.created
-    # Ensure 'Received Date' is in datetime format
-    wgs_df['Received Date'] = pd.to_datetime(wgs_df['Received Date'])
-
-    # Hardcode the column order
-    wgs_desired_order = [
-    'Received Date', 'Progress', 'Species','Name',  'Project Name', 'Submitter', 
-    'Submitting Lab','Project Account', 'Experiment Name', 'Extraction Number', 
-    'Reagent Label', 'Concentration Absorbance (ng/µl)', 'A260/280 ratio', 
-    'A260/230 ratio', 'Concentration Fluorescence (ng/µl)', 'Storage (Box)', 
-    'Storage (Well)', 'Billing Description', 'Price', 'Invoice ID', 'Sample Type', 
-    'nd_limsid', 'qubit_limsid', 'prep_limsid', 'seq_limsid', 'billed_limsid', 
-    'Increased Pooling (%)', 
-    'Gram Stain', 'LIMSID', 'Project LIMSID' 
-    ]
-
-    # Reorder the columns in the DataFrame
-    wgs_df = wgs_df[[col for col in wgs_desired_order if col in wgs_df.columns] + [col for col in wgs_df.columns if col not in wgs_desired_order]]
-   
-    # Get column names from the dataframe
-    column_names = wgs_df.columns.tolist()
-
-
-
 
     # Define a reactive value to store the filtered dataframe
     filtered_data = reactive.Value(wgs_df)
