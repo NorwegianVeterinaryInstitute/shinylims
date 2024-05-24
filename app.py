@@ -10,9 +10,6 @@ from faicons import icon_svg
 from shinyswatch import theme, theme_picker_ui, theme_picker_server
 from pins import board_connect
 
-# Get column names from the dataframe
-column_names = wgs_df.columns.tolist()
-
 # The contents of the WGS samples page
 wgs_samples_page = ui.page_fluid(
     ui.div(
@@ -134,6 +131,11 @@ def server(input, output, session):
 
     # Reorder the columns in the DataFrame
     wgs_df = wgs_df[[col for col in wgs_desired_order if col in wgs_df.columns] + [col for col in wgs_df.columns if col not in wgs_desired_order]]
+   
+    # Get column names from the dataframe
+    column_names = wgs_df.columns.tolist()
+
+
 
 
     # Define a reactive value to store the filtered dataframe
