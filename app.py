@@ -113,16 +113,15 @@ app_ui = ui.page_navbar(
 
 # Server function
 def server(input, output, session):
-  board = board_connect()
+    board = board_connect()
+    wgs_df = board.pin_read("vi2172/wgs_samples_limsshiny")
+    meta = board.pin_meta("vi2172/wgs_samples_limsshiny")
+    wgs_date_created = meta.created
+    # Ensure 'Received Date' is in datetime format
+    wgs_df['Received Date'] = pd.to_datetime(wgs_df['Received Date'])
 
-   wgs_df = board.pin_read("vi2172/wgs_samples_limsshiny")
-   meta = board.pin_meta("vi2172/wgs_samples_limsshiny")
-   wgs_date_created = meta.created
-   # Ensure 'Received Date' is in datetime format
-   wgs_df['Received Date'] = pd.to_datetime(wgs_df['Received Date'])
-
-   # Hardcode the column order
-   wgs_desired_order = [
+    # Hardcode the column order
+    wgs_desired_order = [
     'Received Date', 'Progress', 'Species','Name',  'Project Name', 'Submitter', 
     'Submitting Lab','Project Account', 'Experiment Name', 'Extraction Number', 
     'Reagent Label', 'Concentration Absorbance (ng/µl)', 'A260/280 ratio', 
