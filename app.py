@@ -59,41 +59,56 @@ def server(input, output, session):
     '''
 
     # Fetch initial data
-    projects_df, project_date_created = fetch_pinned_data("vi2172/projects_limsshiny")
-    wgs_df, wgs_date_created = fetch_pinned_data("vi2172/wgs_samples_limsshiny")
-    prepared_df, prepared_date_created = fetch_pinned_data("vi2172/wgs_prepared_limsshiny")
-    
-    # Initialize reactive values with the initial data
-    projects_df = reactive.Value(projects_df)
-    wgs_df = reactive.Value(wgs_df)
-    prepared_df = reactive.Value(prepared_df)
+    with ui.Progress (min=1, max=10) as p:
+        p.set(message="Loading datasets from pins...")
+        
+        projects_df, project_date_created = fetch_pinned_data("vi2172/projects_limsshiny")
+        p.set(3, message="Projects data fetched")
+        wgs_df, wgs_date_created = fetch_pinned_data("vi2172/wgs_samples_limsshiny")
+        p.set(6, message="WGS samples data fetched")
+        prepared_df, prepared_date_created = fetch_pinned_data("vi2172/wgs_prepared_limsshiny")
+        p.set(8, message="Prepared data fetched")
 
-    projects_df_created = reactive.Value(project_date_created)
-    wgs_date_created = reactive.Value(wgs_date_created)
-    prepared_date_created = reactive.Value(prepared_date_created)
-
+        # Initialize reactive values with the initial data
+        projects_df = reactive.Value(projects_df)
+        wgs_df = reactive.Value(wgs_df)
+        prepared_df = reactive.Value(prepared_df)
+        
+        p.set(9, message="Reactive dataframe values established")
+        projects_df_created = reactive.Value(project_date_created)
+        wgs_date_created = reactive.Value(wgs_date_created)
+        prepared_date_created = reactive.Value(prepared_date_created)
+        
+        p.set(10, message="Datasets loaded successfully")
     
     # Define a function to update the reactive values
     def update_pinned_data():
-        updated_projects_df, updated_project_date_created = fetch_pinned_data("vi2172/projects_limsshiny")
-        updated_wgs_df, updated_wgs_date_created = fetch_pinned_data("vi2172/wgs_samples_limsshiny")
-        updated_prepared_df, updated_prepared_created = fetch_pinned_data("vi2172/wgs_prepared_limsshiny")
+        with ui.Progress (min=1, max=6) as p:
+            p.set(message="Loading updated datasets from pins...")
 
-        # Update reactive values
-        projects_df.set(updated_projects_df)
-        wgs_df.set(updated_wgs_df)
-        prepared_df.set(updated_prepared_df)
+            updated_projects_df, updated_project_date_created = fetch_pinned_data("vi2172/projects_limsshiny")
+            p.set(3, message="Projects data fetched")
+            updated_wgs_df, updated_wgs_date_created = fetch_pinned_data("vi2172/wgs_samples_limsshiny")
+            p.set(6, message="WGS samples data fetched")
+            updated_prepared_df, updated_prepared_created = fetch_pinned_data("vi2172/wgs_prepared_limsshiny")
+            p.set(8, message="Prepared data fetched")
 
-        projects_df_created.set(updated_project_date_created)
-        wgs_date_created.set(updated_wgs_date_created)
-        prepared_date_created.set(updated_prepared_created)
+            # Update reactive values
+            projects_df.set(updated_projects_df)
+            wgs_df.set(updated_wgs_df)
+            prepared_df.set(updated_prepared_df)
+            p.set(9, message="Reactive dataframe values updated")
+
+            projects_df_created.set(updated_project_date_created)
+            wgs_date_created.set(updated_wgs_date_created)
+            prepared_date_created.set(updated_prepared_created)
+            p.set(10, message="Datasets updated successfully")
 
     # Define an effect to handle the update button click event
     @reactive.Effect
     @reactive.event(input.update_button)
     def on_update_button_click():
         update_pinned_data()
-        ui.notification_show(ui.HTML(f"<strong>Data frames successfully updated from latest pins<strong>"))
 
     @render.text
     def update_tooltip_output():
@@ -124,6 +139,7 @@ def server(input, output, session):
         setup_wgs_samples_page(input, output, session, wgs_df.get(), wgs_date_created.get())
         setup_prepared_samples_page(input, output, session, prepared_df.get(), prepared_date_created.get())
         return ui.TagList()  # Return an empty UI element as setup_wgs_samples_page handles rendering
+    
 
 
 ###########

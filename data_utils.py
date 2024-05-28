@@ -1,8 +1,10 @@
-# data_fetcher.py
 import pandas as pd
 from pins import board_connect
+from shiny import ui
+
 
 def fetch_pinned_data(pin_name):
+    
     board = board_connect()
     df = board.pin_read(pin_name)
     if 'Open Date' in df.columns:
