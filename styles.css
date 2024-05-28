@@ -1,0 +1,9 @@
+.shiny-notification {
+    height: 100px;
+    width: 800px;
+    position:fixed;
+    top: calc(50% - 50px);
+    left: calc(50% - 400px);
+    font-size: 1.4rem; 
+  }
+ 

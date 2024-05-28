@@ -52,9 +52,11 @@ projects_page = ui.page_fluid(
                 value="column_selection_projects",
                 icon=icon_svg("table-columns")
             ),
+            class_="d-flex flex-column bd-highlight mb-3 mt-3",
             open = False,
             multiple=False
         ),
+        class_="d-flex flex-column bd-highlight mb-3"
     ),
     
     ui.output_ui("data_projects")
@@ -132,9 +134,11 @@ wgs_samples_page = ui.page_fluid(
                 value="column_selection",
                 icon=icon_svg("table-columns")
             ),
+            class_="d-flex flex-column bd-highlight mb-3 mt-3",
             open = False,
             multiple=False
         ),
+        class_="d-flex flex-column bd-highlight mb-3"
     ),
 
     ui.output_ui("data_wgs")
@@ -204,7 +208,7 @@ prepared_samples_page = ui.page_fluid(
                 value="column_selection_prepared",  # Provide a unique value
                 icon=icon_svg("table-columns")
             ),
-            class_="d-flex-inline bd-highlight mb-3", 
+            class_="d-flex-inline bd-highlight mb-3 mt-3", 
             open = False,
             multiple=False
         ),

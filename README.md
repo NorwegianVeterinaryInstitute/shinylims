@@ -18,3 +18,9 @@ Runs locally with:
 ```
 shiny run app.py
 ```
+
+Remember to update the manifest before making commits
+
+```
+rsconnect write-manifest shiny . --overwrite
+```

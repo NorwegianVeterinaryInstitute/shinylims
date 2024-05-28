@@ -24,6 +24,9 @@ app_ui = ui.page_navbar(
     # Select bootstrap theme
     theme.cerulean(),
 
+    # Include the custom CSS file
+    ui.head_content(ui.include_css("styles.css")),
+    
     # Push the navbar items to the right
     ui.nav_spacer(),  
 
@@ -35,7 +38,7 @@ app_ui = ui.page_navbar(
     ui.nav_panel("WGS Samples", wgs_samples_page),
     ui.nav_panel("Prepared Samples", prepared_samples_page), 
     ui.nav_panel("Sequencing Runs", "Sequencing Run dataframe goes here"),
-    ui.nav_control(ui.tooltip(ui.input_action_button("update_button", "Update Data"), ui.output_ui("update_tooltip_output"), placement="right", id="update_tooltip" )), 
+    ui.nav_control(ui.tooltip(ui.input_action_button("update_button", "Update Data", class_="btn-success"), ui.output_ui("update_tooltip_output"), placement="right", id="update_tooltip" )), 
     
     # Title
     title=ui.tooltip(ui.span("Clarity LIMS Shiny App   ",icon_svg("circle-info")) ,ui.HTML("App for viewing status of projects and samples submitted for NGS through Clarity LIMS.<br><br> Automatic data transfer from Clarity every 2nd hour.<br><br> 'Update Data' button will collect latest transferred data"),placement="right",id="title_tooltip")

@@ -24,13 +24,16 @@
       "checksum": "821ab8e54317dac3660c9695fc90eedc"
     },
     "app.py": {
-      "checksum": "a43b563b9f9f098333de54bfe4d81e71"
+      "checksum": "56b67256c7d522ddb53e064e85b7a670"
     },
     "data_utils.py": {
       "checksum": "8982d673eb9e66c6bdc11e6f57824de6"
     },
+    "styles.css": {
+      "checksum": "d31861ca745fbaae0040760e33a95c2e"
+    },
     "ui_pages.py": {
-      "checksum": "ee80dd12b48cdeea05949e80ef11a209"
+      "checksum": "aa06e3ff1eeae492a72f22e100d764c8"
     },
     "ui_server.py": {
       "checksum": "4fde70e9179674de1492da396e753a88"
