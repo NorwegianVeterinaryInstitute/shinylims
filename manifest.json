@@ -21,7 +21,7 @@
       "checksum": "6c96ff0ac9efaf927e671c50eaa636ee"
     },
     "README.md": {
-      "checksum": "821ab8e54317dac3660c9695fc90eedc"
+      "checksum": "e43540e228defc4ae6e2478fa92a24e8"
     },
     "app.py": {
       "checksum": "56b67256c7d522ddb53e064e85b7a670"
@@ -36,7 +36,7 @@
       "checksum": "aa06e3ff1eeae492a72f22e100d764c8"
     },
     "ui_server.py": {
-      "checksum": "4fde70e9179674de1492da396e753a88"
+      "checksum": "6bed2c64651a800c93287f111b46b036"
     }
   }
 }
