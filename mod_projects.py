@@ -1,4 +1,5 @@
 from shiny import module, ui, render
+from faicons import icon_svg
 
 
 @module.ui
@@ -85,7 +86,7 @@ def modServer(input, output, session):
         dat = filtered_df.reset_index(drop=True)
 
         # Store selected columns in variable and set the filtered df in reactive value
-        selected_columns = list(input.fields_to_display_projects())
+        selected_colmns = list(input.fields_to_display_projects())
         projects_filtered_data.set(filtered_df)
 
         # Return HTML tag with DT table element
