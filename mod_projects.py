@@ -1,5 +1,6 @@
 from shiny import module, ui, render
 from faicons import icon_svg
+from data_utils import fetch_pinned_data
 
 
 @module.ui
