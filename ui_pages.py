@@ -7,7 +7,8 @@ from faicons import icon_svg
 
 
 # Contents of the Projects page
-projects_page = ui.page_fluid(
+projects_page = ui.navset_card_underline(
+    ui.nav_panel("Table",
     ui.div(
         ui.accordion(
             ui.accordion_panel(
@@ -60,11 +61,13 @@ projects_page = ui.page_fluid(
     ),
     
     ui.output_ui("data_projects")
-)
+),
+ui.nav_panel("Info","Info page will be placed here"))
 
 
 # Contents of the WGS samples page
-wgs_samples_page = ui.page_fluid(
+wgs_samples_page = ui.navset_card_underline(
+    ui.nav_panel("Table",
     ui.div(
         ui.accordion(
             ui.accordion_panel(
@@ -143,11 +146,13 @@ wgs_samples_page = ui.page_fluid(
 
     ui.output_ui("data_wgs")
 
-)
+),
+ui.nav_panel("Info",ui.output_ui("wgs_info")))
 
 
 # Contents of the Prepared samples page
-prepared_samples_page = ui.page_fluid(
+prepared_samples_page = ui.navset_card_underline(
+    ui.nav_panel("Table",
     ui.div(
         ui.accordion(
             ui.accordion_panel(
@@ -215,5 +220,74 @@ prepared_samples_page = ui.page_fluid(
         class_="d-flex flex-column bd-highlight mb-3"
     ),
     
-    ui.output_ui("data_prepared")
-)
+    ui.output_ui("data_prepared"),
+),
+ui.nav_panel("Info", "Info page will be placed here"))
+
+# Contents of the Sequencing page
+seq_page = ui.navset_card_underline(
+    ui.nav_panel("Table",
+    ui.div(
+        ui.accordion(
+            ui.accordion_panel(
+                ui.output_text("filters_title_seq"),  # Filter icon
+                ui.row(ui.column(3,
+                    ui.input_date_range(
+                        id="date_range_seq", 
+                        label="Date Range",
+                        start=None, # Will be populated by the server function,
+                        end=None, # Will be populated by the server function,
+                    ),
+                    ui.input_action_button(
+                        id="reset_date_seq", 
+                        label="Reset Date Filter",
+                    ),),
+                    ui.column(3,
+                    ui.input_selectize(
+                        id="filter_cassette_seq", 
+                        label="Casette Type", 
+                        choices=[],  # Will be populated in the server, 
+                        multiple=True, 
+                    ),),
+                    ui.column(3,
+                    ui.input_selectize(
+                        id="filter_reads_seq", 
+                        label="Read Length", 
+                        choices=[],  # Will be populated in the server, 
+                        multiple=True, 
+                    ),),),
+                    value="filters", icon=icon_svg("filter"),
+                    
+            ),
+            ui.accordion_panel(
+                ui.output_text("column_selection_title_seq"),  # Dynamic title for Column Selection
+                ui.div(
+                    ui.div(
+                        ui.div(
+                            ui.input_checkbox_group(
+                                id="fields_to_display_seq",
+                                inline=False,
+                                label=ui.div("Field Selection", class_="fw-bold"),
+                                choices=[], # Will be populated by the server function
+                                selected=[] # Will be populated by the server function
+                            ),
+                            style="flex: 2; margin-right: 20px;"
+                        ),
+                        style="display: flex; align-items: flex-start;"
+                    )
+                ),
+                open=False,
+                value="column_selection_seq",  # Provide a unique value
+                icon=icon_svg("table-columns")
+            ),
+            class_="d-flex-inline bd-highlight mb-3 mt-3", 
+            open = False,
+            multiple=False
+        ),
+        class_="d-flex flex-column bd-highlight mb-3"
+    ),
+    ui.p("TEST"),
+    ui.output_ui("data_seq"),
+),
+ui.nav_panel("Plots", ui.p("Plots will be displayed here")),
+ui.nav_panel("Info", "Info page will be placed here"))
