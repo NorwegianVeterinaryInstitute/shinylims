@@ -46,7 +46,7 @@ app_ui = ui.page_fluid(
         title=ui.tooltip(ui.span("Clarity LIMS Shiny App   ", icon_svg("circle-info")), ui.HTML(
             "App for viewing status of projects and samples submitted for NGS through Clarity LIMS.<br><br> Automatic data transfer from Clarity every 2nd hour.<br><br> 'Update Data' button will collect latest transferred data"), placement="right", id="title_tooltip")
     ),
-    modUI=(id='mod_projects')
+    modUI(id='mod_projects')
 )
 
 
@@ -55,7 +55,7 @@ app_ui = ui.page_fluid(
 ###################
 
 def server(input, output, session):
-    modServer = (id='mod_projects')
+    modServer(id='mod_projects')
 
     ###########
     # RUN APP #
