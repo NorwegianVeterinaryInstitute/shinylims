@@ -137,10 +137,9 @@ wgs_samples_page = ui.navset_tab(
             open = False,
             multiple=False
         ),
-        class_="mb-3"
+        class_="d-flex flex-column mb-3"
     ),
-
-    ui.output_ui("data_wgs")
+    ui.output_ui("data_wgs"),
 
 ),
 ui.nav_panel("Info",ui.card(ui.output_ui("wgs_info"))))

@@ -25,7 +25,7 @@ def setup_projects_page(input, output, session, projects_df, project_date_create
         # Filter data using the "show projects with comment only"-button
         project_comment_filter = input.project_comment_filter()
         if project_comment_filter == True:
-            filtered_df = filtered_df[filtered_df['Comment'].notna()]
+            filtered_df = filtered_df[filtered_df['Comment'] != '']
 
         # Pandas will insert indexing, which we dont want
         dat = filtered_df.reset_index(drop=True)
@@ -35,7 +35,10 @@ def setup_projects_page(input, output, session, projects_df, project_date_create
         projects_filtered_data.set(filtered_df)
         
         #get index for the comment section (used for css styling in DT below)
-        comment_index = dat[selected_columns].columns.get_loc('Comment')
+        if 'Comment' in dat[selected_columns].columns:
+            comment_index = dat[selected_columns].columns.get_loc('Comment')
+        else:
+            comment_index = "Dummy"
 
         # Return HTML tag with DT table element
         return ui.HTML(DT(dat[selected_columns], 
@@ -45,9 +48,9 @@ def setup_projects_page(input, output, session, projects_df, project_date_create
                           classes="compact hover order-column cell-border", 
                           #scrollY=True,
                           scrollY = "750px",
-                          scrollCollapse=True,
+                          #scrollCollapse=True,
                           paging=False,
-                          scrollX = True,
+                          #scrollX = True,
                           maxBytes=0, 
                           autoWidth=True,
                           keys= True,
@@ -183,23 +186,25 @@ def setup_wgs_samples_page(input, output, session, wgs_df, wgs_date_created):
                           layout={"topEnd": "search"}, 
                           column_filters="footer", 
                           search={"smart": True},
-                          #lengthMenu=[[20, 30, 50, 100, 200, -1], [20, 30, 50, 100, 200, "All"]],
-                          classes="nowrap compact hover order-column cell-border", #"display nowrap compact order-column cell-border header-border",
-                          #scrollY=True,
+                          classes="no-wrap compact hover order-column cell-border", 
                           scrollY = "750px",
-                          scrollX=True,
-                          scrollCollapse=True,
+                          #scrollX=True,
+                          #scrollCollapse=True,
                           paging=False,
+                          autoWidth = True,
                           maxBytes=0, 
-                          autoWidth=True,
                           keys= True,
                           buttons=[#"pageLength", 
                                    "copyHtml5",
                                   {"extend": "csvHtml5", "title": "WGS Sample Data"},
                                   {"extend": "excelHtml5", "title": "WGS Sample Data"},],
                           order=[[0, "desc"]],
-                          columnDefs=[{"className": "dt-center", "width": "200px", "targets": "_all"}],))
-    
+                          columnDefs=[
+                          {"className": "dt-center", "targets": "_all"},
+                          {"width": "200px", "targets": "_all"}]  # Set a default width for all columns
+                          )) 
+
+
     # Define default column checkbox selection
     @reactive.Effect
     def set_default_fields_to_display():
@@ -367,17 +372,14 @@ def setup_prepared_samples_page(input, output, session, prepared_df, prepared_da
                           layout={"topEnd": "search"}, 
                           column_filters="footer", 
                           search={"smart": True},
-                          #lengthMenu=[[20, 30, 50, 100, 200, -1], [20, 30, 50, 100, 200, "All"]],
                           classes="nowrap compact hover order-column cell-border", 
-                          #scrollY=True,
                           scrollY = "750px",
-                          scrollCollapse=True,
+                          #scrollCollapse=True,
                           paging=False,
                           maxBytes=0, 
                           autoWidth=True,
                           keys= True,
-                          buttons=[#"pageLength", 
-                                   "copyHtml5",
+                          buttons=["copyHtml5",
                                   {"extend": "csvHtml5", "title": "WGS Sample Data"},
                                   {"extend": "excelHtml5", "title": "WGS Sample Data"},],
                           order=[[0, "desc"]],
@@ -485,16 +487,17 @@ def setup_seq_run_page(input, output, session, seq_df, seq_date_created):
         dat = filtered_df.reset_index(drop=True)
         seq_filtered_data.set(filtered_df)
         
-        comment_index = dat[selected_columns].columns.get_loc('Comment')
-
+        if 'Comment' in dat[selected_columns].columns:
+            comment_index = dat[selected_columns].columns.get_loc('Comment')
+        else:
+            comment_index = "Dummy"
+            
         return ui.HTML(DT(dat[selected_columns], 
                           layout={"topEnd": "search"}, 
                           column_filters="footer", 
                           search={"smart": True},
                           classes="compact nowrap hover order-column cell-border",  
-                          #scrollY=True,
                           scrollY = "750px",
-                          scrollCollapse=True,
                           paging=False,
                           maxBytes=0, 
                           autoWidth=True,
