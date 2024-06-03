@@ -186,7 +186,7 @@ def setup_wgs_samples_page(input, output, session, wgs_df, wgs_date_created):
                           layout={"topEnd": "search"}, 
                           column_filters="footer", 
                           search={"smart": True},
-                          classes="no-wrap compact hover order-column cell-border", 
+                          classes="nowrap compact hover order-column cell-border", 
                           scrollY = "750px",
                           #scrollX=True,
                           #scrollCollapse=True,
@@ -491,7 +491,7 @@ def setup_seq_run_page(input, output, session, seq_df, seq_date_created):
             comment_index = dat[selected_columns].columns.get_loc('Comment')
         else:
             comment_index = "Dummy"
-            
+
         return ui.HTML(DT(dat[selected_columns], 
                           layout={"topEnd": "search"}, 
                           column_filters="footer", 
