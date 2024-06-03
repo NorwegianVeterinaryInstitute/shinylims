@@ -37,7 +37,6 @@ def fetch_pinned_data(pin_name):
     # Find created date
     meta_created = board.pin_meta(pin_name).created
 
-
     # Add html link for limsids
 
     if "seq_limsid" in df.columns:
