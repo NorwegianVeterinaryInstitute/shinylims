@@ -120,7 +120,7 @@ def setup_projects_page(input, output, session, projects_df, project_date_create
         return f"Column Selection ({num_selected} of {total_columns} columns selected)"
     
     
-def setup_wgs_samples_page(input, output, session, wgs_df, wgs_date_created):
+def setup_wgs_samples_page(input, output, session, wgs_df, wgs_date_created,  historical_df):
     
     # Define a reactive value to store the filtered dataframe
     filtered_data = reactive.Value(wgs_df)
@@ -204,6 +204,30 @@ def setup_wgs_samples_page(input, output, session, wgs_df, wgs_date_created):
                           {"width": "200px", "targets": "_all"}]  # Set a default width for all columns
                           )) 
 
+    @render.ui
+    def historical_wgs():
+        # Return HTML tag with DT table element
+        
+        return ui.HTML(DT(historical_df, 
+                          layout={"topEnd": "search"}, 
+                          column_filters="footer", 
+                          search={"smart": True},
+                          classes="nowrap compact hover order-column cell-border", 
+                          scrollY = "750px",
+                          #scrollX=True,
+                          #scrollCollapse=True,
+                          paging=False,
+                          autoWidth = True,
+                          maxBytes=0, 
+                          keys= True,
+                          buttons=[#"pageLength", 
+                                   "copyHtml5",
+                                  {"extend": "csvHtml5", "title": "WGS Sample Data"},
+                                  {"extend": "excelHtml5", "title": "WGS Sample Data"},],
+                          columnDefs=[
+                          {"className": "dt-center", "targets": "_all"},
+                          {"width": "200px", "targets": "_all"}]  # Set a default width for all columns
+        ))
 
     # Define default column checkbox selection
     @reactive.Effect

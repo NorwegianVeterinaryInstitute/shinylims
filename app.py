@@ -73,6 +73,8 @@ def server(input, output, session):
         p.set(7, message="Prepared data fetched")
         seq_df, seq_date_created = fetch_pinned_data("vi2172/seq_runs_limsshiny")
         p.set(8, message="Seq data fetched")
+        historical_df, historical_date_created = fetch_pinned_data("vi2172/wgs_historical")
+        p.set(9, message="Historical data fetched")
 
         # Initialize reactive values with the initial data
         projects_df = reactive.Value(projects_df)
@@ -142,7 +144,7 @@ def server(input, output, session):
     @render.ui
     def render_updated_data():
         setup_projects_page(input, output, session, projects_df.get(), projects_df_created.get())
-        setup_wgs_samples_page(input, output, session, wgs_df.get(), wgs_date_created.get())
+        setup_wgs_samples_page(input, output, session, wgs_df.get(), wgs_date_created.get(), historical_df)
         setup_prepared_samples_page(input, output, session, prepared_df.get(), prepared_date_created.get())
         setup_seq_run_page(input,output,session,seq_df.get(),seq_date_created.get())
         return ui.TagList()  # Return an empty UI element as setup_wgs_samples_page handles rendering

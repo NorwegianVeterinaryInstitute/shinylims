@@ -142,6 +142,7 @@ wgs_samples_page = ui.navset_tab(
     ui.output_ui("data_wgs"),
 
 ),
+ui.nav_panel("Table Historical Data", ui.output_ui("historical_wgs")),
 ui.nav_panel("Info",ui.card(ui.output_ui("wgs_info"))))
 
 
