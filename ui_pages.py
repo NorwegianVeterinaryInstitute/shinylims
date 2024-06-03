@@ -7,7 +7,7 @@ from faicons import icon_svg
 
 
 # Contents of the Projects page
-projects_page = ui.navset_card_underline(
+projects_page = ui.navset_tab(
     ui.nav_panel("Table",
     ui.div(
         ui.accordion(
@@ -44,20 +44,18 @@ projects_page = ui.navset_card_underline(
                                 choices=[],
                                 selected= [], 
                             ),
-                            style="flex: 2; margin-right: 20px;"
                         ),
-                        style="display: flex; align-items: flex-start;"
                     )
                 ),
                 open=False,
                 value="column_selection_projects",
                 icon=icon_svg("table-columns")
             ),
-            class_="d-flex flex-column bd-highlight mb-3 mt-3",
+            class_="mb-3 mt-3",
             open = False,
             multiple=False
         ),
-        class_="d-flex flex-column bd-highlight mb-3"
+        class_="mb-3"
     ),
     
     ui.output_ui("data_projects")
@@ -66,7 +64,7 @@ ui.nav_panel("Info","Info page will be placed here"))
 
 
 # Contents of the WGS samples page
-wgs_samples_page = ui.navset_card_underline(
+wgs_samples_page = ui.navset_tab(
     ui.nav_panel("Table",
     ui.div(
         ui.accordion(
@@ -119,7 +117,6 @@ wgs_samples_page = ui.navset_card_underline(
                                 choices= [], # Will be populated by the server function
                                 selected= [] # Will be populated by the server function
                             ),
-                            style="flex: 2; margin-right: 20px;"
                         ),
                         ui.div(
                             ui.input_radio_buttons(
@@ -128,30 +125,29 @@ wgs_samples_page = ui.navset_card_underline(
                                 choices=["All", "All (-IDs,Labels & billinginfo)", "Billing info only", "Custom"],
                                 selected="All (-IDs,Labels & billinginfo)"
                             ),
-                            style="flex: 1; margin-left: 20px;"
                         ),
-                        style="display: flex; align-items: flex-start;"
+                        style="display: flex; align-items: flex-start;" # Places the preset list to the right of checkbox group
                     )
                 ),
                 open=False,
                 value="column_selection",
                 icon=icon_svg("table-columns")
             ),
-            class_="d-flex flex-column bd-highlight mb-3 mt-3",
+            class_="mb-3 mt-3",
             open = False,
             multiple=False
         ),
-        class_="d-flex flex-column bd-highlight mb-3"
+        class_="mb-3"
     ),
 
     ui.output_ui("data_wgs")
 
 ),
-ui.nav_panel("Info",ui.output_ui("wgs_info")))
+ui.nav_panel("Info",ui.card(ui.output_ui("wgs_info"))))
 
 
 # Contents of the Prepared samples page
-prepared_samples_page = ui.navset_card_underline(
+prepared_samples_page = ui.navset_tab(
     ui.nav_panel("Table",
     ui.div(
         ui.accordion(
@@ -206,18 +202,18 @@ prepared_samples_page = ui.navset_card_underline(
                             ),
                             style="flex: 2; margin-right: 20px;"
                         ),
-                        style="display: flex; align-items: flex-start;"
+                        style="display: flex; align-items: flex-start; width: 100%;"
                     )
                 ),
                 open=False,
                 value="column_selection_prepared",  # Provide a unique value
                 icon=icon_svg("table-columns")
             ),
-            class_="d-flex-inline bd-highlight mb-3 mt-3", 
+            class_="mb-3 mt-3",
             open = False,
             multiple=False
         ),
-        class_="d-flex flex-column bd-highlight mb-3"
+        class_="mb-3"
     ),
     
     ui.output_ui("data_prepared"),
@@ -225,7 +221,7 @@ prepared_samples_page = ui.navset_card_underline(
 ui.nav_panel("Info", "Info page will be placed here"))
 
 # Contents of the Sequencing page
-seq_page = ui.navset_card_underline(
+seq_page = ui.navset_tab(
     ui.nav_panel("Table",
     ui.div(
         ui.accordion(
@@ -271,22 +267,20 @@ seq_page = ui.navset_card_underline(
                                 choices=[], # Will be populated by the server function
                                 selected=[] # Will be populated by the server function
                             ),
-                            style="flex: 2; margin-right: 20px;"
                         ),
-                        style="display: flex; align-items: flex-start;"
+                        #style="display: flex; align-items: flex-start; width: 100%;"
                     )
                 ),
                 open=False,
                 value="column_selection_seq",  # Provide a unique value
                 icon=icon_svg("table-columns")
             ),
-            class_="d-flex-inline bd-highlight mb-3 mt-3", 
+            class_="mb-3 mt-3", 
             open = False,
             multiple=False
         ),
-        class_="d-flex flex-column bd-highlight mb-3"
+        class_="mb-3"
     ),
-    ui.p("TEST"),
     ui.output_ui("data_seq"),
 ),
 ui.nav_panel("Plots", ui.p("Plots will be displayed here")),

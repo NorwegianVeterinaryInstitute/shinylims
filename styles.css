@@ -1,3 +1,5 @@
+
+/* Place shiny notifications centered and larger than normal */
 .shiny-notification {
     height: 100px;
     width: 800px;
@@ -7,3 +9,25 @@
     font-size: 1.4rem; 
   }
  
+  
+/* datatables alignment */
+.dt-center {
+    text-align: center;
+}
+.dt-left {
+  text-align: left;
+}
+.nowrap {
+  white-space: nowrap;
+}
+
+
+/* Standard for all datatables should be centered alignment */
+table.dataTable td, table.dataTable th {
+  text-align: center !important;
+}
+
+/* Create separate class to left-slign comment */
+table.dataTable td.left-column {
+  text-align: left !important; 
+}

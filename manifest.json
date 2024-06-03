@@ -27,16 +27,16 @@
       "checksum": "198c45888f36910a3557d8dbf7764616"
     },
     "data_utils.py": {
-      "checksum": "da4d77e06c51aae245dde57a0ccff615"
+      "checksum": "5a49c36b06c415e5c6b66b0d33d39d2a"
     },
     "styles.css": {
-      "checksum": "d31861ca745fbaae0040760e33a95c2e"
+      "checksum": "3a235faad5ed32854aa71009d1e7a333"
     },
     "ui_pages.py": {
-      "checksum": "97c90c8d39f3d3ef7f107decce5bf6db"
+      "checksum": "5ec55b06678b05a9e27ddb7e5afdaab9"
     },
     "ui_server.py": {
-      "checksum": "0f51a1905c530ce4b43f9ad2e6abcd09"
+      "checksum": "1a209a637bef5a9fdd799b99653740b1"
     }
   }
 }
