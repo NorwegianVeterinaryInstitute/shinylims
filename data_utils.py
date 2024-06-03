@@ -22,7 +22,7 @@ def transform_to_html(limsid):
 
 def fetch_pinned_data(pin_name):
     
-    board = board_connect(server_url="https://connect.posit.vetinst.no/", api_key="NCU44S5HcyA64HIVn5o7fbIKQR5a1yds")
+    board = board_connect()
     df = board.pin_read(pin_name)
     if 'Open Date' in df.columns:
         df['Open Date'] = pd.to_datetime(df['Open Date'])
