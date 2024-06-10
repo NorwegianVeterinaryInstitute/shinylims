@@ -6,7 +6,7 @@ import seaborn as sns   # will be used for some plots on the Sequencing Runs pag
 from shiny import App, render, ui, reactive
 import datetime 
 import pytz # For fixing timezone differences
-from faicons import icon_svg
+from faicons import icon_svg  #https://faicons.dev/
 from shinyswatch import theme
 
 # App modules
@@ -41,9 +41,8 @@ app_ui = ui.page_navbar(
     ui.nav_control(ui.tooltip(ui.input_action_button("update_button", "Update Data", class_="btn-success"), ui.output_ui("update_tooltip_output"), placement="right", id="update_tooltip" )), 
     
     # Title
-    title=ui.tooltip(ui.span("Clarity LIMS Shiny App   ",icon_svg("circle-info")) ,ui.HTML("App for viewing status of projects and samples submitted for NGS through Clarity LIMS.<br><br> Automatic data transfer from Clarity every 2nd hour.<br><br> 'Update Data' button will collect latest transferred data"),placement="right",id="title_tooltip")
+    title=ui.span("Clarity LIMS Metadata App    ",icon_svg("dna"))
 )
-
 
 
 ###################
@@ -62,7 +61,7 @@ def server(input, output, session):
     '''
 
     # Fetch initial data
-    with ui.Progress (min=1, max=10) as p:
+    with ui.Progress (min=1, max=12) as p:
         p.set(message="Loading datasets from pins...")
         
         projects_df, project_date_created = fetch_pinned_data("vi2172/projects_limsshiny")
@@ -74,20 +73,22 @@ def server(input, output, session):
         seq_df, seq_date_created = fetch_pinned_data("vi2172/seq_runs_limsshiny")
         p.set(8, message="Seq data fetched")
         historical_df, historical_date_created = fetch_pinned_data("vi2172/wgs_historical")
-        p.set(9, message="Historical data fetched")
+        p.set(9, message="Historical sample data fetched")
+        historical_seq_df, historical_seq_date_created = fetch_pinned_data("vi2172/wgs_historical_seqRuns")
+        p.set(10, message="Historical seq data fetched")
 
         # Initialize reactive values with the initial data
         projects_df = reactive.Value(projects_df)
         wgs_df = reactive.Value(wgs_df)
         prepared_df = reactive.Value(prepared_df)
         seq_df = reactive.Value(seq_df)
-        p.set(9, message="Reactive dataframe values established")
+        p.set(11, message="Reactive dataframe values established")
 
         projects_df_created = reactive.Value(project_date_created)
         wgs_date_created = reactive.Value(wgs_date_created)
         prepared_date_created = reactive.Value(prepared_date_created)
         seq_date_created = reactive.Value(seq_date_created)
-        p.set(10, message="Datasets loaded successfully")
+        p.set(12, message="Datasets loaded successfully")
     
     # Define a function to update the reactive values
     def update_pinned_data():
@@ -124,18 +125,25 @@ def server(input, output, session):
         iso_date_projects_gmt = datetime.datetime.fromisoformat(projects_df_created.get())
         iso_date_wgs_gmt = datetime.datetime.fromisoformat(wgs_date_created.get())
         iso_date_prepared_gmt = datetime.datetime.fromisoformat(prepared_date_created.get())
+        iso_date_seq_gmt = datetime.datetime.fromisoformat(seq_date_created.get())
 
         cet = pytz.timezone('Europe/Berlin')
     
         cet_date_wgs = iso_date_wgs_gmt.astimezone(cet)
         cet_date_projects = iso_date_projects_gmt.astimezone(cet)
         cet_date_prepared = iso_date_prepared_gmt.astimezone(cet)
+        cet_date_seq = iso_date_seq_gmt.astimezone(cet)
 
         human_readable_date_wgs = cet_date_wgs.strftime("%Y-%m-%d (kl %H:%M)")
         human_readable_date_projects = cet_date_projects.strftime("%Y-%m-%d (kl %H:%M)") #%Z to add CEST
         human_readable_date_prepared = cet_date_prepared.strftime("%Y-%m-%d (kl %H:%M)")
+        human_readable_date_sequencing = cet_date_seq.strftime("%Y-%m-%d (kl %H:%M)")
 
-        text = f"<strong>Connect pin status:<br>2h intervals<br><br>Projects:<br>{human_readable_date_projects}<br><br>WGS Samples:<br>{human_readable_date_wgs}<br><br>Prepared Samples:<br>{human_readable_date_prepared}<br><br>Sequencing Runs:<strong>"
+        text = f"<strong>Connect pin status:<br>2h intervals<br><br>\
+            Projects:<br>{human_readable_date_projects}<br><br>\
+            WGS Samples:<br>{human_readable_date_wgs}<br><br>\
+            Prepared Samples:<br>{human_readable_date_prepared}<br><br>\
+            Sequencing Runs:<br>{human_readable_date_sequencing}<strong>"
         
         return ui.HTML(text)
     
@@ -146,7 +154,7 @@ def server(input, output, session):
         setup_projects_page(input, output, session, projects_df.get(), projects_df_created.get())
         setup_wgs_samples_page(input, output, session, wgs_df.get(), wgs_date_created.get(), historical_df)
         setup_prepared_samples_page(input, output, session, prepared_df.get(), prepared_date_created.get())
-        setup_seq_run_page(input,output,session,seq_df.get(),seq_date_created.get())
+        setup_seq_run_page(input,output,session,seq_df.get(),seq_date_created.get(), historical_seq_df)
         return ui.TagList()  # Return an empty UI element as setup_wgs_samples_page handles rendering
     
 

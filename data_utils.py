@@ -20,6 +20,20 @@ def transform_to_html(limsid):
     return ', '.join(html_links)
 
 
+def transform_comments_to_html(comment):
+    if pd.isna(comment) or comment == '':
+        return comment
+    return comment.replace('\n', '<br>')
+
+
+def custom_to_datetime(date_series):
+    try:
+        return pd.to_datetime(date_series, format='%y%m%d', errors='coerce')
+    except Exception as e:
+        print(f"Error converting dates: {e}")
+        return date_series
+
+
 def fetch_pinned_data(pin_name):
     
     board = board_connect()
@@ -29,7 +43,15 @@ def fetch_pinned_data(pin_name):
     if 'Received Date' in df.columns:
         df['Received Date'] = pd.to_datetime(df['Received Date'])
     if 'Date' in df.columns:
-        df['Date'] = pd.to_datetime(df['Date'])
+        try:
+            # Attempt to parse with an expected format first (e.g., YYYY-MM-DD)
+            df['Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d', errors='raise')
+        except:
+            try:
+                # Fall back to the custom parsing format (YYMMDD)
+                df['Date'] = pd.to_datetime(df['Date'], format='%y%m%d', errors='coerce')
+            except Exception as e:
+                print(f"Error converting dates: {e}")
 
     # Replace NaN-values with empty string
     df = df.replace(np.nan, '', regex=True)
@@ -51,5 +73,9 @@ def fetch_pinned_data(pin_name):
     if "prep_limsid" in df.columns:
         df['prep_limsid'] = df['prep_limsid'].apply(transform_to_html)
 
+    # Transform line breaks in comment columns to HTML line breaks
+    comment_columns = [col for col in df.columns if 'comment' in col.lower()]
+    for col in comment_columns:
+        df[col] = df[col].apply(transform_comments_to_html)
 
     return df, meta_created
