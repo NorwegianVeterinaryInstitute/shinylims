@@ -8,7 +8,7 @@ from faicons import icon_svg
 
 # Contents of the Projects page
 projects_page = ui.navset_tab(
-    ui.nav_panel("Table",
+    ui.nav_panel("Table  (Nov 2023 ->)",
     ui.div(
         ui.accordion(
             ui.accordion_panel(
@@ -60,12 +60,12 @@ projects_page = ui.navset_tab(
     
     ui.output_ui("data_projects")
 ),
-ui.nav_panel("Info","Info page will be placed here"))
+ui.nav_panel("Info",ui.card(ui.output_ui("projects_info"))))
 
 
 # Contents of the WGS samples page
 wgs_samples_page = ui.navset_tab(
-    ui.nav_panel("Table",
+    ui.nav_panel("Table (Nov 2023 ->)",
     ui.div(
         ui.accordion(
             ui.accordion_panel(
@@ -142,13 +142,49 @@ wgs_samples_page = ui.navset_tab(
     ui.output_ui("data_wgs"),
 
 ),
-ui.nav_panel("Table Historical Data", ui.output_ui("historical_wgs")),
+ui.nav_panel("Table Historical Data (Nov 2019 - Nov 2023)", 
+    ui.div(
+        ui.accordion(
+            ui.accordion_panel(
+                ui.output_text("filters_title_historical"), # Dynamic title handled by the server function
+                ui.row(ui.column(3,
+                    ui.input_slider(
+                        id="slider_historical", 
+                        label="Løpende nr",
+                        min= 0, # Will be populated by the server function,
+                        max=5073, # Will be populated by the server function,
+                        value=[0, 5073]
+                    ),),),
+                    value="filters_historical", icon=icon_svg("filter"),),
+            ui.accordion_panel(
+                ui.output_text("column_selection_title_historical"), # Dynamic title handled by the server function
+                    ui.div(
+                        ui.input_checkbox_group(
+                            id="fields_to_display_historical",
+                            inline=False,
+                            label=ui.div("Field Selection", class_="fw-bold"),
+                            choices= [], # Will be populated by the server function
+                            selected= [] # Will be populated by the server function
+                                ),
+                        ),
+                open=False,
+                value="column_selection_historical",
+                icon=icon_svg("table-columns")
+            ),
+            class_="mb-3 mt-3",
+            open = False,
+            multiple=False
+        ),
+        class_="d-flex flex-column mb-3"
+    ),
+    ui.output_ui("historical_wgs")),
+
 ui.nav_panel("Info",ui.card(ui.output_ui("wgs_info"))))
 
 
 # Contents of the Prepared samples page
 prepared_samples_page = ui.navset_tab(
-    ui.nav_panel("Table",
+    ui.nav_panel("Table (Nov 2023 ->)",
     ui.div(
         ui.accordion(
             ui.accordion_panel(
@@ -218,11 +254,11 @@ prepared_samples_page = ui.navset_tab(
     
     ui.output_ui("data_prepared"),
 ),
-ui.nav_panel("Info", "Info page will be placed here"))
+ui.nav_panel("Info",ui.card(ui.output_ui("prepared_info"))))
 
 # Contents of the Sequencing page
 seq_page = ui.navset_tab(
-    ui.nav_panel("Table",
+    ui.nav_panel("Table (Nov 2023 ->)",
     ui.div(
         ui.accordion(
             ui.accordion_panel(
@@ -283,5 +319,37 @@ seq_page = ui.navset_tab(
     ),
     ui.output_ui("data_seq"),
 ),
-ui.nav_panel("Plots", ui.p("Plots will be displayed here")),
-ui.nav_panel("Info", "Info page will be placed here"))
+ui.nav_panel("Table Historical Data (Sept 2019 - Nov 2023)", 
+        ui.div(
+        ui.accordion(
+            ui.accordion_panel(
+                ui.output_text("filters_title_SeqHistorical"), # Dynamic title handled by the server function
+                ui.row(ui.column(3,
+                    ui.code("No filters yet defined"
+                    ),),),
+                    value="filters_SeqHistorical", icon=icon_svg("filter"),),
+            ui.accordion_panel(
+                ui.output_text("column_selection_title_SeqHistorical"), # Dynamic title handled by the server function
+                    ui.input_checkbox_group(
+                        id="fields_to_display_SeqHistorical",
+                        inline=False,
+                        label=ui.div("Field Selection", class_="fw-bold"),
+                        choices= [], # Will be populated by the server function
+                        selected= [] # Will be populated by the server function
+                            ),
+                open=False,
+                value="column_selection_SeqHistorical",
+                icon=icon_svg("table-columns")
+            ),
+            class_="mb-3 mt-3",
+            open = False,
+            multiple=False
+        ),
+        class_="d-flex flex-column mb-3"
+    ),
+    ui.output_ui("SeqHistorical")),
+
+ui.nav_panel("Plots", ui.code("Plots will be displayed here. Waiting for iTables support for selecting data from the table: https://github.com/mwouts/itables/issues/250")),
+ui.nav_panel("Info",ui.div(ui.code("NB!! Waiting for instrument integration for getting certain QC values. The data collection cron script will also be rewritten after instrument integration is in order NB!!"),
+    ui.card(ui.output_ui("seqRun_info"),))))
+
