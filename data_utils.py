@@ -78,5 +78,4 @@ def fetch_pinned_data(pin_name):
     for col in comment_columns:
         df[col] = df[col].apply(transform_comments_to_html)
 
-    print(df)
     return df, meta_created
