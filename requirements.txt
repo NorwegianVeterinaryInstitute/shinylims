@@ -1,8 +1,8 @@
-shiny
-seaborn
-pandas
-itables
-rsconnect-python
-pins
-faicons
+shiny==0.9.0
+seaborn==0.13.2
+pandas==2.2.2
+itables==2.0.1
+rsconnect-python==1.23.0
+pins==0.8.5
+faicons==0.2.2
 shinyswatch==0.6.1
