@@ -23,20 +23,14 @@
     "README.md": {
       "checksum": "e43540e228defc4ae6e2478fa92a24e8"
     },
+    "api-key.txt": {
+      "checksum": "5565761502953df5ede1b297131cf1ea"
+    },
     "app.py": {
       "checksum": "dcb0e583c2c9f5cde04e5d682457422c"
     },
     "data_utils.py": {
-      "checksum": "b948ec43bdea08f052ff00a401ad9507"
-    },
-    "historicalDataNGS-seqruns.csv": {
-      "checksum": "e119048638e3fc1fbef83089f15766c7"
-    },
-    "historicalDataNGS.csv": {
-      "checksum": "8734f695f9f7d89b91118ad1a2842028"
-    },
-    "pin-old-data.py": {
-      "checksum": "c321f360c63d59a4723cceb06933f7a7"
+      "checksum": "16417905362c2e796daec78ef8152ea9"
     },
     "styles.css": {
       "checksum": "3a235faad5ed32854aa71009d1e7a333"

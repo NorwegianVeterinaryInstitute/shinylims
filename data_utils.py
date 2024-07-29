@@ -36,7 +36,7 @@ def custom_to_datetime(date_series):
 
 def fetch_pinned_data(pin_name):
     
-    board = board_connect()
+    board = board_connect() # ADD server_url and api_key here for local deployment!
     df = board.pin_read(pin_name)
     if 'Open Date' in df.columns:
         df['Open Date'] = pd.to_datetime(df['Open Date'])
@@ -78,4 +78,5 @@ def fetch_pinned_data(pin_name):
     for col in comment_columns:
         df[col] = df[col].apply(transform_comments_to_html)
 
+    print(df)
     return df, meta_created
