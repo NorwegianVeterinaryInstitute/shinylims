@@ -15,7 +15,7 @@
   },
   "files": {
     "requirements.txt": {
-      "checksum": "2b18271d2929c82e0c2aded35774ea3f"
+      "checksum": "c26585ae899e45ba3bff789ed1c554e6"
     },
     ".gitignore": {
       "checksum": "85d6754af8e577056060708790e4049f"
@@ -31,6 +31,15 @@
     },
     "data_utils.py": {
       "checksum": "16417905362c2e796daec78ef8152ea9"
+    },
+    "historicalDataNGS-seqruns.csv": {
+      "checksum": "e119048638e3fc1fbef83089f15766c7"
+    },
+    "historicalDataNGS.csv": {
+      "checksum": "8734f695f9f7d89b91118ad1a2842028"
+    },
+    "pin-old-data.py": {
+      "checksum": "966344712c69bbe452b8ee9f39f3dcaf"
     },
     "styles.css": {
       "checksum": "3a235faad5ed32854aa71009d1e7a333"
