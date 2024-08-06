@@ -4,7 +4,7 @@ from itables.shiny import DT
 import pandas as pd
 import datetime
 import pytz
-
+from itables.javascript import JavascriptFunction
 
 ####################
 # SERVER FUNCTIONS #
@@ -589,6 +589,17 @@ def setup_seq_run_page(input, output, session, seq_df, seq_date_created, histori
         else:
             comment_index = "Dummy"
 
+        if 'Run Number' in dat[selected_columns].columns:
+            run_number_index = dat[selected_columns].columns.get_loc('Run Number')
+        else:
+            run_number_index = "Dummy"
+
+        if 'Cluster density (K/mm2)' in dat[selected_columns].columns:
+            cluster_density_index = dat[selected_columns].columns.get_loc('Cluster density (K/mm2)')
+        else:
+            cluster_density_index = "Dummy"
+        
+
         return ui.HTML(DT(dat[selected_columns], 
                           layout={"topEnd": "search"}, 
                           column_filters="footer", 
@@ -603,7 +614,12 @@ def setup_seq_run_page(input, output, session, seq_df, seq_date_created, histori
                                   {"extend": "csvHtml5", "title": "WGS Sample Data"},
                                   {"extend": "excelHtml5", "title": "WGS Sample Data"},],
                           order=[[0, "desc"]],
-                          columnDefs=[{'targets': comment_index, 'className': 'left-column'},{"className": "dt-center", "targets": "_all"}]))
+                          columnDefs=[
+                              {'targets': comment_index, 'className': 'left-column'},
+                              {"className": "dt-center", "targets": "_all"},
+                              {"targets": run_number_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")},
+                              {"targets": cluster_density_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")}
+                              ]))
 
     @render.ui
     def SeqHistorical():

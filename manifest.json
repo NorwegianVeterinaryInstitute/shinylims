@@ -23,9 +23,6 @@
     "README.md": {
       "checksum": "e43540e228defc4ae6e2478fa92a24e8"
     },
-    "api-key.txt": {
-      "checksum": "5565761502953df5ede1b297131cf1ea"
-    },
     "app.py": {
       "checksum": "dcb0e583c2c9f5cde04e5d682457422c"
     },
@@ -39,7 +36,7 @@
       "checksum": "da947ff0de151ce45fc2a3d3f9fe9a81"
     },
     "ui_server.py": {
-      "checksum": "21b753048aefe4c3954f5442919b4df0"
+      "checksum": "424365bb163f15713d05b02817da1edc"
     }
   }
 }
