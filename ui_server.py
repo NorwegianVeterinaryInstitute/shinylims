@@ -68,7 +68,7 @@ def setup_projects_page(input, output, session, projects_df, project_date_create
         ui.update_checkbox_group(
             "fields_to_display_projects",
             choices= projects_df.columns.tolist(),
-            selected= ['Open Date', 'Project Name', 'Samples', 'Submitter', 'Submitting Lab', 'Comment']
+            selected= ['Open Date', 'Status','Project Name', 'Samples', 'Submitter', 'Submitting Lab', 'Comment']
         )    
     
     # Define default date range
