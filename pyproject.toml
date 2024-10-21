@@ -4,12 +4,6 @@ version = "0.1.0"
 authors = [
   { name="Magnus Leithaug", email="magnus.leithaug@vetinst.no" },
 ]
-packages = [
-    { include = "shinylims" }
-]
-
-[project.package_data]
-"shinylims" = ["assets/*.css"]
 
 description = "A shiny app to display lab metadata from clarity LIMS"
 readme = "README.md"
