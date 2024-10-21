@@ -15,7 +15,7 @@
   },
   "files": {
     "requirements.txt": {
-      "checksum": "b193e9d91c6900b2941ad9e286d14e81"
+      "checksum": "61cd3b49f6616e7fdbc55270416ccf1b"
     },
     ".gitignore": {
       "checksum": "a490f4da04fb5b1ec743568fe3380d40"
@@ -27,10 +27,10 @@
       "checksum": "bbcd65b7e389067d3922f20a2f9eaf4e"
     },
     "README.md": {
-      "checksum": "29f89c822578144822fd0d057dcc61be"
+      "checksum": "262635faedb2f6c0096957d5b75c6d2c"
     },
     "pyproject.toml": {
-      "checksum": "b0870ceede594d3af7f992e25f9329a9"
+      "checksum": "158312210f1c3c22ec358b734eaa34a6"
     },
     "src/shinylims/__init__.py": {
       "checksum": "d41d8cd98f00b204e9800998ecf8427e"
@@ -51,7 +51,7 @@
       "checksum": "13c704eff839d4b4d8c0e7e801a4b49c"
     },
     "uv.lock": {
-      "checksum": "51eae1d84db9e198577447ea5ce17ae2"
+      "checksum": "9b96f9b5b26f9ebe3ea91404ecb4ee15"
     }
   }
 }
