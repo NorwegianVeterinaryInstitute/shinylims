@@ -10,10 +10,13 @@ from faicons import icon_svg  #https://faicons.dev/
 from shinyswatch import theme
 
 # App modules
-from ui_pages import projects_page, wgs_samples_page, prepared_samples_page, seq_page
-from ui_server import setup_projects_page, setup_wgs_samples_page, setup_prepared_samples_page, setup_seq_run_page
-from data_utils import fetch_pinned_data
+from src.shinylims.ui_pages import projects_page, wgs_samples_page, prepared_samples_page, seq_page
+from src.shinylims.ui_server import setup_projects_page, setup_wgs_samples_page, setup_prepared_samples_page, setup_seq_run_page
+from src.shinylims.data_utils import fetch_pinned_data
 
+# Add assets
+from pathlib import Path
+css_path = Path(__file__).parent / "assets" / "styles.css"
 
 ####################
 # CONSTRUCT THE UI #
@@ -25,7 +28,7 @@ app_ui = ui.page_navbar(
     theme.cerulean(),
 
     # Include the custom CSS file
-    ui.head_content(ui.include_css("styles.css")),
+    ui.head_content(ui.include_css(css_path)),
     
     # Push the navbar items to the right
     ui.nav_spacer(),  
