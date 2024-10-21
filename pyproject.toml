@@ -1,0 +1,25 @@
+[project]
+name = "shinylims-uv"
+version = "0.1.0"
+authors = [
+  { name="Magnus Leithaug", email="magnus.leithaug@vetinst.no" },
+]
+packages = [
+    { include = "shinylims" }
+]
+
+[project.package_data]
+"shinylims" = ["assets/*.css"]
+
+description = "A shiny app to display lab metadata from clarity LIMS"
+readme = "README.md"
+requires-python = ">=3.11.5"
+dependencies = [
+    "faicons==0.2.2",
+    "itables==2.0.1",
+    "pandas==2.2.2",
+    "pins==0.8.5",
+    "seaborn==0.13.2",
+    "shiny==0.9.0",
+    "shinyswatch==0.6.1",
+]

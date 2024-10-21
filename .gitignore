@@ -1,2 +1,3 @@
-__pycache__
-api-key.txt
+__pycache__/
+/src/shinylims/__pycache__
+*.pyc
