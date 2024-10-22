@@ -3,40 +3,55 @@
   "locale": "English_United States.1252",
   "metadata": {
     "appmode": "python-shiny",
-    "entrypoint": "app"
+    "entrypoint": "shinylims.app:app"
   },
   "python": {
-    "version": "3.11.9",
+    "version": "3.11.5",
     "package_manager": {
       "name": "pip",
-      "version": "24.0",
+      "version": "24.2",
       "package_file": "requirements.txt"
     }
   },
   "files": {
     "requirements.txt": {
-      "checksum": "b5406ad9b684385870dad2811a0cbb52"
+      "checksum": "2976d8cc4dabb78a47c02b90dc75d48e"
     },
     ".gitignore": {
-      "checksum": "85d6754af8e577056060708790e4049f"
+      "checksum": "a490f4da04fb5b1ec743568fe3380d40"
+    },
+    ".python-version": {
+      "checksum": "215923581f8fcce0029639f7ab16ccb6"
+    },
+    "LICENSE": {
+      "checksum": "bbcd65b7e389067d3922f20a2f9eaf4e"
     },
     "README.md": {
-      "checksum": "e43540e228defc4ae6e2478fa92a24e8"
+      "checksum": "262635faedb2f6c0096957d5b75c6d2c"
     },
-    "app.py": {
-      "checksum": "dcb0e583c2c9f5cde04e5d682457422c"
+    "pyproject.toml": {
+      "checksum": "158312210f1c3c22ec358b734eaa34a6"
     },
-    "data_utils.py": {
-      "checksum": "91c3c9621a893c9f1163077c8633c8d0"
+    "src/shinylims/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
     },
-    "styles.css": {
+    "src/shinylims/app.py": {
+      "checksum": "b561f7e2b81fff588d93ac091dc6a16b"
+    },
+    "src/shinylims/assets/styles.css": {
       "checksum": "3a235faad5ed32854aa71009d1e7a333"
     },
-    "ui_pages.py": {
+    "src/shinylims/data_utils.py": {
+      "checksum": "91c3c9621a893c9f1163077c8633c8d0"
+    },
+    "src/shinylims/ui_pages.py": {
       "checksum": "da947ff0de151ce45fc2a3d3f9fe9a81"
     },
-    "ui_server.py": {
+    "src/shinylims/ui_server.py": {
       "checksum": "13c704eff839d4b4d8c0e7e801a4b49c"
+    },
+    "uv.lock": {
+      "checksum": "9b96f9b5b26f9ebe3ea91404ecb4ee15"
     }
   }
 }
