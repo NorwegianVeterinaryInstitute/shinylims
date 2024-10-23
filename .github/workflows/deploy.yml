@@ -42,10 +42,11 @@ jobs:
           git add requirements.txt manifest.json
           git commit -m "Update requirements and manifest" || echo "No changes to commit"
           
-          if [ "${{ env.MODE }}" == "test" ]; then
+          if [[ "${{ env.MODE }}" == "test" ]]; then
             git push origin --force HEAD:test_deploy  # Push to test branch
-          elif [ "${{ env.MODE }}" == "prod" ]; then
+          elif [[ "${{ env.MODE }}" == "prod" ]]; then
             git push origin --force HEAD:deploy  # Push to deploy branch
-          elif [ "${{ env.MODE }}" == "both" ]; then
+          elif [[ "${{ env.MODE }}" == "both" ]]; then
             git push origin --force HEAD:test_deploy  # Push to test branch
             git push origin --force HEAD:deploy  # Push to deploy branch
+          fi
