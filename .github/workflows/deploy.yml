@@ -21,13 +21,10 @@ jobs:
         with:
           enable-cache: true
       
-      - name: Install yq
-        run: sudo apt-get update && sudo apt-get install -y yq
-      
-      - name: Read deployment mode from YAML file
+      - name: Read deploy mode from text file
         run: |
-          export MODE=$(cat deploy_mode.yaml | yq '.mode')
-          echo "mode=$MODE" >> $GITHUB_ENV
+          MODE=$(cat deploy_mode.txt)
+          echo "MODE=${MODE}" >> $GITHUB_ENV
 
       - name: Print the deployment mode
         run: echo "The deployment mode is ${{ env.mode }}"
