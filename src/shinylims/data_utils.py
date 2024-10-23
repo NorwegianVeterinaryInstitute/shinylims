@@ -2,7 +2,8 @@ import pandas as pd
 from pins import board_connect
 from shiny import ui
 import numpy as np
-
+from dotenv import load_dotenv
+import os
 
 def transform_to_html(limsid):
     if pd.isna(limsid) or limsid == '':
@@ -36,7 +37,11 @@ def custom_to_datetime(date_series):
 
 def fetch_pinned_data(pin_name):
     
-    board = board_connect() # ADD server_url and api_key here for local deployment!
+    # Load environment variables from .env file
+    load_dotenv()
+    
+    board = board_connect(api_key=os.getenv('POSIT_API_KEY'), server_url=os.getenv('POSIT_SERVER_URL'))
+
     df = board.pin_read(pin_name)
     if 'Open Date' in df.columns:
         df['Open Date'] = pd.to_datetime(df['Open Date'])

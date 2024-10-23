@@ -1,3 +1,7 @@
+# Ignore cache
 __pycache__/
 /src/shinylims/__pycache__
 *.pyc
+
+# Other
+.env
