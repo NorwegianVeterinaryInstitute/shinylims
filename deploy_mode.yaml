@@ -1,6 +1,0 @@
-# Mode options used by the deployment script:
-# - prod: for production updates
-# - test: for testing updates
-# - both: for updating both test and production
-
-mode: test
