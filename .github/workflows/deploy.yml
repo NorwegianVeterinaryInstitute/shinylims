@@ -27,7 +27,7 @@ jobs:
           echo "MODE=${MODE}" >> $GITHUB_ENV
 
       - name: Print the deployment mode
-        run: echo "The deployment mode is ${{ env.mode }}"
+        run: echo "The deployment mode is ${{ env.MODE }}"
 
       - name: Generate requirements.txt with `uv`
         run: uv export --no-hashes -o requirements.txt
@@ -42,10 +42,10 @@ jobs:
           git add requirements.txt manifest.json
           git commit -m "Update requirements and manifest" || echo "No changes to commit"
           
-          if [ "${{ env.mode }}" == "test" ]; then
+          if [ "${{ env.MODE }}" == "test" ]; then
             git push origin --force HEAD:test_deploy  # Push to test branch
-          elif [ "${{ env.mode }}" == "prod" ]; then
+          elif [ "${{ env.MODE }}" == "prod" ]; then
             git push origin --force HEAD:deploy  # Push to deploy branch
-          elif [ "${{ env.mode }}" == "both" ]; then
+          elif [ "${{ env.MODE }}" == "both" ]; then
             git push origin --force HEAD:test_deploy  # Push to test branch
             git push origin --force HEAD:deploy  # Push to deploy branch
