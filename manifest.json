@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "locale": "en_US.UTF-8",
+  "metadata": {
+    "appmode": "python-shiny",
+    "entrypoint": "shinylims.app:app"
+  },
+  "python": {
+    "version": "3.11.5",
+    "package_manager": {
+      "name": "pip",
+      "version": "24.2",
+      "package_file": "requirements.txt"
+    }
+  },
+  "files": {
+    "requirements.txt": {
+      "checksum": "f744bda7fb113b74a5934525c3fc519d"
+    },
+    ".github/workflows/deploy.yml": {
+      "checksum": "a0169a023a7fe152a855bc2018d515d7"
+    },
+    ".gitignore": {
+      "checksum": "55e2b0f82118a10424eafff1ce2ee65e"
+    },
+    ".python-version": {
+      "checksum": "215923581f8fcce0029639f7ab16ccb6"
+    },
+    "LICENSE": {
+      "checksum": "fc80e042aeec4b637e104910d16812fc"
+    },
+    "README.md": {
+      "checksum": "65faa9c6b0eaa0ea54b4fb245510d247"
+    },
+    "deploy_mode.txt": {
+      "checksum": "d6e4a9b6646c62fc48baa6dd6150d1f7"
+    },
+    "pyproject.toml": {
+      "checksum": "4457c3e7ca77d9346961f4954a65a946"
+    },
+    "src/shinylims/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "src/shinylims/app.py": {
+      "checksum": "588da57cd4035e9bdb2f02a5840ab77f"
+    },
+    "src/shinylims/assets/styles.css": {
+      "checksum": "b073cd8b93003fcf207624547b122d20"
+    },
+    "src/shinylims/data_utils.py": {
+      "checksum": "da906f7ea253c0eb4eb9becbe4395687"
+    },
+    "src/shinylims/ui_pages.py": {
+      "checksum": "bd392f9103524e65914ce4631ea2836d"
+    },
+    "src/shinylims/ui_server.py": {
+      "checksum": "da138a7f9e271fe83f123c3460d83784"
+    },
+    "uv.lock": {
+      "checksum": "5f9f34b684f001d05b6ae7e2039d175d"
+    }
+  }
+}
