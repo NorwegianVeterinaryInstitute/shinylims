@@ -19,8 +19,12 @@ def setup_projects_page(input, output, session, projects_df, project_date_create
     @render.ui
     def data_projects():
         # Filter data using selected date range filter
+
         start_date, end_date = input.date_range_projects()
-        filtered_df = projects_df[(projects_df['Open Date'] >= pd.to_datetime(start_date)) & (projects_df['Open Date'] <= pd.to_datetime(end_date))]
+        filtered_df = projects_df[
+            (projects_df['Open Date'].isna()) |
+            (projects_df['Open Date'] >= pd.to_datetime(start_date)) &
+            (projects_df['Open Date'] <= pd.to_datetime(end_date))]
         
         # Filter data using the "show projects with comment only"-button
         project_comment_filter = input.project_comment_filter()
@@ -169,11 +173,14 @@ def setup_wgs_samples_page(input, output, session, wgs_df, wgs_date_created,  hi
     # Filter and render the filtered dataframe
     @render.ui
     def data_wgs():
-
+        
         # Filter data using selected date range filter
         start_date, end_date = input.date_range()
-        filtered_df = wgs_df[(wgs_df['Received Date'] >= pd.to_datetime(start_date)) & (wgs_df['Received Date'] <= pd.to_datetime(end_date))]
-
+        filtered_df = wgs_df[
+            (wgs_df['Received Date'].isna()) | 
+            ((wgs_df['Received Date'] >= pd.to_datetime(start_date)) & 
+            (wgs_df['Received Date'] <= pd.to_datetime(end_date)))
+            ]
         selected_project_accounts = input.filter_project_account()
         if selected_project_accounts:
             filtered_df = filtered_df[filtered_df['Project Account'].isin(selected_project_accounts)]
@@ -431,7 +438,10 @@ def setup_prepared_samples_page(input, output, session, prepared_df, prepared_da
     def data_prepared():
 
         start_date, end_date = input.date_range_prepared()
-        filtered_df = prepared_df[(prepared_df['Received Date'] >= pd.to_datetime(start_date)) & (prepared_df['Received Date'] <= pd.to_datetime(end_date))]
+        filtered_df = prepared_df[
+            (prepared_df['Received Date'].isna()) |
+            (prepared_df['Received Date'] >= pd.to_datetime(start_date)) & 
+            (prepared_df['Received Date'] <= pd.to_datetime(end_date))]
 
         selected_project_accounts = input.filter_project_account_prepared()
         if selected_project_accounts:
