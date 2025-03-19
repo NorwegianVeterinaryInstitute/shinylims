@@ -1,22 +1,41 @@
+'''
+app.py - Main UI and server logic for the Shiny LIMS Metadata App 
+Ties together the different table modules and defines the main UI layout.
+
+Specifically, this module defines the app_ui variable and server function to run App(app_ui, server)
+'''
+
 ###########
 # IMPORTS #
 ###########
 
-import seaborn as sns   # will be used for some plots on the Sequencing Runs page
 from shiny import App, render, ui, reactive
 import datetime 
 import pytz # For fixing timezone differences
 from faicons import icon_svg  #https://faicons.dev/
 from shinyswatch import theme
 
-# App modules
-from src.shinylims.ui_pages import projects_page, wgs_samples_page, prepared_samples_page, seq_page
-from src.shinylims.ui_server import setup_projects_page, setup_wgs_samples_page, setup_prepared_samples_page, setup_seq_run_page
-from src.shinylims.data_utils import fetch_pinned_data
+# Import table modules
+from shinylims.tables.projects import projects_ui, projects_server
+from shinylims.tables.samples import samples_ui, samples_server
+from shinylims.tables.sequencing import seq_ui, seq_server  # Make sure these function names match what's in your file
+
+# Import database utilities
+from src.shinylims.data.db_utils import get_db_update_info, refresh_db_connection
+#from src.shinylims.data.db_utils import refresh_db_connection
+
+# Import data utilities
+from src.shinylims.data.data_utils import (
+    fetch_projects_data, 
+    fetch_all_samples_data, 
+    fetch_sequencing_data
+)
 
 # Add assets
 from pathlib import Path
 css_path = Path(__file__).parent / "assets" / "styles.css"
+from shinylims.data.brand_utils import load_brand_config
+brand = load_brand_config()
 
 ####################
 # CONSTRUCT THE UI #
@@ -33,15 +52,14 @@ app_ui = ui.page_navbar(
     # Push the navbar items to the right
     ui.nav_spacer(),  
 
-    # Kickstarts server side ui reactive functions using latest pin update
+    # Kickstart server side ui reactive functions using latest database update
     ui.nav_control(ui.output_ui("render_updated_data")), 
 
     # Define ui panels
-    ui.nav_panel("Projects", projects_page),
-    ui.nav_panel("WGS Samples", wgs_samples_page),
-    ui.nav_panel("Prepared Samples", prepared_samples_page), 
-    ui.nav_panel("Sequencing Runs", seq_page),
-    ui.nav_control(ui.tooltip(ui.input_action_button("update_button", "Update Data", class_="btn-success"), ui.output_ui("update_tooltip_output"), placement="right", id="update_tooltip" )), 
+    ui.nav_panel("Projects", projects_ui()),
+    ui.nav_panel("Samples", samples_ui()),  
+    ui.nav_panel("Illumina Sequencing Runs", seq_ui()),
+    ui.nav_control(ui.tooltip(ui.input_action_button("update_button", "Refresh SQL db connection", class_="btn-success"), ui.output_ui("update_tooltip_output"), placement="right", id="update_tooltip" )), 
     
     # Title
     title=ui.span("Clarity LIMS Metadata App    ",icon_svg("dna"))
@@ -53,112 +71,145 @@ app_ui = ui.page_navbar(
 ###################
 
 def server(input, output, session):
-    '''
-    Fetching pinned data and all ui reactive rendering is done from this function
+    """
+    Fetching data from SQLite database and all ui reactive rendering is done from this function.
 
     Inital data is fetched and stored as reactive values. The reactive values are updated
-    through the function update_pinned_data() which is triggered by an ui action button.
+    through the function update_database_data() which is triggered by an ui action button.
     
     Reactive metadata values are used to populate a information tooltip through the 
     function update_tooltip_output()
-    '''
+    """
 
     # Fetch initial data
-    with ui.Progress (min=1, max=12) as p:
-        p.set(message="Loading datasets from pins...")
+    with ui.Progress(min=1, max=12) as p:
+        p.set(message="Loading datasets from SQLite database...")
         
-        projects_df, project_date_created = fetch_pinned_data("vi2172/projects_limsshiny")
+        projects_df, project_date_created = fetch_projects_data()
         p.set(3, message="Projects data fetched")
-        wgs_df, wgs_date_created = fetch_pinned_data("vi2172/wgs_samples_limsshiny")
-        p.set(6, message="WGS samples data fetched")
-        prepared_df, prepared_date_created = fetch_pinned_data("vi2172/wgs_prepared_limsshiny")
-        p.set(7, message="Prepared data fetched")
-        seq_df, seq_date_created = fetch_pinned_data("vi2172/seq_runs_limsshiny")
+        
+        samples_df, samples_date_created = fetch_all_samples_data()
+        p.set(6, message="Samples data fetched")
+        
+        seq_df, seq_date_created = fetch_sequencing_data()
         p.set(8, message="Seq data fetched")
-        historical_df, historical_date_created = fetch_pinned_data("vi2172/wgs_historical")
-        p.set(9, message="Historical sample data fetched")
-        historical_seq_df, historical_seq_date_created = fetch_pinned_data("vi2172/wgs_historical_seqRuns")
-        p.set(10, message="Historical seq data fetched")
-
+        
         # Initialize reactive values with the initial data
-        projects_df = reactive.Value(projects_df)
-        wgs_df = reactive.Value(wgs_df)
-        prepared_df = reactive.Value(prepared_df)
-        seq_df = reactive.Value(seq_df)
+        projects_df_reactive = reactive.Value(projects_df)
+        samples_df_reactive = reactive.Value(samples_df)
+        seq_df_reactive = reactive.Value(seq_df)
         p.set(11, message="Reactive dataframe values established")
 
-        projects_df_created = reactive.Value(project_date_created)
-        wgs_date_created = reactive.Value(wgs_date_created)
-        prepared_date_created = reactive.Value(prepared_date_created)
-        seq_date_created = reactive.Value(seq_date_created)
+        projects_date_created_reactive = reactive.Value(project_date_created)
+        samples_date_created_reactive = reactive.Value(samples_date_created)
+        seq_date_created_reactive = reactive.Value(seq_date_created)
         p.set(12, message="Datasets loaded successfully")
     
     # Define a function to update the reactive values
-    def update_pinned_data():
-        with ui.Progress (min=1, max=6) as p:
-            p.set(message="Loading updated datasets from pins...")
+    def update_database_data():
+        '''Update the reactive values with the latest data from the database'''
 
-            updated_projects_df, updated_project_date_created = fetch_pinned_data("vi2172/projects_limsshiny")
+        with ui.Progress(min=1, max=10) as p:
+            p.set(message="Refreshing database connection...")
+            
+            # Force database refresh
+            refresh_db_connection()
+            
+            # Fetch updated data
+            updated_projects_df, updated_project_date_created = fetch_projects_data()
             p.set(3, message="Projects data fetched")
-            updated_wgs_df, updated_wgs_date_created = fetch_pinned_data("vi2172/wgs_samples_limsshiny")
-            p.set(6, message="WGS samples data fetched")
-            updated_prepared_df, updated_prepared_created = fetch_pinned_data("vi2172/wgs_prepared_limsshiny")
-            p.set(8, message="Prepared data fetched")
+            
+            updated_samples_df, updated_samples_date_created = fetch_all_samples_data()
+            p.set(6, message="Samples data fetched")
+            
+            updated_seq_df, updated_seq_date_created = fetch_sequencing_data()
+            p.set(8, message="Seq data fetched")
 
             # Update reactive values
-            projects_df.set(updated_projects_df)
-            wgs_df.set(updated_wgs_df)
-            prepared_df.set(updated_prepared_df)
+            projects_df_reactive.set(updated_projects_df)
+            samples_df_reactive.set(updated_samples_df)
+            seq_df_reactive.set(updated_seq_df)
             p.set(9, message="Reactive dataframe values updated")
 
-            projects_df_created.set(updated_project_date_created)
-            wgs_date_created.set(updated_wgs_date_created)
-            prepared_date_created.set(updated_prepared_created)
+            projects_date_created_reactive.set(updated_project_date_created)
+            samples_date_created_reactive.set(updated_samples_date_created)
+            seq_date_created_reactive.set(updated_seq_date_created)
             p.set(10, message="Datasets updated successfully")
 
     # Define an effect to handle the update button click event
     @reactive.Effect
     @reactive.event(input.update_button)
     def on_update_button_click():
-        update_pinned_data()
+        '''Handle the update button click event'''
+        update_database_data()
 
-    @render.text
+    @render.ui
     def update_tooltip_output():
-        
-        iso_date_projects_gmt = datetime.datetime.fromisoformat(projects_df_created.get())
-        iso_date_wgs_gmt = datetime.datetime.fromisoformat(wgs_date_created.get())
-        iso_date_prepared_gmt = datetime.datetime.fromisoformat(prepared_date_created.get())
-        iso_date_seq_gmt = datetime.datetime.fromisoformat(seq_date_created.get())
+        '''Render the update tooltip with updated data information'''
 
-        cet = pytz.timezone('Europe/Berlin')
+        # Get database update information        
+        update_info = get_db_update_info()
     
-        cet_date_wgs = iso_date_wgs_gmt.astimezone(cet)
-        cet_date_projects = iso_date_projects_gmt.astimezone(cet)
-        cet_date_prepared = iso_date_prepared_gmt.astimezone(cet)
-        cet_date_seq = iso_date_seq_gmt.astimezone(cet)
-
-        human_readable_date_wgs = cet_date_wgs.strftime("%Y-%m-%d (kl %H:%M)")
-        human_readable_date_projects = cet_date_projects.strftime("%Y-%m-%d (kl %H:%M)") #%Z to add CEST
-        human_readable_date_prepared = cet_date_prepared.strftime("%Y-%m-%d (kl %H:%M)")
-        human_readable_date_sequencing = cet_date_seq.strftime("%Y-%m-%d (kl %H:%M)")
-
-        text = f"<strong>Connect pin status:<br>2h intervals<br><br>\
-            Projects:<br>{human_readable_date_projects}<br><br>\
-            WGS Samples:<br>{human_readable_date_wgs}<br><br>\
-            Prepared Samples:<br>{human_readable_date_prepared}<br><br>\
-            Sequencing Runs:<br>{human_readable_date_sequencing}<strong>"
-        
+        # Convert timestamps to CET
+        cet = pytz.timezone('Europe/Oslo')
+    
+        # Current time for app refresh
+        now = datetime.datetime.now(cet)
+        app_refresh_time = now.strftime("%Y-%m-%d %H:%M")
+    
+        # Get last update timestamps for each table
+        proj_time = seq_time = samples_time = "Not available"
+    
+        if update_info.get('table_updates'):
+            if 'projects' in update_info['table_updates']:
+                proj_update = update_info['table_updates']['projects']
+                try:
+                    proj_time = datetime.datetime.fromisoformat(proj_update['timestamp']).strftime("%Y-%m-%d %H:%M")
+                except:
+                    proj_time = proj_update['timestamp']
+                
+            if 'samples' in update_info['table_updates']:
+                samples_update = update_info['table_updates']['samples']
+                try:
+                    samples_time = datetime.datetime.fromisoformat(samples_update['timestamp']).strftime("%Y-%m-%d %H:%M")
+                except:
+                    samples_time = samples_update['timestamp']
+                
+            if 'ilmn_sequencing' in update_info['table_updates']:
+                seq_update = update_info['table_updates']['ilmn_sequencing']
+                try:
+                    seq_time = datetime.datetime.fromisoformat(seq_update['timestamp']).strftime("%Y-%m-%d %H:%M")
+                except:
+                    seq_time = seq_update['timestamp']
+    
+        # Build a very minimal tooltip
+        text = f"""<strong>SQL db last updated:</strong><br>
+        ➡️ Projects:<br>{proj_time}<br>
+        ➡️ Samples:<br>{samples_time}<br>
+        ➡️ Sequencing:<br>{seq_time}<br><br>
+        <strong>App last refreshed:</strong><br>
+        🔄 {app_refresh_time}"""
+    
         return ui.HTML(text)
     
-    # Function to update UI with reactive functionality. UI is updated with the most recent data whenever the df`s change.
-    @output
+    
     @render.ui
     def render_updated_data():
-        setup_projects_page(input, output, session, projects_df.get(), projects_df_created.get())
-        setup_wgs_samples_page(input, output, session, wgs_df.get(), wgs_date_created.get(), historical_df)
-        setup_prepared_samples_page(input, output, session, prepared_df.get(), prepared_date_created.get())
-        setup_seq_run_page(input,output,session,seq_df.get(),seq_date_created.get(), historical_seq_df)
-        return ui.TagList()  # Return an empty UI element as setup_wgs_samples_page handles rendering
+        '''Render the updated data to the UI'''
+
+        projects_server(input, output, session, 
+                   projects_df_reactive.get(),
+                   projects_date_created_reactive.get())
+    
+        samples_server(input, output, session,
+                 samples_df_reactive.get(),
+                 samples_date_created_reactive.get())
+    
+        seq_server(input, output, session,
+             seq_df_reactive.get(),
+             seq_date_created_reactive.get())
+    
+        return ui.TagList()  # Return an empty UI element
     
 
 
