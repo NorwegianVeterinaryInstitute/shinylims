@@ -2,7 +2,7 @@
 
 A Python Shiny app for LIMS reporting hosted on Posit Connect.
 
-The app displays metadata stored in pins. The pinning of data to Posit Connect is done using scripts running on the Illumina LIMS Clarity server:
+The app displays metadata stored in a SQLite pin. The db upserts and subsequent pinning to Posit Connect is done using scripts running on the Illumina LIMS Clarity server:
 https://github.com/NorwegianVeterinaryInstitute/nvi_lims_epps/tree/main/shiny_app 
 
 This python package is managed with uv (https://docs.astral.sh/uv). To run it, clone the repository and install the package with:
@@ -23,6 +23,7 @@ Any pushes to main is automatically deployed on Posit Connect. Here we have two 
 | ------------------- | ---------------------  | ------------------------- | ------ |
 | shinylims-uv-test-deploy | test-deploy | test | admin access only | 
 | shinylims-uv-deploy | deploy | prod | open for everyone by request |
+| both of the above  | both of the above | both | - |
 
 
 The idea here is to first implement any changes on an instance running on your local computer. After confirmed running as expected locally, push to the test Posit instance to confirm that everything also functions on Posit. Then change mode to 'prod' and push again to implement changes to the production instance of the app. You can also choose to deploy from both branches at the same time by using the mode ```both```.

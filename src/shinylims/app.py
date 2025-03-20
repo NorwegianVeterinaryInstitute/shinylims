@@ -14,6 +14,8 @@ import datetime
 import pytz # For fixing timezone differences
 from faicons import icon_svg  #https://faicons.dev/
 from shinyswatch import theme
+import os
+from pathlib import Path
 
 # Import table modules
 from shinylims.tables.projects import projects_ui, projects_server
@@ -34,8 +36,12 @@ from src.shinylims.data.data_utils import (
 # Add assets
 from pathlib import Path
 css_path = Path(__file__).parent / "assets" / "styles.css"
-from shinylims.data.brand_utils import load_brand_config
+from shinylims.data.brand_utils import load_brand_config, generate_comprehensive_brand_css, get_logo_path
 brand = load_brand_config()
+
+# Logo file to use
+logo_file = "logos/vetinst-logo.png"
+logo_path = get_logo_path(brand, logo_file)
 
 ####################
 # CONSTRUCT THE UI #
@@ -44,13 +50,23 @@ brand = load_brand_config()
 app_ui = ui.page_navbar(
     
     # Select bootstrap theme
-    theme.cerulean(),
+    #theme.cerulean(),
 
-    # Include the custom CSS file
-    ui.head_content(ui.include_css(css_path)),
+    # Add Google Fonts and custom CSS that overrides the theme
+    ui.head_content(
+        ui.tags.link(
+            rel="stylesheet",
+            href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&display=swap"
+        ),
+        ui.tags.style(generate_comprehensive_brand_css(brand)),
+        ui.include_css(css_path)
+    ),
+
     
     # Push the navbar items to the right
-    ui.nav_spacer(),  
+    #ui.nav_spacer(),  
+    # Add a spacer before the nav panels to push them toward center
+    ui.nav_spacer(),
 
     # Kickstart server side ui reactive functions using latest database update
     ui.nav_control(ui.output_ui("render_updated_data")), 
@@ -58,11 +74,30 @@ app_ui = ui.page_navbar(
     # Define ui panels
     ui.nav_panel("Projects", projects_ui()),
     ui.nav_panel("Samples", samples_ui()),  
-    ui.nav_panel("Illumina Sequencing Runs", seq_ui()),
-    ui.nav_control(ui.tooltip(ui.input_action_button("update_button", "Refresh SQL db connection", class_="btn-success"), ui.output_ui("update_tooltip_output"), placement="right", id="update_tooltip" )), 
+    ui.nav_panel("Illumina Sequencing", seq_ui()),
+    # Add another spacer after panels to push the button to the far right
+    ui.nav_spacer(),
+    ui.nav_control(ui.tooltip(
+        ui.input_action_button("update_button", "Refresh SQL db connection", class_="btn-success"), 
+        ui.output_ui("update_tooltip_output"), 
+        placement="right", 
+        id="update_tooltip",
+        style="display: flex; align-items: center; height: 100%;"
+    )),
     
     # Title
-    title=ui.span("Clarity LIMS Metadata App    ",icon_svg("dna"))
+    
+    title=ui.div(
+        ui.tags.img(
+            src=logo_path,
+            alt="NVI",
+            height="55px",
+            style="margin-right: 10px; vertical-align: middle;"
+        ),
+        #ui.span("LIMS Metadata App", style="vertical-align: middle;"),
+        style="display: flex; align-items: center;"
+    ),
+    
 )
 
 
@@ -80,6 +115,8 @@ def server(input, output, session):
     Reactive metadata values are used to populate a information tooltip through the 
     function update_tooltip_output()
     """
+    # Create a reactive value for database update info
+    db_update_info_reactive = reactive.Value(get_db_update_info())
 
     # Fetch initial data
     with ui.Progress(min=1, max=12) as p:
@@ -134,6 +171,10 @@ def server(input, output, session):
             projects_date_created_reactive.set(updated_project_date_created)
             samples_date_created_reactive.set(updated_samples_date_created)
             seq_date_created_reactive.set(updated_seq_date_created)
+
+            # Update the database update info
+            db_update_info_reactive.set(get_db_update_info())  # Update tooltip info
+
             p.set(10, message="Datasets updated successfully")
 
     # Define an effect to handle the update button click event
@@ -148,7 +189,7 @@ def server(input, output, session):
         '''Render the update tooltip with updated data information'''
 
         # Get database update information        
-        update_info = get_db_update_info()
+        update_info = db_update_info_reactive.get()
     
         # Convert timestamps to CET
         cet = pytz.timezone('Europe/Oslo')
@@ -217,4 +258,7 @@ def server(input, output, session):
 # RUN APP #
 ###########
 
-app = App(app_ui, server)
+# Get the absolute path to the www directory
+www_dir = Path(__file__).parent / "www"
+
+app = App(app_ui, server, static_assets=www_dir)

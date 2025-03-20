@@ -11,7 +11,16 @@ import pytz
 
 # UI definition for the Samples page
 def samples_ui():
-    return ui.navset_tab(
+    return ui.div(
+        ui.tags.style("""
+            /* Custom styling for the samples nav tabs */
+            #samples_navset .nav-link.active { 
+                font-size: 1.5rem !important; 
+            }
+        """),
+
+        ui.h2("\u00A0", class_="mb-3 text-center"),
+        ui.navset_tab(
         ui.nav_panel("Table (Nov 2023 ->)",
             ui.div(
                 ui.accordion(
@@ -94,8 +103,9 @@ def samples_ui():
             ),
             ui.output_ui("data_samples"),
         ),
-        ui.nav_panel("Info", ui.card(ui.output_ui("samples_info")))
-    )
+        ui.nav_panel("Info", ui.card(ui.output_ui("samples_info"))),
+        id="samples_navset"
+    ))
 
 # Server logic for the Samples page
 def samples_server(input, output, session, samples_df, samples_date_created):
