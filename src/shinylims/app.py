@@ -23,8 +23,7 @@ from shinylims.tables.samples import samples_ui, samples_server
 from shinylims.tables.sequencing import seq_ui, seq_server  # Make sure these function names match what's in your file
 
 # Import database utilities
-from src.shinylims.data.db_utils import get_db_update_info, refresh_db_connection
-#from src.shinylims.data.db_utils import refresh_db_connection
+from src.shinylims.data.db_utils import get_db_update_info, refresh_db_connection, get_formatted_update_info
 
 # Import data utilities
 from src.shinylims.data.data_utils import (
@@ -36,7 +35,7 @@ from src.shinylims.data.data_utils import (
 # Add assets
 from pathlib import Path
 css_path = Path(__file__).parent / "assets" / "styles.css"
-from shinylims.data.brand_utils import load_brand_config, generate_comprehensive_brand_css, get_logo_path
+from shinylims.data.brand_utils import load_brand_config, generate_comprehensive_brand_css
 brand = load_brand_config()
 
 # Logo file to use
@@ -182,56 +181,23 @@ def server(input, output, session):
     def on_update_button_click():
         '''Handle the update button click event'''
         update_database_data()
+    
 
     @render.ui
     def update_tooltip_output():
         '''Render the update tooltip with updated data information'''
-
-        # Get database update information        
-        update_info = db_update_info_reactive.get()
-    
-        # Convert timestamps to CET
-        cet = pytz.timezone('Europe/Oslo')
-    
-        # Current time for app refresh
-        now = datetime.datetime.now(cet)
-        app_refresh_time = now.strftime("%Y-%m-%d %H:%M")
-    
-        # Get last update timestamps for each table
-        proj_time = seq_time = samples_time = "Not available"
-    
-        if update_info.get('table_updates'):
-            if 'projects' in update_info['table_updates']:
-                proj_update = update_info['table_updates']['projects']
-                try:
-                    proj_time = datetime.datetime.fromisoformat(proj_update['timestamp']).strftime("%Y-%m-%d %H:%M")
-                except:
-                    proj_time = proj_update['timestamp']
-                
-            if 'samples' in update_info['table_updates']:
-                samples_update = update_info['table_updates']['samples']
-                try:
-                    samples_time = datetime.datetime.fromisoformat(samples_update['timestamp']).strftime("%Y-%m-%d %H:%M")
-                except:
-                    samples_time = samples_update['timestamp']
-                
-            if 'ilmn_sequencing' in update_info['table_updates']:
-                seq_update = update_info['table_updates']['ilmn_sequencing']
-                try:
-                    seq_time = datetime.datetime.fromisoformat(seq_update['timestamp']).strftime("%Y-%m-%d %H:%M")
-                except:
-                    seq_time = seq_update['timestamp']
+        # Get formatted info 
+        formatted_info = get_formatted_update_info()
     
         # Build a very minimal tooltip
         text = f"""<strong>SQL db last updated:</strong><br>
-        ➡️ Projects:<br>{proj_time}<br>
-        ➡️ Samples:<br>{samples_time}<br>
-        ➡️ Sequencing:<br>{seq_time}<br><br>
+        ➡️ Projects:<br>{formatted_info['projects']['formatted']}<br>
+        ➡️ Samples:<br>{formatted_info['samples']['formatted']}<br>
+        ➡️ Sequencing:<br>{formatted_info['ilmn_sequencing']['formatted']}<br><br>
         <strong>App last refreshed:</strong><br>
-        🔄 {app_refresh_time}"""
-    
+        🔄 {formatted_info['app_refresh']}"""
+
         return ui.HTML(text)
-    
     
     @render.ui
     def render_updated_data():

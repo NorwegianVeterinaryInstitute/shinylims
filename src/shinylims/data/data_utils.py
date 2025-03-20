@@ -13,9 +13,42 @@ samples, and sequencing runs with standardized column naming and formatting.
 
 import pandas as pd
 import datetime
-from src.shinylims.data.db_utils import query_to_dataframe
+from src.shinylims.data.db_utils import query_to_dataframe, get_db_update_info
 import numpy as np
 
+
+####################
+# HELPER FUNCTIONS #
+####################
+
+def get_table_update_timestamp(table_name):
+    """
+    Get the last update timestamp for a specific table from the update_log.
+    
+    Args:
+        table_name (str): Name of the table to get the timestamp for
+        
+    Returns:
+        str: ISO formatted timestamp of the last update for this table
+    """
+    update_info = get_db_update_info()
+    
+    # Check if we have table-specific update info
+    if update_info.get('update_method') == 'update_log' and update_info.get('table_updates'):
+        # Handle case where tables_affected might contain our table name
+        # We need to check if the table_name is in the tables_affected field
+        for db_table, update in update_info['table_updates'].items():
+            # The tables_affected field might contain multiple tables or a pattern
+            # Check if our table is mentioned in this field
+            if table_name in db_table:
+                return update['timestamp']
+    
+    # Fall back to the overall last update time if available
+    if update_info.get('last_update'):
+        return update_info['last_update']
+    
+    # Last resort - use current time
+    return datetime.datetime.now().isoformat()
 
 ####################
 # TRANSFORMATIONS #
@@ -78,7 +111,8 @@ def fetch_projects_data():
     # Replace NaN values
     df = df.replace(np.nan, '', regex=True)
     
-    meta_created = datetime.datetime.now().isoformat()
+    # Get the actual update timestamp for this table instead of current time
+    meta_created = get_table_update_timestamp('projects')
 
     # Transform comments
     comment_columns = [col for col in df.columns if 'comment' in col.lower()]
@@ -135,7 +169,7 @@ def fetch_all_samples_data():
     for col in comment_columns:
         df[col] = df[col].apply(transform_comments_to_html)
     
-    meta_created = datetime.datetime.now().isoformat()
+    meta_created = get_table_update_timestamp('samples')
     
     return df, meta_created
 
@@ -186,6 +220,6 @@ def fetch_sequencing_data():
             df[col] = df[col].apply(transform_to_html)
 
     
-    meta_created = datetime.datetime.now().isoformat()
+    meta_created = get_table_update_timestamp('ilmn_sequencing')
     
     return df, meta_created

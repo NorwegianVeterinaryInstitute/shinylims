@@ -157,21 +157,6 @@ def generate_comprehensive_brand_css(brand):
     {brand['defaults']['bootstrap'].get('rules', '')}
     """
 
-def get_logo_path(brand, logo_name="english"):
-    """Get the path to a specific logo file from the brand config."""
-    try:
-        # Get the logo filename from the images dictionary
-        logo_filename = brand["logo"]["images"][logo_name]
-        
-        # Replace 'logos/' with 'assets/' in the path
-        logo_filename = logo_filename.replace("logos/", "assets/")
-        
-        # Return the modified path
-        return f"/{logo_filename}"
-    except KeyError:
-        # Fallback to a default
-        return "/assets/vetinst-logo.png"
-
 
 # Default brand configuration in case loading fails
 DEFAULT_BRAND = {
