@@ -259,6 +259,6 @@ def server(input, output, session):
 ###########
 
 # Get the absolute path to the www directory
-www_dir = Path(__file__).parent / "www"
+www_dir = Path(__file__).parent / "src" / "shinylims" / "www"
 
 app = App(app_ui, server, static_assets=www_dir)
