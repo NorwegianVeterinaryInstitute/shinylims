@@ -40,7 +40,7 @@ from shinylims.data.brand_utils import load_brand_config, generate_comprehensive
 brand = load_brand_config()
 
 # Logo file to use
-logo_file = "assets/vetinst-logo.png"
+logo_path = "assets/vetinst-logo.png"
 
 ####################
 # CONSTRUCT THE UI #
