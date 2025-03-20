@@ -14,6 +14,7 @@ import os
 from pins import board_connect
 from dotenv import load_dotenv
 import datetime
+import pytz
 
 # Load environment variables
 load_dotenv()
@@ -241,3 +242,86 @@ def get_db_update_info():
             'error': str(e)
         }
 
+
+
+def get_formatted_update_info():
+    """
+    Get formatted update information for display in the UI.
+    
+    Returns:
+        dict: A dictionary containing formatted timestamps for each table
+              and additional metadata about the updates.
+    """
+    update_info = get_db_update_info()
+    
+    # Convert timestamps to CET
+    cet = pytz.timezone('Europe/Oslo')
+    
+    # Current time for app refresh
+    now = datetime.datetime.now(cet)
+    app_refresh_time = now.strftime("%Y-%m-%d %H:%M")
+    
+    # Format timestamps for each table
+    formatted_info = {
+        'projects': {
+            'timestamp': 'Not available',
+            'formatted': 'Not available',
+            'records': 'N/A'
+        },
+        'samples': {
+            'timestamp': 'Not available',
+            'formatted': 'Not available',
+            'records': 'N/A'
+        },
+        'ilmn_sequencing': {
+            'timestamp': 'Not available',
+            'formatted': 'Not available',
+            'records': 'N/A'
+        },
+        'app_refresh': app_refresh_time
+    }
+    
+    if update_info.get('table_updates'):
+        # We need to find entries in table_updates that might refer to our tables
+        for table_name, table_info in formatted_info.items():
+            if table_name != 'app_refresh':  # Skip the app refresh time
+                # Look for an exact match first
+                if table_name in update_info['table_updates']:
+                    table_update = update_info['table_updates'][table_name]
+                    try:
+                        iso_timestamp = table_update['timestamp']
+                        dt = datetime.datetime.fromisoformat(iso_timestamp)
+                        formatted_info[table_name] = {
+                            'timestamp': iso_timestamp,
+                            'formatted': dt.strftime("%Y-%m-%d %H:%M"),
+                            'records': table_update.get('records_affected', 'N/A')
+                        }
+                    except Exception as e:
+                        print(f"Error formatting timestamp for {table_name}: {e}")
+                        formatted_info[table_name] = {
+                            'timestamp': table_update['timestamp'],
+                            'formatted': table_update['timestamp'],
+                            'records': table_update.get('records_affected', 'N/A')
+                        }
+                else:
+                    # Look for partial matches in the tables_affected field
+                    for db_table, update in update_info['table_updates'].items():
+                        if table_name in db_table:
+                            try:
+                                iso_timestamp = update['timestamp']
+                                dt = datetime.datetime.fromisoformat(iso_timestamp)
+                                formatted_info[table_name] = {
+                                    'timestamp': iso_timestamp,
+                                    'formatted': dt.strftime("%Y-%m-%d %H:%M"),
+                                    'records': update.get('records_affected', 'N/A')
+                                }
+                            except Exception as e:
+                                print(f"Error formatting timestamp for {table_name} in {db_table}: {e}")
+                                formatted_info[table_name] = {
+                                    'timestamp': update['timestamp'],
+                                    'formatted': update['timestamp'],
+                                    'records': update.get('records_affected', 'N/A')
+                                }
+                            break  # Stop after finding the first match
+    
+    return formatted_info
