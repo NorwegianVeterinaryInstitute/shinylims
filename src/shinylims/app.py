@@ -40,7 +40,7 @@ from shinylims.data.brand_utils import load_brand_config, generate_comprehensive
 brand = load_brand_config()
 
 # Logo file to use
-logo_path = "assets/vetinst-logo.png"
+logo_path = "logos/vetinst-logo.png"  
 
 ####################
 # CONSTRUCT THE UI #
@@ -258,6 +258,6 @@ def server(input, output, session):
 ###########
 
 # Get the absolute path to the www directory
-www_dir = Path(__file__).parent / "src" / "shinylims" / "www"
+www_dir = Path(__file__).parent.parent.parent / "www"
 
 app = App(app_ui, server, static_assets=www_dir)
