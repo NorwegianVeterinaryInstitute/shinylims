@@ -121,7 +121,7 @@ def projects_server(input, output, session, projects_df, project_date_created):
                          layout={"topEnd": "search"}, 
                          column_filters="footer", 
                          search={"smart": True, "regex": True, "caseInsensitive": True},
-                         lengthMenu=[[50, 100, 200, 500, -1], [50, 100, 200, 500, "All (NB: Slow)" ]], 
+                         lengthMenu=[[50, 100, 200, 500, -1], [50, 100, 200, 500, "All" ]], 
                          classes="compact hover order-column cell-border", 
                          scrollY="750px",
                          paging=True,
