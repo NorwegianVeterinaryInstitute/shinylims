@@ -41,7 +41,6 @@ brand = load_brand_config()
 
 # Logo file to use
 logo_file = "assets/vetinst-logo.png"
-logo_path = f"/{logo_file}" 
 
 ####################
 # CONSTRUCT THE UI #
