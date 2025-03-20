@@ -1,15 +1,3 @@
-
-/* Place shiny notifications centered and larger than normal */
-.shiny-notification {
-    height: 100px;
-    width: 800px;
-    position:fixed;
-    top: calc(50% - 50px);
-    left: calc(50% - 400px);
-    font-size: 1.4rem; 
-  }
- 
-  
 /* datatables alignment */
 .dt-center {
     text-align: center;
@@ -21,7 +9,6 @@
   white-space: nowrap;
 }
 
-
 /* Standard for all datatables should be centered alignment */
 table.dataTable td, table.dataTable th {
   text-align: center !important;
@@ -30,4 +17,55 @@ table.dataTable td, table.dataTable th {
 /* Create separate class to left-slign comment */
 table.dataTable td.left-column {
   text-align: left !important; 
+}
+/* Center navigation panels */
+.shiny-nav-center {
+  display: flex;
+  justify-content: center;
+  flex-grow: 1;
+  margin: 0 auto;
+}
+
+/* Custom navbar layout */
+.custom-navbar-container {
+  display: flex;
+  width: 100%;
+  align-items: center;
+}
+
+/* Improved table spacing */
+.reactable-data td, .dataTable td {
+  padding: 8px 10px;
+}
+
+/* Add spacing below main headings */
+h2.card-title {
+  margin-bottom: 3rem;
+}
+
+/* Improve table filter/search spacing */
+.reactable-filter-input, .dataTables_filter input {
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* Improve button spacing in navbar */
+.navbar .btn {
+  margin-left: 20px;
+}
+
+/* Lighter color for every second entry in tables */
+table.dataTable tbody tr:nth-child(even),
+.rt-tr:nth-child(even) {
+  background-color: rgba(215, 244, 255, 0.3) !important; /* Light version of air color */
+}
+
+/* Hover color in tables */
+table.dataTable tbody tr:hover,
+.rt-tr:hover,
+.datatable tbody tr:hover {
+  background-color: #C7D9FF !important; /* light_water color from brand yml */
+  transition: background-color 0.2s ease;
 }

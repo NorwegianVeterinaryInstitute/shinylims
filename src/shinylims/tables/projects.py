@@ -15,60 +15,70 @@ import pytz
 ##############################
 
 def projects_ui():
-    return ui.navset_tab(
-        ui.nav_panel("Table  (Nov 2023 ->)",
-            ui.div(
-                ui.accordion(
-                    ui.accordion_panel(
-                        ui.output_text("filters_title_projects"),
-                        ui.row(ui.column(3,
-                            ui.input_date_range(
-                                id="date_range_projects", 
-                                label="Open Date Range",
-                                start=None,
-                                end=None,
-                            ),
-                            ui.input_action_button(
-                                id="reset_date_projects", 
-                                label="Reset Date Filter",
-                            ),),
-                            ui.column(3,
-                                ui.input_checkbox(
-                                    id="project_comment_filter",
-                                    label="Show only projects with 'Comment'"
-                                ))),
-                            value="filters", icon=icon_svg("filter"),
-                    ),
-                    ui.accordion_panel(
-                        ui.output_text("column_selection_title_projects"), 
-                        ui.div(
+    return ui.div(
+        ui.tags.style("""
+            /* Custom styling for the projects nav tabs */
+            #projects_navset .nav-link.active { 
+                font-size: 1.5rem !important; 
+            }
+        """),
+        
+        ui.h2("\u00A0", class_="mb-3 text-center"),
+        ui.navset_tab(
+            ui.nav_panel("Table  (Nov 2023 ->)",
+                ui.div(
+                    ui.accordion(
+                        ui.accordion_panel(
+                            ui.output_text("filters_title_projects"),
+                            ui.row(ui.column(3,
+                                ui.input_date_range(
+                                    id="date_range_projects", 
+                                    label="Open Date Range",
+                                    start=None,
+                                    end=None,
+                                ),
+                                ui.input_action_button(
+                                    id="reset_date_projects", 
+                                    label="Reset Date Filter",
+                                ),),
+                                ui.column(3,
+                                    ui.input_checkbox(
+                                        id="project_comment_filter",
+                                        label="Show only projects with 'Comment'"
+                                    ))),
+                                value="filters", icon=icon_svg("filter"),
+                        ),
+                        ui.accordion_panel(
+                            ui.output_text("column_selection_title_projects"), 
                             ui.div(
                                 ui.div(
-                                    ui.input_checkbox_group(
-                                        id="fields_to_display_projects",
-                                        inline=False,
-                                        label=ui.div("Field Selection", class_="fw-bold"),
-                                        choices=[],
-                                        selected=[],
+                                    ui.div(
+                                        ui.input_checkbox_group(
+                                            id="fields_to_display_projects",
+                                            inline=False,
+                                            label=ui.div("Field Selection", class_="fw-bold"),
+                                            choices=[],
+                                            selected=[],
+                                        ),
                                     ),
-                                ),
-                            )
+                                )
+                            ),
+                            open=False,
+                            value="column_selection_projects",
+                            icon=icon_svg("table-columns")
                         ),
+                        class_="mb-3 mt-3",
                         open=False,
-                        value="column_selection_projects",
-                        icon=icon_svg("table-columns")
+                        multiple=False
                     ),
-                    class_="mb-3 mt-3",
-                    open=False,
-                    multiple=False
+                    class_="mb-3"
                 ),
-                class_="mb-3"
+                
+                ui.output_ui("data_projects")
             ),
-            
-            ui.output_ui("data_projects")
-        ),
-        ui.nav_panel("Info", ui.card(ui.output_ui("projects_info")))
-    )
+            ui.nav_panel("Info", ui.card(ui.output_ui("projects_info"))), id="projects_navset"
+        )
+)
 
 
 ##############################
@@ -110,7 +120,7 @@ def projects_server(input, output, session, projects_df, project_date_created):
         return ui.HTML(DT(dat[selected_columns], 
                          layout={"topEnd": "search"}, 
                          column_filters="footer", 
-                         search={"smart": True},
+                         search={"smart": True, "regex": True, "caseInsensitive": True},
                          lengthMenu=[[50, 100, 200, 500, -1], [50, 100, 200, 500, "All (NB: Slow)" ]], 
                          classes="compact hover order-column cell-border", 
                          scrollY="750px",

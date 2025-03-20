@@ -79,6 +79,11 @@ def fetch_projects_data():
     df = df.replace(np.nan, '', regex=True)
     
     meta_created = datetime.datetime.now().isoformat()
+
+    # Transform comments
+    comment_columns = [col for col in df.columns if 'comment' in col.lower()]
+    for col in comment_columns:
+        df[col] = df[col].apply(transform_comments_to_html)
     
     return df, meta_created
 
@@ -174,10 +179,12 @@ def fetch_sequencing_data():
     
     # Replace NaN values
     df = df.replace(np.nan, '', regex=True)
-    
-    # Transform comments
-    if 'comment' in df.columns:
-        df['comment'] = df['comment'].apply(transform_comments_to_html)
+
+    # Transform LIMS IDs to HTML links
+    for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid']:
+        if col in df.columns:
+            df[col] = df[col].apply(transform_to_html)
+
     
     meta_created = datetime.datetime.now().isoformat()
     

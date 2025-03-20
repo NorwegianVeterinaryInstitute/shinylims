@@ -12,7 +12,15 @@ from itables.javascript import JavascriptFunction
 
 # UI definition for the Sequencing page
 def seq_ui():
-    return ui.navset_tab(
+    return ui.div(
+        ui.tags.style("""
+            /* Custom styling for the samples nav tabs */
+            #seq_navset .nav-link.active { 
+                font-size: 1.5rem !important; 
+            }
+        """),
+        ui.h2("\u00A0", class_="mb-3 text-center"),
+        ui.navset_tab(
         ui.nav_panel("Table (Nov 2023 ->)",
             ui.div(
                 ui.accordion(
@@ -75,8 +83,9 @@ def seq_ui():
         ui.nav_panel("Plots", ui.code("Plots will be displayed here. Waiting for iTables support for selecting data from the table: https://github.com/mwouts/itables/issues/250")),
         ui.nav_panel("Info",ui.div(
             ui.code("NB!! Waiting for instrument integration for getting certain QC values. The data collection cron script will also be rewritten after instrument integration is in order NB!!"),
-            ui.card(ui.output_ui("seqRun_info"),)))
-    )
+            ui.card(ui.output_ui("seqRun_info"),))),
+            id="seq_navset"
+    ))
 
 # Server logic for the Sequencing page
 def seq_server(input, output, session, seq_df, seq_date_created):
