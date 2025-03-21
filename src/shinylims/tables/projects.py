@@ -118,6 +118,7 @@ def projects_server(input, output, session, projects_df, project_date_created):
 
         # Return HTML tag with DT table element
         return ui.HTML(DT(dat[selected_columns], 
+                         select = True, 
                          layout={"topEnd": "search"}, 
                          column_filters="footer", 
                          search={"smart": True, "regex": True, "caseInsensitive": True},

@@ -1,10 +1,11 @@
 version = 1
+revision = 1
 requires-python = ">=3.11.5"
 resolution-markers = [
-    "python_full_version < '3.12' and platform_system != 'Emscripten'",
-    "python_full_version < '3.12' and platform_system == 'Emscripten'",
-    "python_full_version >= '3.12' and platform_system != 'Emscripten'",
-    "python_full_version >= '3.12' and platform_system == 'Emscripten'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.12' and sys_platform != 'emscripten'",
+    "python_full_version >= '3.12' and sys_platform == 'emscripten'",
 ]
 
 [[package]]
@@ -118,7 +119,7 @@ name = "click"
 version = "8.1.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "platform_system == 'Windows'" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
 wheels = [
@@ -345,16 +346,16 @@ wheels = [
 
 [[package]]
 name = "itables"
-version = "2.0.1"
+version = "2.2.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ipython" },
     { name = "numpy" },
     { name = "pandas" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a7/70/cacc01bb6895c6a5c6db8f05dbbbea1fbf9355c92d8cdd94c01209f1c832/itables-2.0.1.tar.gz", hash = "sha256:dae51872275f7d2a7be7159c280a67ae369ec31bb0d3b87042c5919f6de201a3", size = 1081795 }
+sdist = { url = "https://files.pythonhosted.org/packages/07/18/359fc46f2874290843a4ba2c089d0109874cd2d73863d0e69fd54a5e9532/itables-2.2.5.tar.gz", hash = "sha256:838ed4783da0b6481b9062c362b8a331aa56f48d6c90e0f6dc76a0488a316049", size = 2436699 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/a8/589e34340f3631d73365c98c2027d177e1d9b10c15bb6823283dce690287/itables-2.0.1-py3-none-any.whl", hash = "sha256:ab99561f088eb7dbfca6f24f894a80929fd8c3198f55126441057366e0718bec", size = 221658 },
+    { url = "https://files.pythonhosted.org/packages/aa/dd/8976761076632f492f0d25502e348f41f343423d36270dc32f323b9155bc/itables-2.2.5-py3-none-any.whl", hash = "sha256:d0d33ce427c6c84d4063998650323eb65ccddb47a5505ef1ad3f563580dc101d", size = 1407043 },
 ]
 
 [[package]]
@@ -895,7 +896,7 @@ name = "questionary"
 version = "2.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "prompt-toolkit", marker = "platform_system != 'Emscripten'" },
+    { name = "prompt-toolkit", marker = "sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/84/d0/d73525aeba800df7030ac187d09c59dc40df1c878b4fab8669bdc805535d/questionary-2.0.1.tar.gz", hash = "sha256:bcce898bf3dbb446ff62830c86c5c6fb9a22a54146f0f5597d3da43b10d8fc8b", size = 24726 }
 wheels = [
@@ -938,18 +939,18 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "appdirs" },
     { name = "asgiref" },
-    { name = "click", marker = "platform_system != 'Emscripten'" },
+    { name = "click", marker = "sys_platform != 'emscripten'" },
     { name = "htmltools" },
     { name = "linkify-it-py" },
     { name = "markdown-it-py" },
     { name = "mdit-py-plugins" },
     { name = "packaging" },
     { name = "python-multipart" },
-    { name = "questionary", marker = "platform_system != 'Emscripten'" },
+    { name = "questionary", marker = "sys_platform != 'emscripten'" },
     { name = "starlette" },
     { name = "typing-extensions" },
-    { name = "uvicorn", marker = "platform_system != 'Emscripten'" },
-    { name = "watchfiles", marker = "platform_system != 'Emscripten'" },
+    { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
+    { name = "watchfiles", marker = "sys_platform != 'emscripten'" },
     { name = "websockets" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/76/da/99755041e436ae7385018afcce0275ff35367ab9e70a49f6877ace203647/shiny-0.9.0.tar.gz", hash = "sha256:add19daeb6d5a43f4f60fbc89affed05f4f4b19ffc7ee252001288aa1724ccf9", size = 3618587 }
@@ -975,7 +976,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "faicons", specifier = "==0.2.2" },
-    { name = "itables", specifier = "==2.0.1" },
+    { name = "itables", specifier = "==2.2.5" },
     { name = "pandas", specifier = "==2.2.2" },
     { name = "pins", specifier = "==0.8.5" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
@@ -1093,8 +1094,8 @@ name = "uvicorn"
 version = "0.32.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "platform_system != 'Emscripten'" },
-    { name = "h11", marker = "platform_system != 'Emscripten'" },
+    { name = "click", marker = "sys_platform != 'emscripten'" },
+    { name = "h11", marker = "sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e0/fc/1d785078eefd6945f3e5bab5c076e4230698046231eb0f3747bc5c8fa992/uvicorn-0.32.0.tar.gz", hash = "sha256:f78b36b143c16f54ccdb8190d0a26b5f1901fe5a3c777e1ab29f26391af8551e", size = 77564 }
 wheels = [
@@ -1106,7 +1107,7 @@ name = "watchfiles"
 version = "0.24.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio", marker = "platform_system != 'Emscripten'" },
+    { name = "anyio", marker = "sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c8/27/2ba23c8cc85796e2d41976439b08d52f691655fdb9401362099502d1f0cf/watchfiles-0.24.0.tar.gz", hash = "sha256:afb72325b74fa7a428c009c1b8be4b4d7c2afedafb2982827ef2156646df2fe1", size = 37870 }
 wheels = [
