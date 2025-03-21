@@ -1,71 +1,81 @@
-/* datatables alignment */
-.dt-center {
-    text-align: center;
-}
-.dt-left {
-  text-align: left;
-}
-.nowrap {
-  white-space: nowrap;
-}
+/* Utility classes for alignment */
+.dt-center { text-align: center; }
+.dt-left { text-align: left; }
+.nowrap { white-space: nowrap; }
 
-/* Standard for all datatables should be centered alignment */
+/* Table alignment */
 table.dataTable td, table.dataTable th {
   text-align: center !important;
 }
-
-/* Create separate class to left-slign comment */
 table.dataTable td.left-column {
   text-align: left !important; 
 }
-/* Center navigation panels */
+
+/* Layout components */
 .shiny-nav-center {
   display: flex;
   justify-content: center;
   flex-grow: 1;
   margin: 0 auto;
 }
-
-/* Custom navbar layout */
 .custom-navbar-container {
   display: flex;
   width: 100%;
   align-items: center;
 }
 
-/* Improved table spacing */
-.reactable-data td, .dataTable td {
-  padding: 8px 10px;
-}
-
-/* Add spacing below main headings */
-h2.card-title {
-  margin-bottom: 3rem;
-}
-
-/* Improve table filter/search spacing */
+/* Component-specific behaviors */
 .reactable-filter-input, .dataTables_filter input {
   padding: 6px 10px;
   margin-bottom: 12px;
   border: 1px solid #ccc;
   border-radius: 4px;
 }
-
-/* Improve button spacing in navbar */
 .navbar .btn {
   margin-left: 20px;
 }
 
-/* Lighter color for every second entry in tables */
-table.dataTable tbody tr:nth-child(even),
-.rt-tr:nth-child(even) {
-  background-color: rgba(215, 244, 255, 0.3) !important; /* Light version of air color */
+/* Table width adjustments for scaling */
+@media (min-width: 992px) {
+  .dataTables_wrapper, .reactable {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: visible;
+  }
+  table.dataTable, .reactable-table {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  .card-body, .shiny-output-container {
+    width: 100% !important;
+    overflow-x: visible;
+  }
+  .dataTables_filter {
+    float: right;
+    width: auto !important;
+  }
+  .dataTables_paginate, .reactable-pagination {
+    width: auto !important;
+    float: right;
+  }
 }
 
-/* Hover color in tables */
-table.dataTable tbody tr:hover,
-.rt-tr:hover,
-.datatable tbody tr:hover {
-  background-color: #C7D9FF !important; /* light_water color from brand yml */
-  transition: background-color 0.2s ease;
+/* Mobile table adjustments */
+@media (max-width: 991px) {
+  .dataTables_wrapper, .reactable {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+  table.dataTable, .reactable-table {
+    min-width: 100%;
+  }
+  .dataTables_filter {
+    width: 100%;
+    text-align: left;
+    margin-bottom: 10px;
+  }
+  .dataTables_filter input {
+    width: calc(100% - 70px);
+  }
 }
