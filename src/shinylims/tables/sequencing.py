@@ -181,7 +181,8 @@ def seq_server(input, output, session, seq_df, seq_date_created):
         column_index = selected_columns.index(column_to_sort)
 
         return ui.HTML(DT(dat[selected_columns], 
-                          layout={"topEnd": "search"}, 
+                          layout={"topEnd": "search"},
+                          select = True,  
                           column_filters="footer", 
                           search={"smart": True},
                           classes="compact nowrap hover order-column cell-border",  

@@ -240,7 +240,8 @@ def samples_server(input, output, session, samples_df, samples_date_created):
         column_index = selected_columns.index(column_to_sort)
 
         # Return HTML tag with DT table element
-        return ui.HTML(DT(dat[selected_columns], 
+        return ui.HTML(DT(dat[selected_columns],
+                         select = True, 
                          layout={"topEnd": "search"},
                          lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All" ]], 
                          column_filters="footer", 
