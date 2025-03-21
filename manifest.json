@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "locale": "en_US.UTF-8",
+  "metadata": {
+    "appmode": "python-shiny",
+    "entrypoint": "shinylims.app:app"
+  },
+  "python": {
+    "version": "3.11.5",
+    "package_manager": {
+      "name": "pip",
+      "version": "25.0.1",
+      "package_file": "requirements.txt"
+    }
+  },
+  "files": {
+    "requirements.txt": {
+      "checksum": "9570f142de0d08ffe85e4cecc8d627df"
+    },
+    ".env.example": {
+      "checksum": "4e45c40fe87409e3735dd09af93f132a"
+    },
+    ".github/workflows/deploy.yml": {
+      "checksum": "a0169a023a7fe152a855bc2018d515d7"
+    },
+    ".gitignore": {
+      "checksum": "55e2b0f82118a10424eafff1ce2ee65e"
+    },
+    ".python-version": {
+      "checksum": "215923581f8fcce0029639f7ab16ccb6"
+    },
+    "LICENSE": {
+      "checksum": "fc80e042aeec4b637e104910d16812fc"
+    },
+    "README.md": {
+      "checksum": "b5ab1acb2774bf60e66d15b76c6cb7f0"
+    },
+    "deploy_mode.txt": {
+      "checksum": "f6cb3e816496528d4187db53bc66567f"
+    },
+    "pyproject.toml": {
+      "checksum": "4457c3e7ca77d9346961f4954a65a946"
+    },
+    "src/shinylims/__init__.py": {
+      "checksum": "307cc3e530ff345a54e2c5485707a0f7"
+    },
+    "src/shinylims/app.py": {
+      "checksum": "473ca81e3b157a0515748f1cc9558c67"
+    },
+    "src/shinylims/assets/brand.yml": {
+      "checksum": "1b412136d9cd90915d69fdddf4ac093c"
+    },
+    "src/shinylims/assets/styles.css": {
+      "checksum": "b9bb456f5ca3fdc9c5e6808254373ed4"
+    },
+    "src/shinylims/data/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "src/shinylims/data/brand_utils.py": {
+      "checksum": "a77c518a84e472dfc6c6a463830f78fd"
+    },
+    "src/shinylims/data/data_utils.py": {
+      "checksum": "6723b39bdc5615e9989e4e36e4aada64"
+    },
+    "src/shinylims/data/db_utils.py": {
+      "checksum": "e88d0c6d0c2a468324ff6ef46ff4d7f2"
+    },
+    "src/shinylims/tables/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "src/shinylims/tables/projects.py": {
+      "checksum": "4072b0b31a521e5e3591d96eca71e5f6"
+    },
+    "src/shinylims/tables/samples.py": {
+      "checksum": "1b613484f75bec1dba3200a8c952960f"
+    },
+    "src/shinylims/tables/sequencing.py": {
+      "checksum": "75974370d9a913a4f8cd1657f2f61680"
+    },
+    "uv.lock": {
+      "checksum": "5f9f34b684f001d05b6ae7e2039d175d"
+    },
+    "www/logos/vetinst-logo-eng.png": {
+      "checksum": "9b26f213f0e64ea8e49223e5ca460706"
+    },
+    "www/logos/vetinst-logo.png": {
+      "checksum": "9a73087d8d84377a82955262fdd2d1af"
+    }
+  }
+}
