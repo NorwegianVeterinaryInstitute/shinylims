@@ -35,6 +35,15 @@ def process_brand_colors(brand):
 
 def generate_comprehensive_brand_css(brand):
     """Generate comprehensive CSS overrides based on brand configuration."""
+    # Helper function to convert hex to RGB components
+    def hex_to_rgb(hex_color):
+        hex_color = hex_color.lstrip('#')
+        return f"{int(hex_color[0:2], 16)}, {int(hex_color[2:4], 16)}, {int(hex_color[4:6], 16)}"
+    
+    # Get RGB values for the air color
+    air_color = brand['color']['palette']['air'][:7]  # Get the hex part
+    air_rgb = hex_to_rgb(air_color)
+    
     return f"""
     /* Base styles */
     body {{
@@ -52,6 +61,11 @@ def generate_comprehensive_brand_css(brand):
         font-weight: {brand['typography']['headings']['weight']};
         color: {brand['color']['primary']};
         margin-bottom: 1.5rem;
+    }}
+    
+    /* Card title additional spacing */
+    h2.card-title {{
+        margin-bottom: 3rem;
     }}
     
     a {{
@@ -77,7 +91,7 @@ def generate_comprehensive_brand_css(brand):
     
     /* Active tab */
     .nav-link.active {{
-        font-size: 2.2rem !important;
+        font-size: 2rem !important;
         font-weight: 600 !important;
         color: {brand['color']['primary']} !important;
         border-bottom: 3px solid {brand['color']['primary']} !important;
@@ -128,12 +142,25 @@ def generate_comprehensive_brand_css(brand):
         font-size: 1.05rem;
     }}
     
-    .dataTable tbody tr:nth-child(even), .reactable-data tr:nth-child(even) {{
-        background-color: rgba({', '.join(str(int(h[1:3], 16)) for h in [brand['color']['palette']['air'][:7]])}, 0.3);
+    /* Table cell padding */
+    .reactable-data td, .dataTable td {{
+        padding: 8px 10px;
     }}
     
-    .dataTable tbody tr:hover, .reactable-data tr:hover {{
+    /* Alternating row colors for all table types */
+    .dataTable tbody tr:nth-child(even), 
+    .reactable-data tr:nth-child(even),
+    .rt-tr:nth-child(even) {{
+        background-color: rgba({air_rgb}, 0.3);
+    }}
+    
+    /* Hover effects for all table types with transition */
+    .dataTable tbody tr:hover, 
+    .reactable-data tr:hover,
+    .rt-tr:hover,
+    .datatable tbody tr:hover {{
         background-color: {brand['color']['palette']['light_water']};
+        transition: background-color 0.2s ease;
     }}
     
     /* Card styles */
@@ -155,6 +182,92 @@ def generate_comprehensive_brand_css(brand):
     
     /* Any custom Bootstrap rules from brand.yml */
     {brand['defaults']['bootstrap'].get('rules', '')}
+    
+    /* Responsive scaling rules */
+    @media (min-width: 992px) {{
+        body {{
+            transform: scale(0.8);
+            transform-origin: top left;
+            width: 125%;
+            height: 125%;
+            position: absolute;
+        }}
+    }}
+    
+    @media (max-width: 991px) {{
+        body {{
+            transform: scale(0.7);
+            transform-origin: top left;
+            width: 142.85%;
+            height: 142.85%;
+            position: absolute;
+        }}
+        
+        html {{
+            font-size: 18px;
+        }}
+        
+        .nav-link {{
+            font-size: 1.3rem !important;
+        }}
+        
+        .nav-link.active {{
+            font-size: 1.6rem !important;
+        }}
+        
+        .shiny-input-container {{
+            width: 100% !important;
+        }}
+        
+        .dataTables_wrapper, .reactable {{
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            width: 100% !important;
+        }}
+        
+        .dataTables_wrapper td, .reactable-data td {{
+            padding: 10px 6px;
+            word-break: break-word;
+        }}
+        
+        .btn {{
+            padding: 12px 16px;
+            margin: 6px;
+            min-height: 44px;
+            min-width: 44px;
+        }}
+        
+        /* Fix for table filters on mobile */
+        .dataTables_filter {{
+            width: 100%;
+            text-align: left;
+            margin-bottom: 10px;
+        }}
+        
+        .dataTables_filter input {{
+            width: calc(100% - 70px);
+        }}
+    }}
+    
+    @media (max-width: 400px) {{
+        body {{
+            transform: scale(0.6);
+            width: 166.67%;
+            height: 166.67%;
+        }}
+        
+        html {{
+            font-size: 20px;
+        }}
+        
+        .nav-link {{
+            font-size: 1.2rem !important;
+        }}
+        
+        .nav-link.active {{
+            font-size: 1.4rem !important;
+        }}
+    }}
     """
 
 
