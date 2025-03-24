@@ -11,6 +11,7 @@ Specifically, this module defines the app_ui variable and server function to run
 
 # Import the shiny App class and other necessary shiny functions
 from shiny import App, render, ui, reactive
+from faicons import icon_svg
 
 # Import table modules
 from shinylims.tables.projects import projects_ui, projects_server
@@ -24,11 +25,14 @@ from src.shinylims.data.db_utils import get_db_update_info, refresh_db_connectio
 from src.shinylims.data.data_utils import (
     fetch_projects_data, 
     fetch_all_samples_data, 
-    fetch_sequencing_data
+    fetch_sequencing_data,
+    get_app_version
 )
 
 # Add custom CSS
 from pathlib import Path
+import tomli  # For reading pyproject.toml
+
 css_path = Path(__file__).parent / "assets" / "styles.css"
 from shinylims.data.brand_utils import load_brand_config, generate_comprehensive_brand_css
 brand = load_brand_config()
@@ -42,6 +46,8 @@ logo_path = "logos/vetinst-logo.png"
 
 # Get the absolute path to the www directory
 www_dir = Path(__file__).parent.parent.parent / "www"
+
+app_version = get_app_version()
 
 ####################
 # CONSTRUCT THE UI #
@@ -64,7 +70,8 @@ app_ui = ui.page_navbar(
         # Brand CSS (Vetinst branding)
         ui.tags.style(generate_comprehensive_brand_css(brand)),
         # Include CSS file (specific component behaviors)
-        ui.include_css(css_path)
+        ui.include_css(css_path),
+        
     ),
 
     # Add a spacer before the nav panels to push them toward center
@@ -74,11 +81,22 @@ app_ui = ui.page_navbar(
     ui.nav_control(ui.output_ui("render_updated_data")), 
 
     # Define ui panels
-    ui.nav_panel("Projects", projects_ui()),
+    ui.nav_panel("Projects", projects_ui(), value="projects"),
     ui.nav_panel("Samples", samples_ui()),  
     ui.nav_panel("Illumina Sequencing", seq_ui()),
     # Add another spacer after panels to push the button to the far right
     ui.nav_spacer(),
+    # Add info button next to refresh button
+    ui.nav_control(
+        ui.div(
+            ui.input_action_button(
+                "info_button", 
+                icon_svg("info"), 
+                class_="btn-info",
+            ),
+            style="display: flex; align-items: center; height: 100%;"
+        )
+    ),
     ui.nav_control(ui.tooltip(
         ui.input_action_button("update_button", "Refresh SQL db connection", class_="btn-success"), 
         ui.output_ui("update_tooltip_output"), 
@@ -99,6 +117,8 @@ app_ui = ui.page_navbar(
         style="display: flex; align-items: center;"
     ),
     
+    # Set Projects as the default selected panel
+    selected="projects"
 )
 
 
@@ -201,6 +221,72 @@ def server(input, output, session):
         🔄 {formatted_info['app_refresh']}"""
 
         return ui.HTML(text)
+    
+    # Define an effect to handle the info button click event
+    @reactive.Effect
+    @reactive.event(input.info_button)
+    def on_info_button_click():
+        '''Handle the info button click event'''
+        ui.modal_show(
+            ui.modal(
+                ui.h2("LIMS Metadata App Information", class_="mb-4"),
+                ui.div(
+                    ui.h3("About"),
+                    ui.p("""This app provides a user-friendly interface to explore and filter LIMS metadata. 
+                         It connects to the LIMS database and displays information about projects, samples, 
+                         and sequencing runs."""),
+                    ui.h3("Database Information"),
+                    ui.p("The database is updated hourly on the LIMS server and synced to the app every 30 minutes past the hour."),
+                    ui.h4("Last Database Updates:"),
+                    ui.tags.dl(
+                        ui.tags.dt("Projects"),
+                        ui.tags.dd(get_formatted_update_info()['projects']['formatted']),
+                        ui.tags.dt("Samples"),
+                        ui.tags.dd(get_formatted_update_info()['samples']['formatted']),
+                        ui.tags.dt("Sequencing"),
+                        ui.tags.dd(get_formatted_update_info()['ilmn_sequencing']['formatted']),
+                        ui.tags.dt("App Last Refreshed"),
+                        ui.tags.dd(get_formatted_update_info()['app_refresh']),
+                        class_="row"
+                    ),
+                    ui.h3("SQL Database Update Scripts"),
+                    ui.p(ui.tags.a("update_sqlite.py", href="https://github.com/NorwegianVeterinaryInstitute/nvi_lims_epps/blob/main/shiny_app/update_sqlite.py", target="_blank"),
+                       " and ",
+                       ui.tags.a("update_sqlite_ilmn_seq.py", href="https://github.com/NorwegianVeterinaryInstitute/nvi_lims_epps/blob/main/shiny_app/update_sqlite_ilmn_seq.py", target="_blank")),
+                    ui.h3("Data Fields Collection"),
+                    ui.h4("Projects"),
+                    ui.p("All fields in this table are collected from submitted sample UDFs directly except for the project sample number which is retrieved using a genologics API-batch function."),
+                    ui.h4("Samples"),
+                    ui.p(ui.tags.strong("Extraction step"), ": Extraction Number"),
+                    ui.p(ui.tags.strong("Fluorescence step"), ": Absorbance, A260/280 ratio, A260/230 ratio, Fluorescence, Storage Box Name, Storage Well"),
+                    ui.p(ui.tags.strong("Prep Step"), ": Experiment Name, Reagent Labels"),
+                    ui.p(ui.tags.strong("Billing Step"), ": Invoice ID, Price, Billing Description"),
+                    ui.p("Note that the step must be completed in LIMS before the data fields are updated in the Shiny App."),
+                    ui.h4("Sequencing"),
+                    ui.p(ui.tags.strong("Step 8 (NS/MS Run)"), ": Technician Name, Species, Experiment Name, Comment, Run ID, Flow Cell ID, Reagent Cartridge ID, Date"),
+                    ui.p(ui.tags.strong("Step 7 (Generate SampleSheet)"), ": Read 1 Cycles, Read 2 Cycles, Index Cycles"),
+                    ui.p(ui.tags.strong("Step 6 (Make Final Loading Dilution)"), ": Final Library Loading (pM), Volume 20pM Denat Sample (µl), PhiX / library spike-in (%), Average Size - bp"),
+                    ui.p("Table will not be updated until the sequencing step has been completed."),
+                    ui.h3("App Version"),
+                    ui.p(f"Version: {app_version}"),
+                    class_="p-4",
+                    style="max-height: 70vh; overflow-y: auto;"
+                ),
+                ui.div(
+                    ui.input_action_button("close_info", "Close", class_="btn-secondary"),
+                    class_="mt-3 text-center"
+                ),
+                size="xl",
+                easy_close=True,
+                id="info_modal"
+            )
+        )
+
+    # Define an effect to handle the close button in the modal
+    @reactive.Effect
+    @reactive.event(input.close_info)
+    def close_info_modal():
+        ui.modal_remove()
     
     @render.ui
     def render_updated_data():
