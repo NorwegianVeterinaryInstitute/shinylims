@@ -15,7 +15,8 @@ import pandas as pd
 import datetime
 from src.shinylims.data.db_utils import query_to_dataframe, get_db_update_info
 import numpy as np
-
+from pathlib import Path
+import tomli
 
 ####################
 # HELPER FUNCTIONS #
@@ -50,6 +51,9 @@ def get_table_update_timestamp(table_name):
     # Last resort - use current time
     return datetime.datetime.now().isoformat()
 
+
+
+
 ####################
 # TRANSFORMATIONS #
 ####################
@@ -77,6 +81,8 @@ def transform_comments_to_html(comment):
     if pd.isna(comment) or comment == '':
         return comment
     return comment.replace('\n', '<br>')
+
+
 
 
 ####################
@@ -223,3 +229,38 @@ def fetch_sequencing_data():
     meta_created = get_table_update_timestamp('ilmn_sequencing')
     
     return df, meta_created
+
+
+# Get app version from pyproject.toml
+def get_app_version():
+    try:
+        # Look in the same directory as app.py
+        toml_path = Path(__file__).parent / "pyproject.toml"
+        
+        # If not found there, try one level up
+        if not toml_path.exists():
+            toml_path = Path(__file__).resolve().parent.parent / "pyproject.toml"
+            
+        # If still not found, try the current working directory
+        if not toml_path.exists():
+            toml_path = Path.cwd() / "pyproject.toml"
+        
+        if toml_path.exists():
+            with open(toml_path, "rb") as f:
+                data = tomli.load(f)
+                # Try different possible locations of version information
+                if "tool" in data and "poetry" in data["tool"]:
+                    return data["tool"]["poetry"].get("version", "Unknown")
+                elif "project" in data:
+                    return data["project"].get("version", "Unknown")
+                else:
+                    # Direct search for version if not in expected locations
+                    for section in data:
+                        if "version" in data[section]:
+                            return data[section]["version"]
+        
+        return "Unknown"
+    except Exception as e:
+        return "Unknown"
+
+
