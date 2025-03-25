@@ -183,6 +183,19 @@ def generate_comprehensive_brand_css(brand):
     /* Any custom Bootstrap rules from brand.yml */
     {brand['defaults']['bootstrap'].get('rules', '')}
     
+    /* Modal backdrop fix for scaled body */
+    .modal-backdrop {{
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important; 
+        height: 100vh !important;
+        background-color: rgba(0, 0, 0, 0.5) !important;
+        transform: scale(1.25, 1.25) !important;
+        transform-origin: top left !important;
+        z-index: 1040 !important;
+    }}
+
     /* Responsive scaling rules */
     @media (min-width: 992px) {{
         body {{
@@ -236,6 +249,10 @@ def generate_comprehensive_brand_css(brand):
             min-height: 44px;
             min-width: 44px;
         }}
+
+        .modal-backdrop {{
+            transform: scale(1.4285, 1.4285) !important;
+        }}
         
         /* Fix for table filters on mobile */
         .dataTables_filter {{
@@ -266,6 +283,9 @@ def generate_comprehensive_brand_css(brand):
         
         .nav-link.active {{
             font-size: 1.4rem !important;
+        }}
+        .modal-backdrop {{
+            transform: scale(1.6667, 1.6667) !important;
         }}
     }}
     """
