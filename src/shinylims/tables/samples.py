@@ -78,7 +78,7 @@ def samples_server(input, output, session, samples_df, samples_date_created):
                          column_filters="footer", 
                          search={"smart": True},
                          classes="nowrap compact hover order-column cell-border", 
-                         scrollY="750px",
+                         scrollY="780px",
                          paging=True,
                          autoWidth=True,
                          maxBytes=0, 

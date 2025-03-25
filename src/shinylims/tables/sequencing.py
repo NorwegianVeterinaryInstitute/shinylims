@@ -72,7 +72,7 @@ def seq_server(input, output, session, seq_df, seq_date_created):
                           column_filters="footer", 
                           search={"smart": True},
                           classes="compact nowrap hover order-column cell-border",  
-                          scrollY="750px",
+                          scrollY="780px",
                           paging=True,
                           maxBytes=0, 
                           autoWidth=True,

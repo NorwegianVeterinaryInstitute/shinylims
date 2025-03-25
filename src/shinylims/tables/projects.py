@@ -59,7 +59,7 @@ def projects_server(input, output, session, projects_df, project_date_created):
                          search={"smart": True, "regex": True, "caseInsensitive": True},
                          lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],  
                          classes="compact hover order-column cell-border", 
-                         scrollY="750px",
+                         scrollY="780px",
                          paging=True,
                          maxBytes=0, 
                          autoWidth=True,
@@ -108,19 +108,21 @@ def projects_server(input, output, session, projects_df, project_date_created):
                                     # Copy to clipboard
                                     {
                                         "extend": "copyHtml5",
-                                        "exportOptions": {"columns": ":visible"}
+                                        "exportOptions": {"columns": ":visible"},
+                                        "text": "Copy to Clipboard"
                                     },
                                     # CSV export with all visible columns
                                     {
                                         "extend": "csvHtml5", 
                                         "exportOptions": {"columns": ":visible"},
-                                        "text": "CSV (All Visible)",
+                                        "text": "Export to CSV",
                                         "title": "Project Data Export - Full"
                                     },
                                     # Excel export with visible columns
                                     {
                                         "extend": "excelHtml5", 
                                         "exportOptions": {"columns": ":visible"},
+                                        "text": "Export to Excel",
                                         "title": "Project Data Export"
                                     }
                                 ]

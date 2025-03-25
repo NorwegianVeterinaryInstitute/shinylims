@@ -229,7 +229,7 @@ def server(input, output, session):
         '''Handle the info button click event'''
         ui.modal_show(
             ui.modal(
-                ui.h2("LIMS Metadata App Information", class_="mb-4"),
+                ui.h2("Clarity LIMS Metadata App Information", class_="mb-4"),
                 ui.div(
                     ui.h3("About"),
                     ui.p("""This app provides a user-friendly interface to explore and filter LIMS metadata. 
@@ -272,21 +272,11 @@ def server(input, output, session):
                     class_="p-4",
                     style="max-height: 70vh; overflow-y: auto;"
                 ),
-                ui.div(
-                    ui.input_action_button("close_info", "Close", class_="btn-secondary"),
-                    class_="mt-3 text-center"
-                ),
-                size="xl",
+                size="l",
                 easy_close=True,
                 id="info_modal"
             )
         )
-
-    # Define an effect to handle the close button in the modal
-    @reactive.Effect
-    @reactive.event(input.close_info)
-    def close_info_modal():
-        ui.modal_remove()
     
     @render.ui
     def render_updated_data():
