@@ -1,81 +1,200 @@
-/* Utility classes for alignment */
+/* ─────────────────────────────────────────────────────────────── */
+/* Utility Classes - Alignment Helpers */
+/* ─────────────────────────────────────────────────────────────── */
 .dt-center { text-align: center; }
 .dt-left { text-align: left; }
 .nowrap { white-space: nowrap; }
 
-/* Table alignment */
+/* Center-align all DataTable cells and headers by default */
 table.dataTable td, table.dataTable th {
   text-align: center !important;
 }
+
+/* Left-align only specific table cells with class "left-column" */
 table.dataTable td.left-column {
-  text-align: left !important; 
+  text-align: left !important;
 }
 
-/* Layout components */
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Layout Components */
+/* ─────────────────────────────────────────────────────────────── */
+
+/* Center navigation tabs horizontally in navbar */
 .shiny-nav-center {
   display: flex;
   justify-content: center;
   flex-grow: 1;
   margin: 0 auto;
 }
+
+/* Ensure navbar content spans full width and is vertically centered */
 .custom-navbar-container {
   display: flex;
   width: 100%;
   align-items: center;
 }
 
-/* Component-specific behaviors */
-.reactable-filter-input, .dataTables_filter input {
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Navigation Tabs Font Styling */
+/* ─────────────────────────────────────────────────────────────── */
+
+/* Increase font size and boldness for all nav tabs */
+.nav-link {
+  font-size: 1.8rem !important;
+  font-weight: 600 !important;
+}
+
+/* Further emphasize the active tab */
+.nav-link.active {
+  font-size: 2rem !important;
+  font-weight: 700 !important;
+}
+
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Modal Backdrop Fix for Scaled UI */
+/* ─────────────────────────────────────────────────────────────── */
+
+/* Ensures modal backdrop covers entire viewport even after scaling */
+.modal-backdrop {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  transform: scale(1.25, 1.25) !important;
+  transform-origin: top left !important;
+  z-index: 1040 !important;
+}
+
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Form and Button Adjustments */
+/* ─────────────────────────────────────────────────────────────── */
+
+/* Improve search/filter inputs appearance */
+.reactable-filter-input,
+.dataTables_filter input {
   padding: 6px 10px;
   margin-bottom: 12px;
   border: 1px solid #ccc;
   border-radius: 4px;
 }
+
+/* Add spacing to buttons in the navbar */
 .navbar .btn {
   margin-left: 20px;
 }
 
-/* Table width adjustments for scaling */
+/* Style the DataTable buttons */
+div.dt-button-collection {
+  max-height: 80vh;
+  width: 500px !important;
+  max-height: 80vh; 
+  overflow-y: auto;
+  column-count: 2;
+  column-gap: 1em;
+}
+
+
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Desktop-Specific Scaling and Layout (min-width: 992px) */
+/* ─────────────────────────────────────────────────────────────── */
+
 @media (min-width: 992px) {
+  /* Scale entire app to 80% while compensating the width and height */
+  body {
+    transform: scale(0.8);
+    transform-origin: top left;
+    width: 125%;
+    height: 125%;
+    position: absolute;
+  }
+
+  /* Expand wrapper and table elements fully */
   .dataTables_wrapper, .reactable {
     width: 100% !important;
     max-width: 100% !important;
     overflow-x: visible;
   }
+
   table.dataTable, .reactable-table {
     width: 100% !important;
     max-width: none !important;
   }
+
   .card-body, .shiny-output-container {
     width: 100% !important;
     overflow-x: visible;
   }
+
+  /* Right-align the search box and pagination on wide screens */
   .dataTables_filter {
     float: right;
     width: auto !important;
   }
+
   .dataTables_paginate, .reactable-pagination {
     width: auto !important;
     float: right;
   }
 }
 
-/* Mobile table adjustments */
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Mobile Responsiveness (max-width: 991px) */
+/* ─────────────────────────────────────────────────────────────── */
+
 @media (max-width: 991px) {
+  /* Scale entire app to 70% for better visibility while compensating the width and height*/
+  body {
+    transform: scale(0.7);
+    transform-origin: top left;
+    width: 142.85%;
+    height: 142.85%;
+    position: absolute;
+  }
+
+  /* Adjust font size for better readability */
+  html {
+    font-size: 12px;
+  }
+
+  /*Scake modal backdrop to fit the viewport */
+  .modal-backdrop {
+    transform: scale(1.4285, 1.4285) !important;
+  }
+
+  /* Align the filter and pagination controls to the left */
+  .dataTables_filter {
+    width: 100%;
+    text-align: left;
+    margin-bottom: 10px;
+  } 
+
+  /* Make tables scrollable horizontally on small screens */
   .dataTables_wrapper, .reactable {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     width: 100%;
   }
+
   table.dataTable, .reactable-table {
     min-width: 100%;
   }
+
+  /* Expand search input to full width */
   .dataTables_filter {
     width: 100%;
     text-align: left;
     margin-bottom: 10px;
   }
+
   .dataTables_filter input {
-    width: calc(100% - 70px);
+    width: calc(100% - 70px); /* adjust for label space */
   }
 }

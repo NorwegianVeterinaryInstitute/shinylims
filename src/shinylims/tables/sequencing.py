@@ -72,7 +72,7 @@ def seq_server(input, output, session, seq_df, seq_date_created):
                           column_filters="footer", 
                           search={"smart": True},
                           classes="compact nowrap hover order-column cell-border",  
-                          scrollY="780px",
+                          scrollY="80vh",
                           paging=True,
                           maxBytes=0, 
                           autoWidth=True,
@@ -86,28 +86,51 @@ def seq_server(input, output, session, seq_df, seq_date_created):
                                 "extend": "colvis",
                                 "text": "Selection"
                             },
-                            {'extend': "spacer"},
-                            # Button to deselect all columns
+                            # Button to select specific columns presets
                             {
-                                "text": "Deselect All",
-                                "action": JavascriptFunction("""
-                                function(e, dt, node, config) {
-                                    dt.columns().visible(false);
+                            "extend": "collection",
+                            "text": "Presets",
+                            "buttons": [
+                                {
+                                    "text": "Select All",
+                                    "action": JavascriptFunction("""
+                                        function(e, dt, node, config) {
+                                            dt.columns().visible(true);
+                                        }
+                                    """)
+                                },
+                                {
+                                    "text": "Deselect All",
+                                    "action": JavascriptFunction("""
+                                        function(e, dt, node, config) {
+                                            dt.columns().visible(false);
+                                        }
+                                    """)
+                                },
+                                {
+                                   
+                                },
+                                {
+                                    "text": "Minimal View",
+                                    "action": JavascriptFunction("""
+                                        function(e, dt, node, config) {
+                                            // Example: Show only specific columns by index
+                                            dt.columns().visible(false);  // Hide all first
+                                            dt.column(2).visible(true);
+                                            dt.column(3).visible(true);
+                                            dt.column(4).visible(true);
+                                            dt.column(5).visible(true);
+                                            dt.column(9).visible(true);
+                                            dt.column(10).visible(true);
+                                            dt.column(21).visible(true);
+                                        }
+                                    """)
                                 }
-                                """)
-                            },
-                            # Button to select all columns
-                            {
-                                "text": "Select All",
-                                "action": JavascriptFunction("""
-                                function(e, dt, node, config) {
-                                    dt.columns().visible(true);
-                                }
-                                """)
-                            },
+                            ]
+                        },
                             {'extend': "spacer",
                              'style': 'bar',
-                             'text': 'Page Length'},
+                             'text': 'Row Settings'},
                              "pageLength",
                             {'extend': "spacer",
                              'style': 'bar',
