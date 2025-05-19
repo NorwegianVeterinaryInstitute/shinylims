@@ -9,17 +9,20 @@ meta:
 
 logo:
   images:
-    norwegian: logos/vetinst-logo.png
-    norwegian-white: logos/vetinst-logo-hvit.png
-    english: logos/vetinst-logo-eng.png
-    english-white: logos/vetinst-logo-eng-hvit.png
-    sami: logos/vetinst-logo-sam.png
-    sami-white: logos/vetinst-logo-sam-hvit.png
-  small: norwegian
+    norwegian: images/logos/vetinst-logo-no.svg
+    norwegian-white: images/logos/vetinst-logo-neg-no.svg
+    english: images/logos/vetinst-logo-eng.svg
+    english-white: images/logos/vetinst-logo-neg-eng.svg
+    sami: images/logos/vetinst-logo-sam.svg
+    sami-white: images/logos/vetinst-logo-neg-sam.svg
+    favicon-16x16: images/favicon/favicon-16x16.png
+    favicon-32x32: images/favicon/favicon-32x32.png
+    favicon-96x96: images/favicon/favicon-96x96.png
+  small: english
   medium:
-    light: norwegian
-    dark: norwegian-white
-  large: norwegian
+    light: english
+    dark: english-white
+  large: english
 
 color:
   palette:
@@ -27,7 +30,7 @@ color:
     white: "#F7FDFF"
     air: "#D7F4FF"
     dark_air: "#95D9F3"
-    earth: "#59CD88"
+    earth: "#59CD8B"
     light_earth: "#BCEED1"
     water: "#1C4FB9"
     light_water: "#C7D9FF"
@@ -35,11 +38,11 @@ color:
     light_food: "#FFDAD4"
   foreground: black
   background: white
-  primary: water
-  secondary: earth
-  tertiary: air
-  light: air
-  dark: dark_food
+  primary: black
+  secondary: black
+  tertiary: earth
+  warning: light_food
+  danger: dark_food
 
 typography:
   fonts:
@@ -62,9 +65,20 @@ typography:
     family: Consolas
     weight: 400
     size: 0.9em
+  monospace-block: 
+    family: Consolas
+    weight: 400
+    size: 0.9em
+    background-color: air
+  monospace-inline: 
+    family: Consolas
+    weight: 400
+    size: 0.9em
+    color: black
+    background-color: air
   link:
     weight: 600
-    color: primary
+    color: water
     decoration: underline
 
 defaults:

@@ -59,7 +59,7 @@ def projects_server(input, output, session, projects_df, project_date_created):
                          search={"smart": True, "regex": True, "caseInsensitive": True},
                          lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],  
                          classes="compact hover order-column cell-border", 
-                         scrollY="780px",
+                         scrollY= "80vh",
                          paging=True,
                          maxBytes=0, 
                          autoWidth=True,
@@ -73,28 +73,33 @@ def projects_server(input, output, session, projects_df, project_date_created):
                                 "extend": "colvis",
                                 "text": "Selection"
                             },
-                            {'extend': "spacer"},
-                            # Button to deselect all columns
+                            # Button to select specific columns presets
                             {
-                                "text": "Deselect All",
-                                "action": JavascriptFunction("""
-                                function(e, dt, node, config) {
-                                    dt.columns().visible(false);
-                                }
-                                """)
-                            },
-                            # Button to select all columns
-                            {
-                                "text": "Select All",
-                                "action": JavascriptFunction("""
-                                function(e, dt, node, config) {
-                                    dt.columns().visible(true);
-                                }
-                                """)
-                            },
+                            "extend": "collection",
+                            "text": "Presets",
+                            "buttons": [
+                                {
+                                    "text": "Select All",
+                                    "action": JavascriptFunction("""
+                                        function(e, dt, node, config) {
+                                            dt.columns().visible(true);
+                                        }
+                                    """)
+                                },
+                                {
+                                    "text": "Deselect All",
+                                    "action": JavascriptFunction("""
+                                        function(e, dt, node, config) {
+                                            dt.columns().visible(false);
+                                        }
+                                    """)
+                                },
+
+                            ]
+                        },
                             {'extend': "spacer",
                              'style': 'bar',
-                             'text': 'Page Length'},
+                             'text': 'Row Settings'},
                             # Page length selector
                             "pageLength",
                             {'extend': "spacer",

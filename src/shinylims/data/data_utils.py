@@ -2,9 +2,11 @@
 data_utils.py module.
 Utility functions for data fetching and transformation.
 
-This module provides functions to fetch and transform data from various sources
-including SQLite databases and Posit Connect pins. It handles data for projects,
+This module provides functions to fetch and transform data from the
+SQLite database stored as Posit Connect pin. It handles data for projects,
 samples, and sequencing runs with standardized column naming and formatting.
+
+Also includes functions to transform LIMS IDs and comments into HTML
 '''
 
 ####################

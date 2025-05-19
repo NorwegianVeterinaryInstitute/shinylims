@@ -31,30 +31,28 @@ from src.shinylims.data.data_utils import (
 
 # Add custom CSS
 from pathlib import Path
-import tomli  # For reading pyproject.toml
-
 css_path = Path(__file__).parent / "assets" / "styles.css"
-from shinylims.data.brand_utils import load_brand_config, generate_comprehensive_brand_css
-brand = load_brand_config()
+
 
 ####################
 # APP CONFIGURATION #
 ####################
 
-# Logo file to use
-logo_path = "logos/vetinst-logo.png"  
-
 # Get the absolute path to the www directory
-www_dir = Path(__file__).parent.parent.parent / "www"
+# Shouldnt be needed, but something in the project layout is confusing Shiny’s default static path discovery
+www_dir = Path(__file__).parent / "www"
 
+# Logo file to use
+logo_path = "images/logos/vetinst-logo.png"
+
+# Get the app version from the config file
 app_version = get_app_version()
 
 ####################
 # CONSTRUCT THE UI #
 ####################
 
-app_ui = ui.page_navbar(
-    
+app_ui = ui.page_navbar(    
     # Add Google Fonts and custom CSS
     ui.head_content(
         # Viewport meta tag for mobile responsiveness
@@ -62,14 +60,7 @@ app_ui = ui.page_navbar(
             name="viewport",
             content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
         ),
-        # Google Fonts
-        ui.tags.link(
-            rel="stylesheet",
-            href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&display=swap"
-        ),
-        # Brand CSS (Vetinst branding)
-        ui.tags.style(generate_comprehensive_brand_css(brand)),
-        # Include CSS file (specific component behaviors)
+        # Include CSS file
         ui.include_css(css_path),
         
     ),
@@ -118,7 +109,11 @@ app_ui = ui.page_navbar(
     ),
     
     # Set Projects as the default selected panel
-    selected="projects"
+    selected="projects",
+
+    # Set theme from brand.yml
+    theme=ui.Theme.from_brand(__file__)
+
 )
 
 
@@ -302,4 +297,4 @@ def server(input, output, session):
 # RUN APP #
 ###########
 
-app = App(app_ui, server, static_assets=www_dir)
+app = App(app_ui, server, static_assets=www_dir)  
