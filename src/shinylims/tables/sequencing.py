@@ -2,10 +2,12 @@
 sequencing.py - table module containing UI and server logic for the Sequencing table tab
 '''
 
-from shiny import render, ui
-from itables.shiny import DT
-import pandas as pd
+from shiny import ui
+from shinywidgets import output_widget, render_widget
+from itables.widget import ITable
 from itables.javascript import JavascriptFunction
+import pandas as pd
+
 
 ##############################
 # UI ILMN SEQ TABLE
@@ -13,8 +15,7 @@ from itables.javascript import JavascriptFunction
 
 def seq_ui():
     return ui.div(
-        #ui.h2("\u00A0", class_="mb-3 text-center"),
-        ui.output_ui("data_seq")
+        output_widget("data_seq", fillable=False)
     )
 
 ##############################
@@ -22,10 +23,10 @@ def seq_ui():
 ##############################
 
 # Server logic for the Sequencing page
-def seq_server(input, output, session, seq_df, seq_date_created):
+def seq_server(seq_df):
     
     # Return HTML tag with DT table element
-    @render.ui
+    @render_widget
     def data_seq():
         dat = seq_df.copy().reset_index(drop=True)
         
@@ -65,132 +66,131 @@ def seq_server(input, output, session, seq_df, seq_date_created):
             column_index = 0  # Default to first column if Seq Date not found
             date_column_index = -1  # Indicates no date column found
 
-        return ui.HTML(DT(dat, 
-                          layout={"topEnd": "search", "top1": "searchBuilder"},
-                          lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],
-                          select=True,  
-                          column_filters="footer", 
-                          search={"smart": True},
-                          classes="compact nowrap hover order-column cell-border",  
-                          scrollY="80vh",
-                          paging=True,
-                          maxBytes=0, 
-                          autoWidth=True,
-                          keys=True,
-                          buttons=[
-                            {'extend': "spacer",
-                             'style': 'bar',
-                             'text': 'Column Settings'},
-                            # Column visibility toggle
+        return ITable(
+                dat, 
+                layout={"topEnd": "search", "top1": "searchBuilder"},
+                lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],
+                select=True,  
+                column_filters="footer", 
+                search={"smart": True},
+                classes="nowrap compact hover order-column cell-border",
+                scrollY="80vh",
+                scrollX=True,
+                paging=True,
+                maxBytes=0, 
+                allow_html=True,
+                autoWidth=True,
+                keys=True,
+                buttons=[
+                        {'extend': "spacer",
+                         'style': 'bar',
+                         'text': 'Column Settings'},
+                        # Column visibility toggle
+                        {
+                            "extend": "colvis",
+                            "text": "Selection"
+                        },
+                        # Button to select specific columns presets
+                        {
+                        "extend": "collection",
+                        "text": "Presets",
+                        "buttons": [
                             {
-                                "extend": "colvis",
-                                "text": "Selection"
+                                "text": "Select All",
+                                "action": JavascriptFunction("""
+                                    function(e, dt, node, config) {
+                                        dt.columns().visible(true);
+                                    }
+                                """)
                             },
-                            # Button to select specific columns presets
                             {
-                            "extend": "collection",
-                            "text": "Presets",
+                                "text": "Deselect All",
+                                "action": JavascriptFunction("""
+                                    function(e, dt, node, config) {
+                                        dt.columns().visible(false);
+                                    }
+                                """)
+                            },
+                            {
+                               
+                            },
+                            {
+                                "text": "Minimal View",
+                                "action": JavascriptFunction("""
+                                    function(e, dt, node, config) {
+                                        // Example: Show only specific columns by index
+                                        dt.columns().visible(false);  // Hide all first
+                                        dt.column(2).visible(true);
+                                        dt.column(3).visible(true);
+                                        dt.column(4).visible(true);
+                                        dt.column(5).visible(true);
+                                        dt.column(9).visible(true);
+                                        dt.column(10).visible(true);
+                                        dt.column(21).visible(true);
+                                    }
+                                """)
+                            }
+                        ]
+                    },
+                        {'extend': "spacer",
+                         'style': 'bar',
+                         'text': 'Row Settings'},
+                         "pageLength",
+                        {'extend': "spacer",
+                         'style': 'bar',
+                         'text': 'Export'},
+                        # Collection of export options
+                        {
+                            "extend": "collection", 
+                            "text": "Type",
                             "buttons": [
+                                # Copy to clipboard
                                 {
-                                    "text": "Select All",
-                                    "action": JavascriptFunction("""
-                                        function(e, dt, node, config) {
-                                            dt.columns().visible(true);
-                                        }
-                                    """)
+                                    "extend": "copyHtml5",
+                                    "exportOptions": {"columns": ":visible"},
+                                    "text": "Copy to Clipboard"
                                 },
+                                # CSV export with visible columns
                                 {
-                                    "text": "Deselect All",
-                                    "action": JavascriptFunction("""
-                                        function(e, dt, node, config) {
-                                            dt.columns().visible(false);
-                                        }
-                                    """)
+                                    "extend": "csvHtml5", 
+                                    "exportOptions": {"columns": ":visible"},
+                                    "title": "Sequencing Data Export",
+                                    "text": "Export to CSV"
                                 },
+                                # Excel export with visible columns
                                 {
-                                   
-                                },
-                                {
-                                    "text": "Minimal View",
-                                    "action": JavascriptFunction("""
-                                        function(e, dt, node, config) {
-                                            // Example: Show only specific columns by index
-                                            dt.columns().visible(false);  // Hide all first
-                                            dt.column(2).visible(true);
-                                            dt.column(3).visible(true);
-                                            dt.column(4).visible(true);
-                                            dt.column(5).visible(true);
-                                            dt.column(9).visible(true);
-                                            dt.column(10).visible(true);
-                                            dt.column(21).visible(true);
-                                        }
-                                    """)
+                                    "extend": "excelHtml5", 
+                                    "exportOptions": {"columns": ":visible"},
+                                    "title": "Sequencing Data Export",
+                                    "text": "Export to Excel"
                                 }
                             ]
                         },
-                            {'extend': "spacer",
-                             'style': 'bar',
-                             'text': 'Row Settings'},
-                             "pageLength",
-                            {'extend': "spacer",
-                             'style': 'bar',
-                             'text': 'Export'},
-                            # Collection of export options
-                            {
-                                "extend": "collection", 
-                                "text": "Type",
-                                "buttons": [
-                                    # Copy to clipboard
-                                    {
-                                        "extend": "copyHtml5",
-                                        "exportOptions": {"columns": ":visible"},
-                                        "text": "Copy to Clipboard"
-                                    },
-                                    # CSV export with visible columns
-                                    {
-                                        "extend": "csvHtml5", 
-                                        "exportOptions": {"columns": ":visible"},
-                                        "title": "Sequencing Data Export",
-                                        "text": "Export to CSV"
-                                    },
-                                    # Excel export with visible columns
-                                    {
-                                        "extend": "excelHtml5", 
-                                        "exportOptions": {"columns": ":visible"},
-                                        "title": "Sequencing Data Export",
-                                        "text": "Export to Excel"
-                                    }
-                                ]
-                            },
-                            {'extend': "spacer",
-                             'style': 'bar'},
-                          ],
-                          order=[[column_index, "desc"]],
-                          columnDefs=[
-                              {'targets': comment_index, 'className': 'left-column'},
-                              {"className": "dt-center", "targets": "_all"},
-                              {"targets": run_number_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")},
-                              {"targets": cluster_density_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")},
-                              # Explicitly define the Seq Date column as a date type for searchBuilder
-                              {
-                                  "targets": date_column_index,
-                                  "type": "date",
-                                  "render": JavascriptFunction("""
-                                  function(data, type, row) {
-                                      // For sorting and filtering
-                                      if (type === 'sort' || type === 'type' || type === 'filter') {
-                                          if (!data || data === '') {
-                                              return null;
-                                          }
-                                          return data;
+                        {'extend': "spacer",
+                         'style': 'bar'},
+                      ],
+                      order=[[column_index, "desc"]],
+                      columnDefs=[
+                          {'targets': comment_index, 'className': 'left-column', 'width': '200px'} ,
+                          {"className": "dt-center", "targets": "_all"},
+                          {"targets": run_number_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")},
+                          {"targets": cluster_density_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")},
+                          # Explicitly define the Seq Date column as a date type for searchBuilder
+                          {
+                              "targets": date_column_index,
+                              "type": "date",
+                              "render": JavascriptFunction("""
+                              function(data, type, row) {
+                                  // For sorting and filtering
+                                  if (type === 'sort' || type === 'type' || type === 'filter') {
+                                      if (!data || data === '') {
+                                          return null;
                                       }
-                                      // For display
                                       return data;
                                   }
-                                  """)
+                                  // For display
+                                  return data;
                               }
-                          ]))
-    
-
-    # Define outputs that need to be returned
-    output.data_seq = data_seq
+                              """)
+                          }
+                      ])

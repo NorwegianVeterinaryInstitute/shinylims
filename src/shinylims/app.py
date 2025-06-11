@@ -53,7 +53,6 @@ app_version = get_app_version()
 ####################
 
 app_ui = ui.page_navbar(    
-    # Add Google Fonts and custom CSS
     ui.head_content(
         # Viewport meta tag for mobile responsiveness
         ui.tags.meta(
@@ -64,7 +63,7 @@ app_ui = ui.page_navbar(
         ui.include_css(css_path),
         
     ),
-
+    
     # Add a spacer before the nav panels to push them toward center
     ui.nav_spacer(),
 
@@ -277,17 +276,9 @@ def server(input, output, session):
     def render_updated_data():
         '''Render the updated data to the UI'''
 
-        projects_server(input, output, session, 
-                   projects_df_reactive.get(),
-                   projects_date_created_reactive.get())
-    
-        samples_server(input, output, session,
-                 samples_df_reactive.get(),
-                 samples_date_created_reactive.get())
-    
-        seq_server(input, output, session,
-             seq_df_reactive.get(),
-             seq_date_created_reactive.get())
+        projects_server(projects_df_reactive.get())
+        samples_server(samples_df_reactive.get())
+        seq_server(seq_df_reactive.get())
     
         return ui.TagList()  # Return an empty UI element
     

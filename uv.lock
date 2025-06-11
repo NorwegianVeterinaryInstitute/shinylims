@@ -421,16 +421,16 @@ wheels = [
 
 [[package]]
 name = "itables"
-version = "2.2.5"
+version = "2.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ipython" },
     { name = "numpy" },
     { name = "pandas" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/07/18/359fc46f2874290843a4ba2c089d0109874cd2d73863d0e69fd54a5e9532/itables-2.2.5.tar.gz", hash = "sha256:838ed4783da0b6481b9062c362b8a331aa56f48d6c90e0f6dc76a0488a316049", size = 2436699 }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/34/4c297740b778e2bb8f3929829dd1ec0347a22e2f9952c599cd26c1f0901f/itables-2.4.1.tar.gz", hash = "sha256:107252edb08e0f120f8756db41928b94a2caf9a8012bf03e8e89880c8d0b1c5a", size = 2230130 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/aa/dd/8976761076632f492f0d25502e348f41f343423d36270dc32f323b9155bc/itables-2.2.5-py3-none-any.whl", hash = "sha256:d0d33ce427c6c84d4063998650323eb65ccddb47a5505ef1ad3f563580dc101d", size = 1407043 },
+    { url = "https://files.pythonhosted.org/packages/96/26/5aa67c2a120a94a39edf4ab3598129d918b1870239a81ca7f9cce3ad6d72/itables-2.4.1-py3-none-any.whl", hash = "sha256:e0e71938ae952ccb9f0335eada612d69b5aa088633c97b8d60d8301972642491", size = 2260471 },
 ]
 
 [[package]]
@@ -1299,7 +1299,7 @@ wheels = [
 
 [[package]]
 name = "shiny"
-version = "1.3.0"
+version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "appdirs" },
@@ -1322,9 +1322,9 @@ dependencies = [
     { name = "watchfiles", marker = "sys_platform != 'emscripten'" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/41/ff/91e918904bc3502967ca8be684d45825f31ff5e9bc0946e268e9fe8858ba/shiny-1.3.0.tar.gz", hash = "sha256:0e29ccc9b642bf45409efc6a4e9751c29ab9378ac31f1b2f025552ebd7699c99", size = 4996577 }
+sdist = { url = "https://files.pythonhosted.org/packages/6b/dc/1f1da052f0af709ee73dc07ef12f4c5395eff861e430143ae115fabdc3bb/shiny-1.4.0.tar.gz", hash = "sha256:05c709c2a074b9e9f5a82065460815ff40bc686286bacfcab5195a69f3ae759b", size = 4837146 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/4b/d1cd6e39d06b26de36c03f08f98cac800aa7d240f934d93536afc8d2a054/shiny-1.3.0-py3-none-any.whl", hash = "sha256:c1a524f3512c02072f0fd124f7c13dfe03fe51f24ceda4ce9dab0f755deb891d", size = 3769110 },
+    { url = "https://files.pythonhosted.org/packages/f5/e8/ae54ce930d965211c77b28a8c3792f78a80ad1bd012bbb05000176dd246c/shiny-1.4.0-py3-none-any.whl", hash = "sha256:c7748d0cd32696477613b9c00664320ea1604b9d9770a2ec2e8ea7ea5e0b44b4", size = 3870396 },
 ]
 
 [package.optional-dependencies]
@@ -1335,7 +1335,7 @@ theme = [
 
 [[package]]
 name = "shinylims-uv"
-version = "0.2.3"
+version = "0.2.4"
 source = { editable = "." }
 dependencies = [
     { name = "brand-yml" },
@@ -1356,13 +1356,13 @@ dependencies = [
 requires-dist = [
     { name = "brand-yml", specifier = "==0.1.1" },
     { name = "faicons", specifier = "==0.2.2" },
-    { name = "itables", specifier = "==2.2.5" },
+    { name = "itables", specifier = "==2.4.1" },
     { name = "pandas", specifier = "==2.2.2" },
     { name = "pins", specifier = "==0.8.5" },
     { name = "plotly", specifier = "==6.0.1" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "seaborn", specifier = "==0.13.2" },
-    { name = "shiny", extras = ["theme"], specifier = "==1.3.0" },
+    { name = "shiny", extras = ["theme"], specifier = "==1.4.0" },
     { name = "shinyswatch", specifier = "==0.6.1" },
     { name = "shinywidgets", specifier = "==0.5.1" },
     { name = "tomli", specifier = "==2.2.1" },
