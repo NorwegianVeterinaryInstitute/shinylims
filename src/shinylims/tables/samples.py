@@ -2,7 +2,7 @@
 samples.py - Table module containing UI and server logic for the Samples table tab
 '''
 
-from shiny import ui
+from shiny import ui, reactive
 from shinywidgets import output_widget, render_widget
 from itables.widget import ITable
 from itables.javascript import JavascriptFunction
@@ -16,15 +16,24 @@ import pandas as pd
 
 def samples_ui():
     return ui.div(
-        output_widget("data_samples", fillable=False) 
+        # Switch toggle with inline styling
+        ui.div(
+            ui.input_switch("include_hist", "Include historical samples", False)
+        ),
+        # Widget container
+        ui.div(
+            output_widget("data_samples", fillable=False),
+        ),
+        
     )
+
 
 ##############################
 # SERVER SAMPLES TABLE
 ##############################
 
 # Server logic for the Samples page
-def samples_server(samples_df):
+def samples_server(samples_df, samples_historical_df, input):
     
     # Helper function to get indices of columns for saga export
     def get_saga_columns(dataframe):
@@ -49,10 +58,44 @@ def samples_server(samples_df):
             
         return column_indices
 
+
+    @reactive.Effect
+    def show_warning_modal():
+        if input.include_hist():
+            return ui.modal_show(
+                ui.modal(
+                    ui.div(
+                        ui.p("⚠️ You are now including historical samples. The historical data was recorded before the current LIMS system was implemented. It may not be complete or accurate. It will also make searching more difficult since data isnt formatted consistently."),
+                        ui.p("Please review the data carefully. Data can be filtered through the 'Custom Search Builder' by 'Current' or 'Historical' using the 'Data Source' column.")
+                    ),
+                    title="Historical Data Warning",
+                    easy_close=True,
+                    footer=ui.modal_button("OK")
+                )
+            )
+
+    # Create a reactive expression for the combined dataframe
+    @reactive.Calc
+    def combined_samples():
+        # Start with the regular samples
+        dat = samples_df.copy()
+        
+        # If checkbox is checked and historical data exists, combine them
+        if input.include_hist() and samples_historical_df is not None and not samples_historical_df.empty:
+            # Add a column to distinguish data sources if needed
+            dat['Data_Source'] = 'Current'
+            hist_dat = samples_historical_df.copy()
+            hist_dat['Data_Source'] = 'Historical'
+            
+            # Combine the dataframes
+            dat = pd.concat([dat, hist_dat], ignore_index=True, sort=False)
+        
+        return dat.reset_index(drop=True)
+
     # Filter and render the filtered dataframe
     @render_widget
     def data_samples():
-        dat = samples_df.copy().reset_index(drop=True)
+        dat = combined_samples()
         
         # Properly format date columns for DataTables
         if "Received Date" in dat.columns:
@@ -83,7 +126,7 @@ def samples_server(samples_df):
                 column_filters="footer", 
                 search={"smart": True},
                 classes="nowrap compact hover order-column cell-border", 
-                scrollY="80vh",
+                scrollY="75vh",
                 scrollX=True,
                 paging=True,
                 autoWidth=True,
@@ -212,4 +255,4 @@ def samples_server(samples_df):
                             """)
                         }
                      ]
-                    ) 
+                    )
