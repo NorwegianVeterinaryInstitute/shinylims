@@ -26,6 +26,7 @@ from src.shinylims.data.data_utils import (
     fetch_projects_data, 
     fetch_all_samples_data, 
     fetch_sequencing_data,
+    fetch_historical_samples_data,
     get_app_version
 )
 
@@ -123,18 +124,12 @@ app_ui = ui.page_navbar(
 def server(input, output, session):
     """
     Fetching data from SQLite database and all ui reactive rendering is done from this function.
-
-    Inital data is fetched and stored as reactive values. The reactive values are updated
-    through the function update_database_data() which is triggered by an ui action button.
-    
-    Reactive metadata values are used to populate a information tooltip through the 
-    function update_tooltip_output()
     """
     # Create a reactive value for database update info
     db_update_info_reactive = reactive.Value(get_db_update_info())
 
     # Fetch initial data
-    with ui.Progress(min=1, max=12) as p:
+    with ui.Progress(min=1, max=15) as p:  # Increased max for additional data
         p.set(message="Loading datasets from SQLite database...")
         
         projects_df, project_date_created = fetch_projects_data()
@@ -143,25 +138,30 @@ def server(input, output, session):
         samples_df, samples_date_created = fetch_all_samples_data()
         p.set(6, message="Samples data fetched")
         
+        # Fetch historical samples data
+        samples_historical_df = fetch_historical_samples_data()
+        p.set(8, message="Historical samples data fetched")
+        
         seq_df, seq_date_created = fetch_sequencing_data()
-        p.set(8, message="Seq data fetched")
+        p.set(11, message="Seq data fetched")
         
         # Initialize reactive values with the initial data
         projects_df_reactive = reactive.Value(projects_df)
         samples_df_reactive = reactive.Value(samples_df)
+        samples_historical_df_reactive = reactive.Value(samples_historical_df)
         seq_df_reactive = reactive.Value(seq_df)
-        p.set(11, message="Reactive dataframe values established")
+        p.set(13, message="Reactive dataframe values established")
 
         projects_date_created_reactive = reactive.Value(project_date_created)
         samples_date_created_reactive = reactive.Value(samples_date_created)
         seq_date_created_reactive = reactive.Value(seq_date_created)
-        p.set(12, message="Datasets loaded successfully")
+        p.set(15, message="Datasets loaded successfully")
     
     # Define a function to update the reactive values
     def update_database_data():
         '''Update the reactive values with the latest data from the database'''
 
-        with ui.Progress(min=1, max=10) as p:
+        with ui.Progress(min=1, max=12) as p: 
             p.set(message="Refreshing database connection...")
             
             # Force database refresh
@@ -172,25 +172,30 @@ def server(input, output, session):
             p.set(3, message="Projects data fetched")
             
             updated_samples_df, updated_samples_date_created = fetch_all_samples_data()
-            p.set(6, message="Samples data fetched")
+            p.set(5, message="Samples data fetched")
+            
+            # Fetch updated historical samples data
+            updated_samples_historical_df = fetch_historical_samples_data()
+            p.set(7, message="Historical samples data fetched")
             
             updated_seq_df, updated_seq_date_created = fetch_sequencing_data()
-            p.set(8, message="Seq data fetched")
+            p.set(9, message="Seq data fetched")
 
             # Update reactive values
             projects_df_reactive.set(updated_projects_df)
             samples_df_reactive.set(updated_samples_df)
+            samples_historical_df_reactive.set(updated_samples_historical_df)
             seq_df_reactive.set(updated_seq_df)
-            p.set(9, message="Reactive dataframe values updated")
+            p.set(10, message="Reactive dataframe values updated")
 
             projects_date_created_reactive.set(updated_project_date_created)
             samples_date_created_reactive.set(updated_samples_date_created)
             seq_date_created_reactive.set(updated_seq_date_created)
 
             # Update the database update info
-            db_update_info_reactive.set(get_db_update_info())  # Update tooltip info
+            db_update_info_reactive.set(get_db_update_info())
 
-            p.set(10, message="Datasets updated successfully")
+            p.set(12, message="Datasets updated successfully")
 
     # Define an effect to handle the update button click event
     @reactive.Effect
@@ -277,7 +282,12 @@ def server(input, output, session):
         '''Render the updated data to the UI'''
 
         projects_server(projects_df_reactive.get())
-        samples_server(samples_df_reactive.get())
+        # Pass the historical data and input object to samples_server
+        samples_server(
+            samples_df_reactive.get(), 
+            samples_historical_df_reactive.get(),
+            input
+        )
         seq_server(seq_df_reactive.get())
     
         return ui.TagList()  # Return an empty UI element

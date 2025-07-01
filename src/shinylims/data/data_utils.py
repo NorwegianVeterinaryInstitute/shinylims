@@ -182,6 +182,57 @@ def fetch_all_samples_data():
     return df, meta_created
 
 
+def fetch_historical_samples_data():
+    """
+    Fetch historical samples data from SQLite database.
+    Returns: tuple of (DataFrame, creation_date)
+    """
+
+    df = query_to_dataframe("SELECT * FROM samples_historical")
+
+    # Rename columns to match what the app expects
+    df = df.rename(columns={
+        'limsid': 'LIMS ID',
+        'project_limsid': 'Project LIMS ID',
+        'received_date': 'Received Date',
+        'species_name': 'Species',
+        'name': 'Sample Name',
+        'project_name': 'Project Name',
+        'project_account': 'Project Account',
+        'experiment_name': 'Experiment Name',
+        'invoice_id': 'Invoice ID',
+        'extraction_number': 'Extraction Number',
+        'concentration_absorbance': 'Absorbance',
+        'a260_280_ratio': 'A260/280 ratio',
+        'a260_230_ratio': 'A260/230 ratio',
+        'concentration_fluorescence': 'Fluorescence',
+        'storage_box': 'Storage Box Name',
+        'storage_well': 'Storage Well',
+        'billing_description': 'Billing Description',
+        'reagent_label': 'Reagent Label',
+        'increased_pooling': 'Increased Pooling (%)',
+        'nird_filename': 'NIRD Filename',
+    })
+    
+    # Apply transformations
+    if 'Received Date' in df.columns:
+        df['Received Date'] = pd.to_datetime(df['Received Date'], errors='coerce')
+    
+    # Replace NaN values
+    df = df.replace(np.nan, '', regex=True)
+    
+    # Transform LIMS IDs to HTML links
+    for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid']:
+        if col in df.columns:
+            df[col] = df[col].apply(transform_to_html)
+    
+    # Transform comments
+    comment_columns = [col for col in df.columns if 'comment' in col.lower()]
+    for col in comment_columns:
+        df[col] = df[col].apply(transform_comments_to_html)
+
+    return df
+
 def fetch_sequencing_data():
     """Fetch sequencing run data from SQLite and rename columns to match the app."""
 
