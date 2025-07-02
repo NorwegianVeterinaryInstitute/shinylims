@@ -65,8 +65,8 @@ def samples_server(samples_df, samples_historical_df, input):
             return ui.modal_show(
                 ui.modal(
                     ui.div(
-                        ui.p("⚠️ You are now including historical samples. The historical data was recorded before the current LIMS system was implemented. It may not be complete or accurate. It will also make searching more difficult since data isnt formatted consistently."),
-                        ui.p("Please review the data carefully. Data can be filtered through the 'Custom Search Builder' by 'Current' or 'Historical' using the 'Data Source' column.")
+                        ui.p("⚠️ You are now including historical samples. The historical data was recorded before Clarity LIMS was implemented. It may not be complete or accurate. It will also make searching more difficult since data isnt formatted consistently."),
+                        ui.p("Please review the data carefully. Data can be filtered through the 'Custom Search Builder' by 'Clarity LIMS' or 'Historical' using the 'Data Source' column.")
                     ),
                     title="Historical Data Warning",
                     easy_close=True,
@@ -83,10 +83,14 @@ def samples_server(samples_df, samples_historical_df, input):
         # If checkbox is checked and historical data exists, combine them
         if input.include_hist() and samples_historical_df is not None and not samples_historical_df.empty:
             # Add a column to distinguish data sources if needed
-            dat['Data_Source'] = 'Current'
+            dat['Data_Source'] = 'Clarity LIMS'
             hist_dat = samples_historical_df.copy()
             hist_dat['Data_Source'] = 'Historical'
             
+            # Remove the 'data_source' column if it exists
+            if 'data_source' in hist_dat.columns:
+                hist_dat = hist_dat.drop('data_source', axis=1)
+
             # Combine the dataframes
             dat = pd.concat([dat, hist_dat], ignore_index=True, sort=False)
         
