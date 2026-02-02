@@ -131,10 +131,54 @@ def fetch_projects_data():
 
 
 def fetch_all_samples_data():
-    """Fetch all samples data from SQLite and rename columns to match the app."""
+    """Fetch all samples data from SQLite with storage container state and rename columns to match the app."""
 
-    # Query all samples
+    # First, get all samples
     df = query_to_dataframe("SELECT * FROM samples")
+    
+    # Get all container states as a dictionary for efficient lookup
+    containers_query = "SELECT container_name, state FROM storage_containers"
+    containers_df = query_to_dataframe(containers_query)
+    container_states = dict(zip(containers_df['container_name'], containers_df['state']))
+    
+    # Create formatted storage box column BEFORE renaming
+    # This handles multiple boxes separated by commas
+    def format_storage_box(row):
+        box_name = row.get('storage_box', '')
+        
+        if pd.isna(box_name) or box_name == '':
+            return ''
+        
+        # Split by comma and strip whitespace
+        boxes = [box.strip() for box in str(box_name).split(',')]
+        
+        # Format each box with its state
+        formatted_boxes = []
+        
+        for box in boxes:
+            if not box:  # Skip empty strings
+                continue
+                
+            # Look up the state for this box
+            box_state = container_states.get(box, None)
+            
+            if box_state == 'Discarded':
+                # Red and bold for discarded boxes
+                formatted_boxes.append(
+                    f'<span style="color: red; font-weight: bold;">{box} (discarded)</span>'
+                )
+            else:
+                # Normal formatting for active or unknown boxes
+                formatted_boxes.append(box)
+        
+        # Join all formatted boxes back together
+        return ', '.join(formatted_boxes)
+    
+    # Create the formatted column
+    df['storage_box_formatted'] = df.apply(format_storage_box, axis=1)
+    
+    # Drop the original raw column
+    df = df.drop('storage_box', axis=1)
     
     # Rename columns to match what the app expects
     df = df.rename(columns={
@@ -152,7 +196,7 @@ def fetch_all_samples_data():
         'a260_280_ratio': 'A260/280 ratio',
         'a260_230_ratio': 'A260/230 ratio',
         'concentration_fluorescence': 'Fluorescence',
-        'storage_box': 'Storage Box Name',
+        'storage_box_formatted': 'Storage Box',
         'storage_well': 'Storage Well',
         'billing_description': 'Billing Description',
         'reagent_label': 'Reagent Label',
@@ -177,9 +221,27 @@ def fetch_all_samples_data():
     for col in comment_columns:
         df[col] = df[col].apply(transform_comments_to_html)
     
+    # Reorder columns to place "Storage Box" right before "Storage Well"
+    cols = df.columns.tolist()
+    
+    # Remove "Storage Box" from its current position
+    if 'Storage Box' in cols:
+        cols.remove('Storage Box')
+    
+    # Find the index of "Storage Well" and insert "Storage Box" before it
+    if 'Storage Well' in cols:
+        storage_well_idx = cols.index('Storage Well')
+        cols.insert(storage_well_idx, 'Storage Box')
+    
+    # Reorder the dataframe
+    df = df[cols]
+    
     meta_created = get_table_update_timestamp('samples')
     
     return df, meta_created
+
+
+
 
 
 def fetch_historical_samples_data():

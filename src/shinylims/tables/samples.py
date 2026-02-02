@@ -7,7 +7,9 @@ from shinywidgets import output_widget, render_widget
 from itables.widget import ITable
 from itables.javascript import JavascriptFunction
 import pandas as pd
-
+from src.shinylims.data.db_utils import query_to_dataframe
+import pandas as pd
+import re
 
 
 ##############################
@@ -16,15 +18,21 @@ import pandas as pd
 
 def samples_ui():
     return ui.div(
-        # Switch toggle with inline styling
+        # Switches and buttons row
         ui.div(
-            ui.input_switch("include_hist", "Include historical samples", False)
+            ui.input_action_button(
+                "show_storage_status", 
+                "📦 Storage Box Status",
+                class_="btn-secondary btn-sm"
+            ),
+            ui.input_switch("include_hist", "Include historical samples", False),
+            style="display: flex; align-items: baseline; gap: 20px; margin-bottom: 10px;"
+            #                    ^^^^^^^^ Changed from 'center' to 'baseline'
         ),
         # Widget container
         ui.div(
             output_widget("data_samples", fillable=False),
         ),
-        
     )
 
 
@@ -73,6 +81,153 @@ def samples_server(samples_df, samples_historical_df, input):
                     footer=ui.modal_button("OK")
                 )
             )
+        
+    @reactive.Effect
+    def show_warning_modal():
+        # ... existing code ...
+        pass
+    
+    # Modal for storage box status
+    @reactive.Effect
+    @reactive.event(input.show_storage_status)
+    def show_storage_status_modal():
+        
+        
+        try:
+            # Fetch all storage containers with their states
+            query = """
+            SELECT 
+                container_name,
+                state,
+                last_checked,
+                last_updated
+            FROM storage_containers
+            """
+            containers_df = query_to_dataframe(query)
+            
+            if containers_df.empty:
+                content = ui.p("No storage container data available.")
+            else:
+                # Extract numeric part for sorting
+                def extract_number(name):
+                    """Extract the numeric part from container name like 'NGS45' -> 45"""
+                    if pd.isna(name):
+                        return 0
+                    match = re.search(r'(\d+)', str(name))
+                    return int(match.group(1)) if match else 0
+                
+                # Add a numeric sort column
+                containers_df['sort_num'] = containers_df['container_name'].apply(extract_number)
+                
+                # Sort by number only (descending - highest first)
+                containers_df = containers_df.sort_values(
+                    by='sort_num',
+                    ascending=False  # Highest number first
+                )
+                
+                # Rename columns for display (after sorting)
+                containers_df = containers_df.rename(columns={
+                    'container_name': 'Box Name',
+                    'state': 'Status',
+                    'last_checked': 'Last Checked',
+                    'last_updated': 'Last Updated'
+                })
+                
+                # Format dates
+                for col in ['Last Checked', 'Last Updated']:
+                    if col in containers_df.columns:
+                        containers_df[col] = pd.to_datetime(
+                            containers_df[col], 
+                            errors='coerce'
+                        ).dt.strftime('%Y-%m-%d %H:%M')
+                
+                # Add colored status column
+                def format_status(status):
+                    if status == 'Discarded':
+                        return f'<span style="color: red; font-weight: bold;">🗑️ {status}</span>'
+                    elif status == 'Populated':
+                        return f'<span style="color: green; font-weight: bold;">✅ {status}</span>'
+                    else:
+                        return status
+                
+                containers_df['Status'] = containers_df['Status'].apply(format_status)
+                
+                # Count boxes
+                populated_count = containers_df['Status'].str.contains('Populated', case=False).sum()
+                discarded_count = containers_df['Status'].str.contains('Discarded').sum()
+                total_count = len(containers_df)
+                
+                # Create summary text
+                summary = ui.p(
+                    f"📦 Total: {total_count} | ✅ Populated: {populated_count} | 🗑️ Discarded: {discarded_count}",
+                    style="font-weight: bold; margin-bottom: 15px; font-size: 16px;"
+                )
+                
+                # Drop the sort_num column before display
+                display_df = containers_df.drop('sort_num', axis=1)
+                
+                # Create properly aligned HTML table
+                table_html = display_df.to_html(
+                    index=False,
+                    escape=False,  # Allow HTML in Status column
+                    classes='table table-striped table-bordered table-sm',
+                    border=0
+                )
+                
+                # Add inline CSS for proper alignment
+                styled_table = f"""
+                <style>
+                    .storage-table {{
+                        width: 100%;
+                        max-height: 400px;
+                        overflow-y: auto;
+                        overflow-x: auto;
+                    }}
+                    .storage-table table {{
+                        width: 100%;
+                        margin: 0;
+                    }}
+                    .storage-table th {{
+                        position: sticky;
+                        top: 0;
+                        background-color: #f8f9fa;
+                        z-index: 10;
+                        padding: 8px;
+                        text-align: left;
+                        border-bottom: 2px solid #dee2e6;
+                    }}
+                    .storage-table td {{
+                        padding: 8px;
+                        text-align: left;
+                    }}
+                </style>
+                <div class="storage-table">
+                    {table_html}
+                </div>
+                """
+                
+                content = ui.div(
+                    summary,
+                    ui.HTML(styled_table)
+                )
+        
+        except Exception as e:
+            content = ui.div(
+                ui.p(f"⚠️ Error loading storage container data: {str(e)}", 
+                     style="color: red;")
+            )
+        
+        # Show modal
+        ui.modal_show(
+            ui.modal(
+                content,
+                title="📦 Storage Box Status",
+                size="l",
+                easy_close=True,
+                footer=ui.modal_button("Close")
+            )
+        )
+
 
     # Create a reactive expression for the combined dataframe
     @reactive.Calc
