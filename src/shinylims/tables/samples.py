@@ -3,13 +3,16 @@ samples.py - Table module containing UI and server logic for the Samples table t
 '''
 
 from shiny import ui, reactive
-from shinywidgets import output_widget, render_widget
+from shinywidgets import output_widget, render_widget, reactive_read
 from itables.widget import ITable
 from itables.javascript import JavascriptFunction
 import pandas as pd
 from src.shinylims.data.db_utils import query_to_dataframe
-import pandas as pd
 import re
+import io
+
+# Remote server destination path — update this when moving to production
+SAGA_LOCATION = "/path/to/saga/destination/"
 
 
 ##############################
@@ -25,9 +28,13 @@ def samples_ui():
                 "📦 Storage Box Status",
                 class_="btn-secondary btn-sm"
             ),
+            ui.input_action_button(
+                "send_to_server",
+                "📤 Send Selected Samples to SAGA for ATLAS",
+                class_="btn-primary btn-sm"
+            ),
             ui.input_switch("include_hist", "Include historical samples", False),
             style="display: flex; align-items: baseline; gap: 20px; margin-bottom: 10px;"
-            #                    ^^^^^^^^ Changed from 'center' to 'baseline'
         ),
         # Widget container
         ui.div(
@@ -89,7 +96,6 @@ def samples_server(samples_df, samples_historical_df, input):
     @reactive.event(input.show_storage_status)
     def show_storage_status_modal():
         
-        
         try:
             # Fetch all storage containers with their states
             query = """
@@ -119,7 +125,7 @@ def samples_server(samples_df, samples_historical_df, input):
                 # Sort by number only (descending - highest first)
                 containers_df = containers_df.sort_values(
                     by='sort_num',
-                    ascending=False  # Highest number first
+                    ascending=False
                 )
                 
                 # Rename columns for display (after sorting)
@@ -166,7 +172,7 @@ def samples_server(samples_df, samples_historical_df, input):
                 # Create properly aligned HTML table
                 table_html = display_df.to_html(
                     index=False,
-                    escape=False,  # Allow HTML in Status column
+                    escape=False,
                     classes='table table-striped table-bordered table-sm',
                     border=0
                 )
@@ -248,6 +254,124 @@ def samples_server(samples_df, samples_historical_df, input):
         
         return dat.reset_index(drop=True)
 
+
+    # Step 1 — "Send to Server" button: validate selection, then show credentials modal
+    @reactive.Effect
+    @reactive.event(input.send_to_server)
+    def handle_send_to_server():
+        selected = reactive_read(data_samples.widget, "selected_rows")
+
+        if not selected:
+            ui.modal_show(
+                ui.modal(
+                    ui.p("⚠️ No rows selected. Please use 'Select Filtered Rows' first, then deselect any rows you don't want."),
+                    title="No Rows Selected",
+                    easy_close=True,
+                    footer=ui.modal_button("OK")
+                )
+            )
+            return
+
+        dat = combined_samples()
+        export_columns = [col for col in ["Sample Name", "NIRD Filename"] if col in dat.columns]
+
+        if not export_columns:
+            ui.modal_show(
+                ui.modal(
+                    ui.p("⚠️ Could not find 'Sample Name' or 'NIRD Filename' columns in the data."),
+                    title="Export Error",
+                    easy_close=True,
+                    footer=ui.modal_button("OK")
+                )
+            )
+            return
+
+        # Show credentials modal
+        ui.modal_show(
+            ui.modal(
+                ui.p(f"Uploading {len(selected)} rows with columns: {', '.join(export_columns)}",
+                     style="margin-bottom: 15px; color: #555;"),
+                ui.input_text("upload_username", "Username"),
+                ui.input_text("upload_totp", "TOTP Token"),
+                ui.input_password("upload_password", "Password"),
+                title="📤 SAGA Credentials",
+                easy_close=True,
+                footer=ui.div(
+                    ui.modal_button("Cancel"),
+                    ui.input_action_button(
+                        "confirm_upload",
+                        "Upload",
+                        class_="btn-primary",
+                        style="margin-left: 10px;"
+                    ),
+                    style="display: flex; justify-content: flex-end; gap: 10px;"
+                )
+            )
+        )
+
+    # Step 2 — "Upload" button inside the modal: do the actual upload
+    @reactive.Effect
+    @reactive.event(input.confirm_upload)
+    def do_upload():
+        selected = reactive_read(data_samples.widget, "selected_rows")
+        dat = combined_samples()
+        export_columns = [col for col in ["Sample Name", "NIRD Filename"] if col in dat.columns]
+        selected_df = dat.iloc[list(selected)][export_columns]
+
+        username = input.upload_username()
+        totp = input.upload_totp()
+        password = input.upload_password()
+        saga_location = SAGA_LOCATION
+
+        # --- FOR TESTING: write to local CSV ---
+        test_output_path = "/tmp/server_export.csv"
+        selected_df.to_csv(test_output_path, index=False)
+        # --- END TESTING BLOCK (remove for production) ---
+
+        # Build a file-like object in memory from the dataframe
+        file_buffer = io.StringIO()
+        selected_df.to_csv(file_buffer, index=False)
+        file_buffer.seek(0)  # Rewind to the start so upload_csv can read it
+
+        try:
+            # WAITING FOR THIS FUNCTION TO BE IMPLEMENTED 
+            # FROM GEORGE
+            
+            # Print the credentials being used (for debugging - remove in production!!)
+            print(f"Attempting to upload to server with username: {username}, TOTP: {totp}, and password: {'*' * len(password)}")
+            
+            upload_csv(
+                file=file_buffer,
+                username=username,
+                TOTP=totp,
+                password=password,
+                saga_location=saga_location
+            )
+
+            ui.modal_show(
+                ui.modal(
+                    ui.p(f"✅ Successfully uploaded {len(selected_df)} rows to {saga_location}."),
+                    ui.p(f"(Test CSV also saved to: {test_output_path})", 
+                         style="color: #888; font-size: 0.9em;"),  # remove for production
+                    title="Upload Complete",
+                    easy_close=True,
+                    footer=ui.modal_button("OK")
+                )
+            )
+
+        except Exception as e:
+            ui.modal_show(
+                ui.modal(
+                    ui.p(f"⚠️ Upload failed: {str(e)}", style="color: red;"),
+                    ui.p(f"(Test CSV was still saved to: {test_output_path})",
+                         style="color: #888; font-size: 0.9em;"),  # remove for production
+                    title="Upload Error",
+                    easy_close=True,
+                    footer=ui.modal_button("OK")
+                )
+            )
+
+
     # Filter and render the filtered dataframe
     @render_widget
     def data_samples():
@@ -255,11 +379,7 @@ def samples_server(samples_df, samples_historical_df, input):
         
         # Properly format date columns for DataTables
         if "Received Date" in dat.columns:
-            # Convert to datetime type first
             dat["Received Date"] = pd.to_datetime(dat["Received Date"], errors='coerce')
-            
-            # Format dates as strings in a consistent format for display
-            # Keep NaT values as empty strings
             dat["Received Date"] = dat["Received Date"].apply(
                 lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else ''
             )
@@ -268,12 +388,11 @@ def samples_server(samples_df, samples_historical_df, input):
         column_to_sort = "Received Date"
         if column_to_sort in dat.columns:
             column_index = dat.columns.get_loc(column_to_sort)
-            date_column_index = column_index  # Store for columnDefs
+            date_column_index = column_index
         else:
-            column_index = 0  # Default to first column if Received Date not found
-            date_column_index = -1  # Indicates no date column found
+            column_index = 0
+            date_column_index = -1
 
-        # Return HTML tag with DT table element
         return ITable(
                 dat,
                 select=True, 
@@ -293,12 +412,10 @@ def samples_server(samples_df, samples_historical_df, input):
                         {'extend': "spacer",
                          'style': 'bar',
                          'text': 'Column Settings'},
-                        # Column visibility toggle
                         {
                             "extend": "colvis",
                             "text": "Selection"
                         },
-                        # Button to select specific columns presets
                         {
                         "extend": "collection",
                         "text": "Presets",
@@ -326,8 +443,7 @@ def samples_server(samples_df, samples_historical_df, input):
                                 "text": "Minimal View",
                                 "action": JavascriptFunction("""
                                     function(e, dt, node, config) {
-                                        // Example: Show only specific columns by index
-                                        dt.columns().visible(false);  // Hide all first
+                                        dt.columns().visible(false);
                                         dt.column(2).visible(true);
                                         dt.column(3).visible(true);
                                         dt.column(4).visible(true);
@@ -343,37 +459,49 @@ def samples_server(samples_df, samples_historical_df, input):
                         {'extend': "spacer",
                          'style': 'bar',
                          'text': 'Row Settings'},
-                        # Page length selector
                         "pageLength",
+                        # --- NEW: Select filtered rows button ---
+                        {
+                            "text": "☑️ Select Filtered Rows",
+                            "action": JavascriptFunction("""
+                                function(e, dt, node, config) {
+                                    dt.rows({search: 'applied'}).select();
+                                }
+                            """)
+                        },
+                        # Deselect all rows button
+                        {
+                            "text": "🔲 Deselect All Rows",
+                            "action": JavascriptFunction("""
+                                function(e, dt, node, config) {
+                                    dt.rows().deselect();
+                                }
+                            """)
+                        },
                         {'extend': "spacer",
                          'style': 'bar',
                          'text': 'Export'},
-                        # Collection of export options
                         {
                             "extend": "collection", 
                             "text": "Type",
                             "buttons": [
-                                # Copy to clipboard
                                 {
                                     "extend": "copyHtml5",
                                     "exportOptions": {"columns": ":visible"},
                                     "text": "Copy to Clipboard"
                                 },
-                                # CSV export with all visible columns
                                 {
                                     "extend": "csvHtml5", 
                                     "exportOptions": {"columns": ":visible"},
                                     "text": "Export to CSV",
                                     "title": "Sample Data Export"
                                 },
-                                # Excel export with visible columns
                                 {
                                     "extend": "excelHtml5", 
                                     "exportOptions": {"columns": ":visible"},
                                     "text": "Export to Excel",
                                     "title": "Sample Data Export"
                                 },
-                                # CSV export with specific columns for Saga
                                 {
                                     "extend": "csvHtml5", 
                                     "exportOptions": {
@@ -390,22 +518,18 @@ def samples_server(samples_df, samples_historical_df, input):
                      order=[[column_index, "desc"]],
                      columnDefs=[
                         {"className": "dt-center", "targets": "_all"},
-                        {"width": "200px", "targets": "_all"},  # Set a default width for all columns
-                        
-                        # Explicitly define the Received Date column as a date type for searchBuilder
+                        {"width": "200px", "targets": "_all"},
                         {
                             "targets": date_column_index,
                             "type": "date",
                             "render": JavascriptFunction("""
                             function(data, type, row) {
-                                // For sorting and filtering
                                 if (type === 'sort' || type === 'type' || type === 'filter') {
                                     if (!data || data === '') {
                                         return null;
                                     }
                                     return data;
                                 }
-                                // For display
                                 return data;
                             }
                             """)
