@@ -47,10 +47,7 @@ def samples_server(samples_df, samples_historical_df, input):
     def get_saga_columns(dataframe):
         # Define the essential column names - customize this list as needed
         essential_columns = [
-            "LIMS ID", 
             "Sample Name",
-            "Species",
-            "Project Account",
             "NIRD Filename"
         ]
         
@@ -382,8 +379,8 @@ def samples_server(samples_df, samples_historical_df, input):
                                     "exportOptions": {
                                         "columns": get_saga_columns(dat)
                                     },
-                                    "text": "Export CSV for Saga", 
-                                    "title": "saga_export"
+                                    "text": "Export CSV for ATLAS", 
+                                    "title": "atlas_export"
                                 },
                             ]
                         },
