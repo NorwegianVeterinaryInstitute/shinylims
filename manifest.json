@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "locale": "en_US.UTF-8",
+  "metadata": {
+    "appmode": "python-shiny",
+    "entrypoint": "shinylims.app:app"
+  },
+  "python": {
+    "version": "3.11.5",
+    "package_manager": {
+      "name": "pip",
+      "version": "26.0.1",
+      "package_file": "requirements.txt"
+    }
+  },
+  "environment": {
+    "python": {
+      "requires": "~=3.11.0"
+    }
+  },
+  "files": {
+    "requirements.txt": {
+      "checksum": "e06c132f51c44c8cf6561376670fdb55"
+    },
+    ".env.example": {
+      "checksum": "4e45c40fe87409e3735dd09af93f132a"
+    },
+    ".github/workflows/deploy.yml": {
+      "checksum": "a0169a023a7fe152a855bc2018d515d7"
+    },
+    ".gitignore": {
+      "checksum": "55e2b0f82118a10424eafff1ce2ee65e"
+    },
+    ".python-version": {
+      "checksum": "215923581f8fcce0029639f7ab16ccb6"
+    },
+    "LICENSE": {
+      "checksum": "fc80e042aeec4b637e104910d16812fc"
+    },
+    "README.md": {
+      "checksum": "b5ab1acb2774bf60e66d15b76c6cb7f0"
+    },
+    "deploy_mode.txt": {
+      "checksum": "f6cb3e816496528d4187db53bc66567f"
+    },
+    "pyproject.toml": {
+      "checksum": "b16be23514cf71f8ab3b636a44722eec"
+    },
+    "src/shinylims/__init__.py": {
+      "checksum": "307cc3e530ff345a54e2c5485707a0f7"
+    },
+    "src/shinylims/_brand.yml": {
+      "checksum": "9473050e5b3d9032e1a1616885f4f8a8"
+    },
+    "src/shinylims/app.py": {
+      "checksum": "d3c3c0d35423b171bcfb32c890c6d175"
+    },
+    "src/shinylims/assets/styles.css": {
+      "checksum": "6f6bdf688be00153d0866dd7b3b09158"
+    },
+    "src/shinylims/data/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "src/shinylims/data/data_utils.py": {
+      "checksum": "1a3dc0488b40ee160f3ecfd92d902366"
+    },
+    "src/shinylims/data/db_utils.py": {
+      "checksum": "e88d0c6d0c2a468324ff6ef46ff4d7f2"
+    },
+    "src/shinylims/helpers/historical_samples.db": {
+      "checksum": "8d1be45bb556596a0b3855c443b2cd8f"
+    },
+    "src/shinylims/helpers/prepare_historical_data.py": {
+      "checksum": "6c0d103deb3c0222333fa87e5fedfe20"
+    },
+    "src/shinylims/helpers/wgs_historical.csv": {
+      "checksum": "9e551ebd5486a4ba3ac0f771c1f00fd3"
+    },
+    "src/shinylims/tables/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "src/shinylims/tables/projects.py": {
+      "checksum": "7e790e7c67e2d0f6643cd7bacd828fcb"
+    },
+    "src/shinylims/tables/samples.py": {
+      "checksum": "25d04c12b51e5e01e0380d1f949c3cec"
+    },
+    "src/shinylims/tables/sequencing.py": {
+      "checksum": "24ae2031a1db1fb037e3bf82da4e2535"
+    },
+    "src/shinylims/www/images/favicon/favicon-16x16.png": {
+      "checksum": "7d2a3023cd584c3bad3e51badc2c564f"
+    },
+    "src/shinylims/www/images/favicon/favicon-32x32.png": {
+      "checksum": "76ac2e6519fd487af329543073d68949"
+    },
+    "src/shinylims/www/images/favicon/favicon-96x96.png": {
+      "checksum": "bf6e7f3b1b2760adeece99252b0b4de9"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-eng-hvit.png": {
+      "checksum": "0856c06ad4bd26d8d9796bd1087b2bd0"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-eng.png": {
+      "checksum": "9b26f213f0e64ea8e49223e5ca460706"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-eng.svg": {
+      "checksum": "a61767313defeb6cc5c479b28323efe2"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-hvit.png": {
+      "checksum": "c021fe8bf6b93b57340e03b46b2d3e34"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-neg-eng.svg": {
+      "checksum": "a263abcf5aec93ad19da03c011a15cae"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-neg-no.svg": {
+      "checksum": "8694b33984da3e8b3dfe438b3bb4e166"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-neg-sam.svg": {
+      "checksum": "9c4ee272e648c5b71034c5b81ca6049f"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-no.svg": {
+      "checksum": "40aae281a95551bb2d19ad90d14847c3"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-sam-hvit.png": {
+      "checksum": "be79ecf8755d10dc60d078d2f0873da9"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-sam.png": {
+      "checksum": "c27295fbe739601bc154d168a69a8c89"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-sam.svg": {
+      "checksum": "595c6160ede650e125fdc1986b60a6b7"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo.png": {
+      "checksum": "9a73087d8d84377a82955262fdd2d1af"
+    },
+    "uv.lock": {
+      "checksum": "7a0fff110435f8330eb884816bb83f12"
+    }
+  }
+}
