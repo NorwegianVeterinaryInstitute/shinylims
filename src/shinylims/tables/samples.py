@@ -11,8 +11,8 @@ from src.shinylims.data.db_utils import query_to_dataframe
 import re
 import io
 
-# Remote server destination path — update this when moving to production
-SAGA_LOCATION = "/path/to/saga/destination/"
+# Base path on the remote cluster — full path is built dynamically using the username
+SAGA_BASE_PATH = "/cluster/shared/vetinst/users/"
 
 
 ##############################
@@ -321,8 +321,8 @@ def samples_server(samples_df, samples_historical_df, input):
         username = input.upload_username()
         totp = input.upload_totp()
         password = input.upload_password()
-        saga_location = SAGA_LOCATION
-
+        saga_location = SAGA_BASE_PATH + username
+        print(f"Preparing to upload {len(selected_df)} rows to {saga_location} with username '{username}'")
         # --- FOR TESTING: write to local CSV ---
         test_output_path = "/tmp/server_export.csv"
         selected_df.to_csv(test_output_path, index=False)
@@ -334,12 +334,7 @@ def samples_server(samples_df, samples_historical_df, input):
         file_buffer.seek(0)  # Rewind to the start so upload_csv can read it
 
         try:
-            # WAITING FOR THIS FUNCTION TO BE IMPLEMENTED 
-            # FROM GEORGE
-            
-            # Print the credentials being used (for debugging - remove in production!!)
-            print(f"Attempting to upload to server with username: {username}, TOTP: {totp}, and password: {'*' * len(password)}")
-            
+            # WAITING FOR GEORGES FUNCTION TO BE READY (upload_csv)
             upload_csv(
                 file=file_buffer,
                 username=username,
