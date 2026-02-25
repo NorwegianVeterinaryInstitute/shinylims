@@ -17,6 +17,7 @@ from faicons import icon_svg
 from shinylims.tables.projects import projects_ui, projects_server
 from shinylims.tables.samples import samples_ui, samples_server
 from shinylims.tables.sequencing import seq_ui, seq_server
+from shinylims.tables.reagents import reagents_ui, reagents_server
 
 # Import database utilities
 from src.shinylims.data.db_utils import get_db_update_info, refresh_db_connection, get_formatted_update_info
@@ -40,7 +41,7 @@ css_path = Path(__file__).parent / "assets" / "styles.css"
 ####################
 
 # Get the absolute path to the www directory
-# Shouldnt be needed, but something in the project layout is confusing Shiny’s default static path discovery
+# Shouldnt be needed, but something in the project layout is confusing Shiny's default static path discovery
 www_dir = Path(__file__).parent / "www"
 
 # Logo file to use
@@ -75,6 +76,8 @@ app_ui = ui.page_navbar(
     ui.nav_panel("Projects", projects_ui(), value="projects"),
     ui.nav_panel("Samples", samples_ui()),  
     ui.nav_panel("Illumina Sequencing", seq_ui()),
+    ui.nav_panel("Reagents", reagents_ui(), value="reagents"),
+    
     # Add another spacer after panels to push the button to the far right
     ui.nav_spacer(),
     # Add info button next to refresh button
@@ -289,6 +292,9 @@ def server(input, output, session):
             input
         )
         seq_server(seq_df_reactive.get())
+        
+        # Initialize reagents server
+        reagents_server(input, output, session)
     
         return ui.TagList()  # Return an empty UI element
     
@@ -298,4 +304,4 @@ def server(input, output, session):
 # RUN APP #
 ###########
 
-app = App(app_ui, server, static_assets=www_dir)  
+app = App(app_ui, server, static_assets=www_dir)
