@@ -1,7 +1,6 @@
 import logging
 import os
 import paramiko
-import paramiko.SSHException
 import scp
 import stat
 import socket
@@ -55,7 +54,7 @@ def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, remote_
                 message = f"{ip}:{remote_absolute_file_path} already exists.\n"
                 message += "Is this a repeat upload? If yes, delete/move the existing remote file and try again."
                 logger.critical( message )
-                raise SSHException( message )
+                raise paramiko.SSHException( message )
 
         logger.info( "Remote file does not exist, created." )
     finally:
