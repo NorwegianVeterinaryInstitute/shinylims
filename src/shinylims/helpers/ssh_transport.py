@@ -2,6 +2,7 @@ import logging
 import os
 import paramiko
 import scp
+import stat
 import socket
 
 
@@ -18,52 +19,45 @@ def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, remote_
         remote filesystem errors.
     """
 
+    logger = logging.getLogger(__name__)
     ip, port = transport.getpeername( )
 
-    if not os.path.isabs( remote_absolute_dir_path ):
-        message = f"Remote directory is not in absolute path: {remote_absolute_dir_path}"
+    if not os.path.isabs( remote_absolute_file_path ):
+        message = f"Remote directory is not in absolute path: {remote_absolute_file_path}"
         raise RuntimeError( message )
 
     if not transport.is_active( ):
         message = f"TransportError: transport not active at hop {ip}"
-        demuxLogger.critical( message )
-        raise SSHException( message )
+        logger.critical( message )
+        raise paramiko.SSHException( message )
 
     try:
         sftp_client: paramiko.SFTPClient = paramiko.SFTPClient.from_transport( transport )
     except Exception as error:
         message = f"SFTPError: failed to create SFTP session at hop {ip}:{port}"
-        demuxLogger.critical( message )
-        raise SSHException( message ) from error
+        logger.critical( message )
+        raise paramiko.SSHException( message ) from error
 
     try:
         attributes: paramiko.SFTPAttributes | None = None
         try:
-            attributes = sftp_client.stat( remote_absolute_dir_path )
+            attributes = sftp_client.stat( remote_absolute_file_path )
         except FileNotFoundError:
             pass
         except OSError as error:
-            message = f"SFTPError: stat failed for {ip}:{port}:{remote_absolute_dir_path}: {error}"
-            demuxLogger.critical( message )
-            raise SSHException( message ) from error
+            message = f"SFTPError: stat failed for {ip}:{port}:{remote_absolute_file_path}: {error}"
+            logger.critical( message )
+            raise paramiko.SSHException( message ) from error
 
         if attributes is not None:
-            if stat.S_ISDIR( attributes.st_mode ):
-                message = f"{ip}:{remote_absolute_dir_path} already exists.\n"
+            if stat.S_ISREG( attributes.st_mode ):
+                message = f"{ip}:{remote_absolute_file_path} already exists.\n"
                 message += "Is this a repeat upload? If yes, delete/move the existing remote directory and try again."
-                demuxLogger.critical( message )
+                logger.critical( message )
                 raise SSHException( message )
-            raise SSHException( f"{ip}:{remote_absolute_dir_path} exists but is not a directory." )
+            raise paramiko.SSHException( f"{ip}:{remote_absolute_file_path} exists but is not a directory." )
 
-        try:
-            sftp_client.mkdir( remote_absolute_dir_path )
-        except OSError as error:
-            message = f"Directory creation error: cannot create {ip}:{port}:{remote_absolute_dir_path}. "
-            message += f"SFTPError: {error}"
-            demuxLogger.critical( message )
-            raise SSHException( message ) from error
-
-        demuxLogger.info( termcolor.colored( "Remote directory does not exist, created\n", color="cyan", attrs=["bold"] ) )
+        logger.info( "Remote directory does not exist, created." )
     finally:
         try:
             sftp_client.close( )
@@ -85,6 +79,8 @@ def _authenticate_transport( hop:str, transport:paramiko.Transport, username:str
     """
     hostname:str = hop
     port:int     = 22
+    logger = logging.getLogger(__name__)
+
 
     def _kbdint_handler( title, instructions, prompt_list ):
         responses = [ ]
@@ -105,7 +101,7 @@ def _authenticate_transport( hop:str, transport:paramiko.Transport, username:str
         logger.critical( message )
         # treat any raised AuthenticationException from auth_interactive() as failure
         # no other reliable signal exists that NIRD changed the TOTP token prompt
-        raise AuthenticationException( message )
+        raise paramiko.AuthenticationException( message )
 
 
 def _validate_hostkey( hop:str, transport:paramiko.Transport, *, port:int = 22, timeout:float = 30 ):
@@ -126,7 +122,7 @@ def _validate_hostkey( hop:str, transport:paramiko.Transport, *, port:int = 22, 
 
     # Validate host key against known_hosts (RejectPolicy equivalent)
     host_keys = paramiko.HostKeys( )
-    known_hosts_path = os.path.abspath( os.path.expanduser( constants.USER_SSH_KNOWN_HOSTS_PATH ) )
+    known_hosts_path = os.path.abspath( os.path.expanduser( "~/.ssh/known_hosts" ) )
     if os.path.exists( known_hosts_path ):
         host_keys.load( known_hosts_path )
 
@@ -136,7 +132,7 @@ def _validate_hostkey( hop:str, transport:paramiko.Transport, *, port:int = 22, 
 
     if host_key_entry is None:
         message = f"RuntimeError: Host key for {hostname}:{port} not found in {known_hosts_path}. Refusing connection."
-        demuxLogger.critical( message )
+        logger.critical( message )
         raise RuntimeError( message )
 
     accepted = False
@@ -147,8 +143,8 @@ def _validate_hostkey( hop:str, transport:paramiko.Transport, *, port:int = 22, 
 
     if not accepted:
         message = f"RuntimeError: Host key mismatch for {hostname}:{port}. Refusing connection."
-        demuxLogger.critical( message )
-        raise RuntimeError( message ) # https://github.com/NorwegianVeterinaryInstitute/DemultiplexRawSequenceData/issues/150
+        logger.critical( message )
+        raise RuntimeError( message )
 
 
 def _connect( hop: str, *, port: int = 22, timeout: float = 30.0, keepalive: int = 30 ) -> paramiko.Transport:
