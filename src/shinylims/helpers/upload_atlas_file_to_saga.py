@@ -2,8 +2,10 @@ import logging
 import os
 import paramiko
 import scp
-
-import ssh_transport
+from src.shinylims.helpers.ssh_transport import _ensure_remote_present_file_via_sftp
+from src.shinylims.helpers.ssh_transport import _connect
+from src.shinylims.helpers.ssh_transport import _validate_hostkey
+from src.shinylims.helpers.ssh_transport import _authenticate_transport
 
 from typing import IO  # generic file-like object
 
@@ -87,7 +89,7 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
 
     logger = logging.getLogger(__name__)
 
-    if len( file ) == 0:
+    if len( local_file.getvalue() ) == 0:
         message = f"Length of ATLAS file to upload was zero while copying." # check if we got passed garbage
         logger.critical( message )
         raise RuntimeError( message )

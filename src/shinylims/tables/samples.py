@@ -10,6 +10,7 @@ import pandas as pd
 from src.shinylims.data.db_utils import query_to_dataframe
 import re
 import io
+from src.shinylims.helpers.upload_atlas_file_to_saga import _upload_csv_to_saga
 
 # Base path on the remote cluster — full path is built dynamically using the username
 SAGA_BASE_PATH = "/cluster/shared/vetinst/users/"
@@ -334,11 +335,10 @@ def samples_server(samples_df, samples_historical_df, input):
         file_buffer.seek(0)  # Rewind to the start so upload_csv can read it
 
         try:
-            # WAITING FOR GEORGES FUNCTION TO BE READY (upload_csv)
-            upload_csv(
+            _upload_csv_to_saga(
                 file=file_buffer,
                 username=username,
-                TOTP=totp,
+                totp=totp,
                 password=password,
                 saga_location=saga_location
             )
