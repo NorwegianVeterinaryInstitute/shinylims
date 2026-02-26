@@ -53,7 +53,7 @@ def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, usernam
     scp_client = scp.SCPClient( transport )
 
     try:
-        buf = io.BytesIO( buffer.encode( "utf-8" ) )  # str -> bytes
+        buf = io.BytesIO( buffer )  # str -> bytes
         scp_client.putfo( buf, saga_location )  # file and saga_location must be in absolute format
 
     except scp.SCPException as error:
