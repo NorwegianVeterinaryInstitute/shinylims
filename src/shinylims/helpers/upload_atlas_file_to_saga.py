@@ -7,7 +7,7 @@ from src.shinylims.helpers.ssh_transport import _connect
 from src.shinylims.helpers.ssh_transport import _validate_hostkey
 from src.shinylims.helpers.ssh_transport import _authenticate_transport
 
-from typing import IO  # generic file-like object
+from typing import Union, IO # generic file-like object
 
 
 def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, username: str, totp: str, password: str, saga_location: str ) -> None:
