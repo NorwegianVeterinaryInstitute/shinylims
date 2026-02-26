@@ -1,5 +1,6 @@
 import logging
 import os
+import io
 import paramiko
 import scp
 from src.shinylims.helpers.ssh_transport import _ensure_remote_present_file_via_sftp

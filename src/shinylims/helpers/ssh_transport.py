@@ -1,6 +1,7 @@
 import logging
 import os
 import paramiko
+import paramiko.SSHException
 import scp
 import stat
 import socket
