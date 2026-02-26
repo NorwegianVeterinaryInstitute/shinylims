@@ -119,6 +119,8 @@ def _validate_hostkey( hop:str, transport:paramiko.Transport, *, port:int = 22, 
     """
 
     hostname = hop
+    logger = logging.getLogger(__name__)
+    
 
     # Validate host key against known_hosts (RejectPolicy equivalent)
     host_keys = paramiko.HostKeys( )
