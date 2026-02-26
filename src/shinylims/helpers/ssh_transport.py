@@ -52,12 +52,11 @@ def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, remote_
         if attributes is not None:
             if stat.S_ISREG( attributes.st_mode ):
                 message = f"{ip}:{remote_absolute_file_path} already exists.\n"
-                message += "Is this a repeat upload? If yes, delete/move the existing remote directory and try again."
+                message += "Is this a repeat upload? If yes, delete/move the existing remote file and try again."
                 logger.critical( message )
                 raise SSHException( message )
-            raise paramiko.SSHException( f"{ip}:{remote_absolute_file_path} exists but is not a directory." )
 
-        logger.info( "Remote directory does not exist, created." )
+        logger.info( "Remote file does not exist, created." )
     finally:
         try:
             sftp_client.close( )
@@ -120,7 +119,7 @@ def _validate_hostkey( hop:str, transport:paramiko.Transport, *, port:int = 22, 
 
     hostname = hop
     logger = logging.getLogger(__name__)
-    
+
 
     # Validate host key against known_hosts (RejectPolicy equivalent)
     host_keys = paramiko.HostKeys( )

@@ -22,7 +22,6 @@ def _upload_tar_via_scp( local_file: IO[str], transport: paramiko.Transport, use
     Raises RuntimeError if remote file exists or if the files passed are not in absolute format
     """
 
-    remote_file = os.path.join( saga_location, os.path.basename( local_file ) )
     logger = logging.getLogger(__name__)
 
     if transport is None:
@@ -36,7 +35,7 @@ def _upload_tar_via_scp( local_file: IO[str], transport: paramiko.Transport, use
     try:
         sftp_client: paramiko.SFTPClient = paramiko.SFTPClient.from_transport( transport )
         try:
-            sftp_client.stat( remote_file )
+            sftp_client.stat( saga_location )
         except FileNotFoundError:
             pass
         else:
@@ -52,8 +51,9 @@ def _upload_tar_via_scp( local_file: IO[str], transport: paramiko.Transport, use
 
     scp_client = scp.SCPClient( transport )
 
-    try: 
-        scp_client.put( local_file, remote_file )  # file and saga_location must be in absolute format
+    try:
+        buf = io.BytesIO( buffer.encode( "utf-8" ) )  # str -> bytes
+        scp_client.putfo( buf, saga_location )  # file and saga_location must be in absolute format
 
     except scp.SCPException as error:
         raise
@@ -95,12 +95,42 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
         raise RuntimeError( message )
 
     if not username:
-        message = f"username required while uploading to SAGA." # check if we got passed garbage
+        message = f"Username required while uploading to SAGA." # check if we got passed garbage
+        logger.critical( message )
+        raise RuntimeError( message )
+
+    if '*' in username:
+        message= "'*' cannot be part of a username. Aborting." # check if we got passed garbage
+        logger.critical( message )
+        raise RuntimeError( message )
+
+    if not username.isalnum( ) and not username[0].isdigit():
+        message = f"Username must be alphanumeric with no spaces and must not start with a number." # check if we got passed garbage
         logger.critical( message )
         raise RuntimeError( message )
 
     if not totp:
         message = f"2FA token is required to upload a file to SAGA." # check if we got passed garbage
+        logger.critical( message )
+        raise RuntimeError( message )
+
+    if not totp.isdigit( ) or len( totp ) != 6:
+        message = f"2FA token must be all digits and six digits long"
+        logger.critical( message )
+        raise RuntimeError( message )
+
+    if '*' in totp:
+        message = "'*' cannot be part of a totp. Aborting." # check if we got passed garbage
+        logger.critical( message )
+        raise RuntimeError( message )
+
+    if not password:
+        message = "Empty password for uploading ATLAS csv file to SAGA. Aborting."
+        logger.critical( message )
+        raise RuntimeError( message )
+
+    if '*' in password:
+        message = "Password for uploading ATLAS csv file to SAGA cannot contain '*'. Aborting."
         logger.critical( message )
         raise RuntimeError( message )
 
@@ -114,9 +144,15 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
         logger.critical( message )
         raise RuntimeError( message )
 
+    base = os.path.basename( saga_location )
+    if not base or not base != os.sep and os.path.splitext( base )[ 1 ].lower( ) == ".csv": # make sure we got a filename and that it ends in .csv
+        message = f"SAGA remote location does not contain a filename at the end of path or filename does not end in '.csv'"
+        logger.critical( message )
+        raise RuntimeError( message )
 
 
-def _upload_csv_to_saga( file: IO[str], username: str, totp: str, password: str, saga_location: str ) -> None:
+
+def _upload_csv_to_saga( file: Union[ str, os.PathLike, IO[ str ] ], username: str, totp: str, password: str, saga_location: str ) -> None:
     """
     Upload the ATLAS scv file to SAGA
     """
@@ -127,10 +163,13 @@ def _upload_csv_to_saga( file: IO[str], username: str, totp: str, password: str,
                                                   # the only real concern is to add the ssh host key for all five nodes
     transport: paramiko.Transport = None
 
-    _preflight_check( file, username, totp, password, saga_location )
+    data = open( os.fspath( file ) ).read( ) if isinstance( file, ( str, os.PathLike ) ) else file.read( )
+    buffer = io.StringIO( data )
+
+    _preflight_check( buffer, username, totp, password, saga_location )
 
     transport = _connect( hop )
     _validate_hostkey( hop, transport )
-    _authenticate_transport( hop, transport, username, totp, password  ) # auth only by 2FA
+    _authenticate_transport( hop = hop, transport = transport, username = username, password = password, totp = totp  ) # auth only by 2FA
     _ensure_remote_present_file_via_sftp( transport, saga_location )
-    _upload_tar_via_scp( file, transport, username, totp, password, saga_location ) # FIX THIS TO INCLUDE REMOTE FILE CHECKING?
+    _upload_tar_via_scp( buffer, transport, username, totp, password, saga_location ) # FIX THIS TO INCLUDE REMOTE FILE CHECKING?
