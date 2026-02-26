@@ -3,12 +3,14 @@ import os
 import paramiko
 import scp
 
-from typing               import IO  # generic file-like
+import ssh_transport
+
+from typing import IO  # generic file-like object
 
 
 def _upload_tar_via_scp( local_file: IO[str], transport: paramiko.Transport, username: str, totp: str, password: str, saga_location: str ) -> None:
     """
-    Upload a single local tar file to its remote path via an existing SCP session.
+    Upload a single local file to its remote path via an existing SCP session.
 
     Asserts that the remote target does not already exist, then performs a single
     SCP put operation. Does not perform verification by hashing the uploaded files.
@@ -18,7 +20,8 @@ def _upload_tar_via_scp( local_file: IO[str], transport: paramiko.Transport, use
     Raises RuntimeError if remote file exists or if the files passed are not in absolute format
     """
 
-    remote_file = os.path.join( saga_location, os.path.basename( file ) ) 
+    remote_file = os.path.join( saga_location, os.path.basename( local_file ) )
+    logger = logging.getLogger(__name__)
 
     if transport is None:
         message = "Transport for file is not set, aborting"
@@ -45,7 +48,7 @@ def _upload_tar_via_scp( local_file: IO[str], transport: paramiko.Transport, use
         except Exception:
             pass
 
-    scp_client = SCPClient( demux.transport )
+    scp_client = scp.SCPClient( transport )
 
     try: 
         scp_client.put( local_file, remote_file )  # file and saga_location must be in absolute format
@@ -82,6 +85,8 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
         RuntimeError: If any required input is missing or invalid.
     """
 
+    logger = logging.getLogger(__name__)
+
     if len( file ) == 0:
         message = f"Length of ATLAS file to upload was zero while copying." # check if we got passed garbage
         logger.critical( message )
@@ -92,8 +97,8 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
         logger.critical( message )
         raise RuntimeError( message )
 
-    if not topt:
-        message = f"2FA is required to upload a file to SAGA." # check if we got passed garbage
+    if not totp:
+        message = f"2FA token is required to upload a file to SAGA." # check if we got passed garbage
         logger.critical( message )
         raise RuntimeError( message )
 
@@ -111,15 +116,7 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
 
 def _upload_csv_to_saga( file: IO[str], username: str, totp: str, password: str, saga_location: str ) -> None:
     """
-    Dispatch tar uploads to NIRD using the access mode defined on `demux`
-    (SSH, SSH+2FA, or mounted sshfs) and execute transfers either serially
-    or via a ThreadPoolExecutor.
-
-    Serial mode executes uploads inline and fails immediately on error.
-    Parallel mode submits one future per tar, blocks until ALL_COMPLETE,
-    collects per-tar exceptions (including EOFError from transport drops),
-    and raises a single RuntimeError after synchronization if any upload failed.
-
+    Upload the ATLAS scv file to SAGA
     """
 
     logger = logging.getLogger(__name__)
