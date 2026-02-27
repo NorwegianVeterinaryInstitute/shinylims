@@ -7,7 +7,7 @@ import stat
 import socket
 
 
-def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, saga_location: str ) -> None:
+def _ensure_remote_file_present_via_sftp( transport: paramiko.Transport, saga_location: str ) -> None:
     """
     Ensure the remote run directory exists using an already-authenticated SFTP session.
 

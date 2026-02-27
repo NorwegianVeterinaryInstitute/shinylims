@@ -6,7 +6,7 @@ import paramiko
 import paramiko.sftp
 import scp
 import stat
-from src.shinylims.helpers.ssh_transport import _ensure_remote_dir_present_via_sftp
+from src.shinylims.helpers.ssh_transport import _ensure_remote_file_present_via_sftp
 from src.shinylims.helpers.ssh_transport import _connect
 from src.shinylims.helpers.ssh_transport import _validate_hostkey
 from src.shinylims.helpers.ssh_transport import _authenticate_transport
@@ -179,5 +179,5 @@ def _upload_csv_to_saga( file: Union[ str, os.PathLike, IO[ str ] ], username: s
     transport = _connect( hop )
     _validate_hostkey( hop, transport )
     _authenticate_transport( hop = hop, transport = transport, username = username, password = password, totp = totp  ) # auth only by 2FA
-    _ensure_remote_dir_present_via_sftp( transport, saga_location )
+    _ensure_remote_file_present_via_sftp( transport, saga_location )
     _upload_file_via_sftp( buffer, transport, username, totp, password, saga_location ) # FIX THIS TO INCLUDE REMOTE FILE CHECKING?
