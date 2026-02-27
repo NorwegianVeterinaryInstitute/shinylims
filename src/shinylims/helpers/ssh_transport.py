@@ -12,20 +12,19 @@ def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, saga_lo
     Ensure the remote run directory exists using an already-authenticated SFTP session.
 
     Checks for the existence of the target directory on the remote host and creates it
-    if missing. Aborts if the directory already exists or if creation fails.
+    if missing. Aborts if the path exists but is not a directory, if the transport is
+    inactive, or if creation fails.
 
     Raises:
-        SSHException: if the directory already exists, if the transport is inactive,
-        or if remote creation fails due to permission, missing parent, or other
-        remote filesystem errors.
+        SSHException: if the transport is inactive, or if remote creation fails due to
+        permission, missing parent, or other remote filesystem errors.
+        RuntimeError: if the path is not absolute or exists but is not a directory.
     """
 
     logger                                          = logging.getLogger(__name__)
     ip, port                                        = transport.getpeername( )
     basedir:str                                     = str( pathlib.Path( saga_location ).parent ) # e.x. /cluster/shared/vetinst/users/georgmar/atlas_export_20260227_122753.csv -> /cluster/shared/vetinst/users/georgmar
     attributes: paramiko.sftp_attr.SFTPAttributes   = None
-    dir_exists: bool                                = False
-    val:int                                         = 0
     sftp_client: paramiko.SFTPClient                = None
 
 
@@ -46,19 +45,28 @@ def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, saga_lo
         raise paramiko.SSHException( message ) from error
 
     try:
-        attributes  = sftp_client.stat( basedir )
-        dir_exists  = stat.S_ISDIR( attributes.st_mode )
+        attributes = sftp_client.stat( basedir )
+        dir_exists = stat.S_ISDIR( attributes.st_mode )
         logger.debug( f"directory {basedir} exists: {dir_exists}" )
 
         if not dir_exists:
-            val = sftp_client.mkdir( basedir )
-            if paramiko.sftp.SFTP_OK != val:
-                raise ValueError( f"SAGA directory {basedir} was detected to not exist. Tried to create but creation went wrong. Aborting. ")
-            logger.info( f"Remote directory {basedir} does not exist, created." )
+            raise RuntimeError( f"{basedir} exists but is not a directory" )
+
+    except FileNotFoundError:
+        logger.info( f"Remote directory {basedir} does not exist, creating." )
+        try:
+            sftp_client.mkdir( basedir )
+            logger.info( f"Created remote directory: {basedir}" )
+        except Exception as mkdir_error:
+            message = f"SFTPError: failed to create directory {basedir} at hop {ip}:{port}"
+            logger.critical( message )
+            raise paramiko.SSHException( message ) from mkdir_error
+
     except Exception as error:
         message = f"SFTPError: failed to stat {basedir} during session at hop {ip}:{port}"
         logger.critical( message )
         raise paramiko.SSHException( message ) from error
+
     finally:
         sftp_client.close( )
 
