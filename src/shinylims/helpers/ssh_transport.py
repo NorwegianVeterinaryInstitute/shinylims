@@ -103,7 +103,7 @@ def _authenticate_transport( hop:str, transport:paramiko.Transport, username:str
         raise paramiko.AuthenticationException( message )
 
 
-def _validate_hostkey( hop:str, transport:paramiko.Transport, *, port:int = 22, timeout:float = 30 ):
+def _validate_hostkey( hop:str, transport:paramiko.Transport, *, port:int = 22, timeout:float = 30 ) -> None:
     """
     Validate the remote server host key for an already-created SSH Transport.
 
