@@ -1,12 +1,13 @@
 import logging
 import os
 import paramiko
+import pathlib
 import scp
 import stat
 import socket
 
 
-def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, remote_absolute_file_path: str ) -> None:
+def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, saga_location: str ) -> None:
     """
     Ensure the remote run directory exists using an already-authenticated SFTP session.
 
