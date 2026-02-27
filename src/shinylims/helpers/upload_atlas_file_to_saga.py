@@ -46,7 +46,7 @@ def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, usernam
 
     try:
         sftp_client = paramiko.SFTPClient.from_transport( transport )
-    except:
+    except Exception  as error::
         message = f"SFTPError: failed to create SFTP session at hop {ip}:{port}"
         logger.critical( message )
         raise paramiko.SSHException( message ) from error
