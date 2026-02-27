@@ -2,6 +2,7 @@
 samples.py - Table module containing UI and server logic for the Samples table tab
 '''
 
+from questionary import password
 from shiny import ui, reactive
 from shinywidgets import output_widget, render_widget, reactive_read
 from itables.widget import ITable
@@ -11,6 +12,8 @@ from src.shinylims.data.db_utils import query_to_dataframe
 import re
 import io
 from src.shinylims.helpers.upload_atlas_file_to_saga import _upload_csv_to_saga
+from datetime import datetime
+
 
 # Base path on the remote cluster — full path is built dynamically using the username
 SAGA_BASE_PATH = "/cluster/shared/vetinst/users/"
@@ -322,17 +325,18 @@ def samples_server(samples_df, samples_historical_df, input):
         username = input.upload_username()
         totp = input.upload_totp()
         password = input.upload_password()
-        saga_location = SAGA_BASE_PATH + username
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        saga_location = SAGA_BASE_PATH + username + f"/atlas_export_{timestamp}.csv"
         print(f"Preparing to upload {len(selected_df)} rows to {saga_location} with username '{username}'")
+
         # --- FOR TESTING: write to local CSV ---
         test_output_path = "/tmp/server_export.csv"
         selected_df.to_csv(test_output_path, index=False)
         # --- END TESTING BLOCK (remove for production) ---
 
         # Build a file-like object in memory from the dataframe
-        file_buffer = io.StringIO()
-        selected_df.to_csv(file_buffer, index=False)
-        file_buffer.seek(0)  # Rewind to the start so upload_csv can read it
+        # Build a bytes file-like object in memory from the dataframe
+        file_buffer = io.StringIO(selected_df.to_csv(index=False))
 
         try:
             _upload_csv_to_saga(
