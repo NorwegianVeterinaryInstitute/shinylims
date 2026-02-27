@@ -28,6 +28,7 @@ def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, usernam
     """
 
     logger                                          = logging.getLogger(__name__)
+    ip, port                                        = transport.getpeername( )
     basedir:str                                     = str( pathlib.Path( saga_location ).parent ) # e.x. /cluster/shared/vetinst/users/georgmar/atlas_export_20260227_122753.csv -> /cluster/shared/vetinst/users/georgmar
     attributes: paramiko.sftp_attr.SFTPAttributes   = None
     dir_exists: bool                                = False

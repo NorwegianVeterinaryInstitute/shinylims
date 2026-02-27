@@ -21,6 +21,7 @@ def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, saga_lo
     """
 
     logger                                          = logging.getLogger(__name__)
+    ip, port                                        = transport.getpeername( )
     basedir:str                                     = str( pathlib.Path( saga_location ).parent ) # e.x. /cluster/shared/vetinst/users/georgmar/atlas_export_20260227_122753.csv -> /cluster/shared/vetinst/users/georgmar
     attributes: paramiko.sftp_attr.SFTPAttributes   = None
     dir_exists: bool                                = False
