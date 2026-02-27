@@ -105,8 +105,8 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
         logger.critical( message )
         raise RuntimeError( message )
 
-    if not username.isalnum( ) and not username[0].isdigit():
-        message = f"Username must be alphanumeric with no spaces and must not start with a number." # check if we got passed garbage
+    if not username.isalnum( ):
+        message = f"Username must be alphanumeric with no spaces." # check if we got passed garbage
         logger.critical( message )
         raise RuntimeError( message )
 
