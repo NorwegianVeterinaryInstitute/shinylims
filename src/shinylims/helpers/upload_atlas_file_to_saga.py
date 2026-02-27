@@ -4,7 +4,6 @@ import io
 import pathlib
 import paramiko
 import paramiko.sftp
-import paramiko.sftp_attr.SFTPAttributes
 import scp
 import stat
 from src.shinylims.helpers.ssh_transport import _ensure_remote_present_file_via_sftp
@@ -53,14 +52,8 @@ def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, usernam
         val = sftp_client.mkdir( basedir )
         if paramiko.sftp.SFTP_OK != val:
             raise ValueError( f"SAGA directory {basedir} was detected to not exist. Tried to create but creation went wrong. Aborting. ")
-    finally:
-        try:
-            sftp_client.close( )
-        except Exception:
-            pass
 
     try:
-        sftp_client: paramiko.SFTPClient = paramiko.SFTPClient.from_transport( transport )
         buf = io.BytesIO( buffer.getvalue( ) )  # str -> bytes
         attributes = sftp_client.putfo( fl = buf, remotepath = saga_location, confirm = True )  # file and saga_location must be in absolute format
         isinstance( attrs, paramiko.SFTPAttributes ) # success is defined by "no exception raised".
