@@ -1,8 +1,12 @@
 import logging
 import os
 import io
+import pathlib
 import paramiko
+import paramiko.sftp
+import paramiko.sftp_attr.SFTPAttributes
 import scp
+import stat
 from src.shinylims.helpers.ssh_transport import _ensure_remote_present_file_via_sftp
 from src.shinylims.helpers.ssh_transport import _connect
 from src.shinylims.helpers.ssh_transport import _validate_hostkey
@@ -13,17 +17,22 @@ from typing import Union, IO # generic file-like object
 
 def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, username: str, totp: str, password: str, saga_location: str ) -> None:
     """
-    Upload a single local file to its remote path via an existing SCP session.
+    Upload a single local file to its remote path via an sftp session.
 
     Asserts that the remote target does not already exist, then performs a single
-    SCP put operation. Does not perform verification by hashing the uploaded files.
+    sftp put operation.
 
     Returns None on success.
 
-    Raises RuntimeError if remote file exists or if the files passed are not in absolute format
+    Raises
+        RuntimeError if remote file exists or if the files passed are not in absolute format
     """
 
-    logger = logging.getLogger(__name__)
+    logger                                          = logging.getLogger(__name__)
+    basedir:str                                     = str( pathlib.Path( saga_location ).parent ) # e.x. /cluster/shared/vetinst/users/georgmar/atlas_export_20260227_122753.csv -> /cluster/shared/vetinst/users/georgmar
+    attributes: paramiko.sftp_attr.SFTPAttributes   = None
+    dir_exists: bool                                = False
+    val:int                                         = 0
 
     if transport is None:
         message = "Transport for file is not set, aborting"
@@ -35,33 +44,35 @@ def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, usernam
 
     try:
         sftp_client: paramiko.SFTPClient = paramiko.SFTPClient.from_transport( transport )
-        try:
-            sftp_client.stat( saga_location )
-        except FileNotFoundError:
-            pass
-        else:
-            message = f"RuntimeError: Remote file already exists: {saga_location}"
-            message += "Refusing to overwrite. Delete/move remote file first and then try to upload again."
-            logger.critical( message )
-            raise RuntimeError( message)
+        attributes                       = sftp_client.stat( basedir )
+        dir_exists                       = stat.S_ISDIR( attributes.st_mode )
+    except OSError:
+        dir_exists = False
+    
+    if not dir_exists:
+        val = sftp_client.mkdir( basedir )
+        if paramiko.sftp.SFTP_OK != val:
+            raise ValueError( f"SAGA directory {basedir} was detected to not exist. Tried to create but creation went wrong. Aborting. ")
     finally:
         try:
             sftp_client.close( )
         except Exception:
             pass
 
-    scp_client = scp.SCPClient( transport )
-
     try:
-        buf = io.BytesIO( buffer.getvalue().encode('utf-8') )  # str -> bytes
-        scp_client.putfo( buf, saga_location )  # file and saga_location must be in absolute format
-
-    except scp.SCPException as error:
+        sftp_client: paramiko.SFTPClient = paramiko.SFTPClient.from_transport( transport )
+        buf = io.BytesIO( buffer.getvalue( ) )  # str -> bytes
+        attributes = sftp_client.putfo( fl = buf, remotepath = saga_location, confirm = True )  # file and saga_location must be in absolute format
+        isinstance( attrs, paramiko.SFTPAttributes ) # success is defined by "no exception raised".
+    except:
         raise
     finally:
-        scp_client.close( )
+        try:
+            sftp_client.close( )
+        except Exception:
+            pass
 
-    logger.info( f"Done!" )
+    logger.info( f"Done uploading {saga_location}!" )
 
 
 
@@ -159,13 +170,19 @@ def _upload_csv_to_saga( file: Union[ str, os.PathLike, IO[ str ] ], username: s
     """
 
     logger = logging.getLogger(__name__)
-    logging.basicConfig( level = logging.INFO )
+    logging.basicConfig( level = logging.DEBUG )
     hop:str = "login.saga.sigma2.no"              # we can nail this here. this DNS entry in Round-Robin format and there are 5 login nodes
                                                   # the only real concern is to add the ssh host key for all five nodes
+
+
     transport: paramiko.Transport = None
 
     data = open( os.fspath( file ) ).read( ) if isinstance( file, ( str, os.PathLike ) ) else file.read( )
     buffer = io.StringIO( data )
+
+    logger.debug( f"file input is: {file}" )
+    logger.debug( f"buffer is: {buffer.getvalue( )}" )
+    logger.debug( f"saga_location is: {saga_location}" )
 
     _preflight_check( buffer, username, totp, password, saga_location )
 
