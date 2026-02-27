@@ -7,12 +7,10 @@ import stat
 import socket
 
 
-def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, saga_location: str ) -> None:
+def _ensure_remote_dir_present_via_sftp( transport: paramiko.Transport, saga_location: str ) -> None:
     """
-    Ensure the remote run directory exists using an already-authenticated SFTP session.
-
     Checks for the existence of the target directory on the remote host and creates it
-    if missing. Aborts if the directory already exists or if creation fails.
+    if missing.
 
     Raises:
         SSHException: if the directory already exists, if the transport is inactive,
@@ -20,13 +18,13 @@ def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, saga_lo
         remote filesystem errors.
     """
 
-    logger                                          = logging.getLogger(__name__)
-    ip, port                                        = transport.getpeername( )
-    basedir:str                                     = str( pathlib.Path( saga_location ).parent ) # e.x. /cluster/shared/vetinst/users/georgmar/atlas_export_20260227_122753.csv -> /cluster/shared/vetinst/users/georgmar
-    attributes: paramiko.sftp_attr.SFTPAttributes   = None
-    dir_exists: bool                                = False
-    val:int                                         = 0
-    sftp_client: paramiko.SFTPClient                = None
+    logger                              = logging.getLogger(__name__)
+    ip, port                            = transport.getpeername( )
+    basedir:str                         = str( pathlib.Path( saga_location ).parent ) # e.x. /cluster/shared/vetinst/users/georgmar/atlas_export_20260227_122753.csv -> /cluster/shared/vetinst/users/georgmar
+    attributes: paramiko.SFTPAttributes = None
+    dir_exists: bool                    = False
+    val:int                             = 0
+    sftp_client: paramiko.SFTPClient    = None
 
 
     if not os.path.isabs( saga_location ):
@@ -38,29 +36,32 @@ def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, saga_lo
         logger.critical( message )
         raise paramiko.SSHException( message )
 
-    try:
-        sftp_client = paramiko.SFTPClient.from_transport( transport )
-    except Exception as error:
-        message = f"SFTPError: failed to create SFTP session at hop {ip}:{port}"
-        logger.critical( message )
-        raise paramiko.SSHException( message ) from error
+    # try:
+    sftp_client = paramiko.SFTPClient.from_transport( transport )
+    # except Exception as error:
+        # message = f"SFTPError: failed to create SFTP session at hop {ip}:{port}"
+        # logger.critical( message )
+        # raise paramiko.SSHException( message ) from error
 
     try:
         attributes  = sftp_client.stat( basedir )
         dir_exists  = stat.S_ISDIR( attributes.st_mode )
-        logger.debug( f"directory {basedir} exists: {dir_exists}" )
+    except OSError:
+        dir_exists = False
 
-        if not dir_exists:
-            val = sftp_client.mkdir( basedir )
-            if paramiko.sftp.SFTP_OK != val:
-                raise ValueError( f"SAGA directory {basedir} was detected to not exist. Tried to create but creation went wrong. Aborting. ")
-            logger.info( f"Remote directory {basedir} does not exist, created." )
-    except Exception as error:
-        message = f"SFTPError: failed to stat {basedir} during session at hop {ip}:{port}"
-        logger.critical( message )
-        raise paramiko.SSHException( message ) from error
-    finally:
-        sftp_client.close( )
+    logger.debug( f"directory {basedir} exists: {dir_exists}" )
+
+    if not dir_exists:
+        val = sftp_client.mkdir( basedir )
+        if paramiko.sftp.SFTP_OK != val:
+            raise ValueError( f"SAGA directory {basedir} was detected to not exist. Tried to create but creation went wrong. Aborting. ")
+        logger.info( f"Remote directory {basedir} does not exist, created." )
+    # except Exception as error:
+    #     message = f"SFTPError: failed to stat {basedir} during session at hop {ip}:{port}"
+    #     logger.critical( message )
+    #     raise paramiko.SSHException( message ) from error
+    # finally:
+    sftp_client.close( )
 
 
 def _authenticate_transport( hop:str, transport:paramiko.Transport, username:str, password:str, totp:str  ) -> None:

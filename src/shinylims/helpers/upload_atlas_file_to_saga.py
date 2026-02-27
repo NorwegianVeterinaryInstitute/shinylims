@@ -6,7 +6,7 @@ import paramiko
 import paramiko.sftp
 import scp
 import stat
-from src.shinylims.helpers.ssh_transport import _ensure_remote_present_file_via_sftp
+from src.shinylims.helpers.ssh_transport import _ensure_remote_dir_present_via_sftp
 from src.shinylims.helpers.ssh_transport import _connect
 from src.shinylims.helpers.ssh_transport import _validate_hostkey
 from src.shinylims.helpers.ssh_transport import _authenticate_transport
@@ -14,7 +14,7 @@ from src.shinylims.helpers.ssh_transport import _authenticate_transport
 from typing import Union, IO # generic file-like object
 
 
-def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, username: str, totp: str, password: str, saga_location: str ) -> None:
+def _upload_file_via_sftp( buffer: IO[str], transport: paramiko.Transport, username: str, totp: str, password: str, saga_location: str ) -> None:
     """
     Upload a single local file to its remote path via an sftp session.
 
@@ -27,13 +27,14 @@ def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, usernam
         RuntimeError if remote file exists or if the files passed are not in absolute format
     """
 
-    logger                                          = logging.getLogger(__name__)
-    ip, port                                        = transport.getpeername( )
-    basedir:str                                     = str( pathlib.Path( saga_location ).parent ) # e.x. /cluster/shared/vetinst/users/georgmar/atlas_export_20260227_122753.csv -> /cluster/shared/vetinst/users/georgmar
-    attributes: paramiko.sftp_attr.SFTPAttributes   = None
-    dir_exists: bool                                = False
-    val:int                                         = 0
-    sftp_client: paramiko.SFTPClient                = None
+    logger                                  = logging.getLogger(__name__)
+    basedir:str                             = str( pathlib.Path( saga_location ).parent ) # e.x. /cluster/shared/vetinst/users/georgmar/atlas_export_20260227_122753.csv -> /cluster/shared/vetinst/users/georgmar
+    attributes: paramiko.SFTPAttributes     = None
+    dir_exists: bool                        = False
+    val:int                                 = 0
+    sftp_client: paramiko.SFTPClient        = None
+    ip, port                                = transport.getpeername( )
+
 
 
     if transport is None:
@@ -44,22 +45,22 @@ def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, usernam
     if not transport.is_active( ):
         raise OSError( 9, "Peer closed the connection" )
 
-    try:
-        sftp_client = paramiko.SFTPClient.from_transport( transport )
-    except Exception  as error:
-        message = f"SFTPError: failed to create SFTP session at hop {ip}:{port}"
-        logger.critical( message )
-        raise paramiko.SSHException( message ) from error
-    try:
-        buf = io.BytesIO( buffer.getvalue().encode('utf-8') )  # str -> bytes
-        attributes = sftp_client.putfo( fl = buf, remotepath = saga_location, confirm = True )  # file and saga_location must be in absolute format
-        isinstance( attributes, paramiko.SFTPAttributes ) # success is defined by "no exception raised".
-    except:
-        message = f"SFTPError: failed to upload file during SFTP session at hop {ip}:{port}"
-        logger.critical( message )
-        raise paramiko.SSHException( message ) from error
-    finally:
-        sftp_client.close( )
+    # try:
+    sftp_client = paramiko.SFTPClient.from_transport( transport )
+    # except Exception  as error:
+    #     message = f"SFTPError: failed to create SFTP session at hop {ip}:{port}"
+    #     logger.critical( message )
+    #     raise paramiko.SSHException( message ) from error
+    # try:
+    buf = io.BytesIO( buffer.getvalue( ).encode('utf-8') )  # str -> bytes
+    attributes = sftp_client.putfo( fl = buf, remotepath = saga_location, confirm = True )  # file and saga_location must be in absolute format
+    isinstance( attributes, paramiko.SFTPAttributes ) # success is defined by "no exception raised".
+    # except Exception as error:
+    #     message = f"SFTPError: failed to upload file during SFTP session at hop {ip}:{port}"
+    #     logger.critical( message )
+    #     raise paramiko.SSHException( message ) from error
+    # finally:
+    sftp_client.close( )
 
     logger.info( f"Done uploading {saga_location}!" )
 
@@ -146,7 +147,7 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
         raise RuntimeError( message )
 
     base = os.path.basename( saga_location )
-    if not base or not base != os.sep and os.path.splitext( base )[ 1 ].lower( ) == ".csv": # make sure we got a filename and that it ends in .csv
+    if ( not base ) or ( not os.path.splitext( base )[ 1 ].lower( ) == ".csv" ): # make sure we got a filename and that it ends in .csv
         message = f"SAGA remote location does not contain a filename at the end of path or filename does not end in '.csv'"
         logger.critical( message )
         raise RuntimeError( message )
@@ -178,5 +179,5 @@ def _upload_csv_to_saga( file: Union[ str, os.PathLike, IO[ str ] ], username: s
     transport = _connect( hop )
     _validate_hostkey( hop, transport )
     _authenticate_transport( hop = hop, transport = transport, username = username, password = password, totp = totp  ) # auth only by 2FA
-    _ensure_remote_present_file_via_sftp( transport, saga_location )
-    _upload_tar_via_scp( buffer, transport, username, totp, password, saga_location ) # FIX THIS TO INCLUDE REMOTE FILE CHECKING?
+    _ensure_remote_dir_present_via_sftp( transport, saga_location )
+    _upload_file_via_sftp( buffer, transport, username, totp, password, saga_location ) # FIX THIS TO INCLUDE REMOTE FILE CHECKING?
