@@ -32,6 +32,8 @@ def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, usernam
     attributes: paramiko.sftp_attr.SFTPAttributes   = None
     dir_exists: bool                                = False
     val:int                                         = 0
+    sftp_client: paramiko.SFTPClient                = None
+
 
     if transport is None:
         message = "Transport for file is not set, aborting"
@@ -42,28 +44,21 @@ def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, usernam
         raise OSError( 9, "Peer closed the connection" )
 
     try:
-        sftp_client: paramiko.SFTPClient = paramiko.SFTPClient.from_transport( transport )
-        attributes                       = sftp_client.stat( basedir )
-        dir_exists                       = stat.S_ISDIR( attributes.st_mode )
-    except OSError:
-        dir_exists = False
-    
-    if not dir_exists:
-        val = sftp_client.mkdir( basedir )
-        if paramiko.sftp.SFTP_OK != val:
-            raise ValueError( f"SAGA directory {basedir} was detected to not exist. Tried to create but creation went wrong. Aborting. ")
-
+        sftp_client = paramiko.SFTPClient.from_transport( transport )
+    except:
+        message = f"SFTPError: failed to create SFTP session at hop {ip}:{port}"
+        logger.critical( message )
+        raise paramiko.SSHException( message ) from error
     try:
         buf = io.BytesIO( buffer.getvalue( ) )  # str -> bytes
         attributes = sftp_client.putfo( fl = buf, remotepath = saga_location, confirm = True )  # file and saga_location must be in absolute format
-        isinstance( attrs, paramiko.SFTPAttributes ) # success is defined by "no exception raised".
+        isinstance( attributes, paramiko.SFTPAttributes ) # success is defined by "no exception raised".
     except:
-        raise
+        message = f"SFTPError: failed to upload file during SFTP session at hop {ip}:{port}"
+        logger.critical( message )
+        raise paramiko.SSHException( message ) from error
     finally:
-        try:
-            sftp_client.close( )
-        except Exception:
-            pass
+        sftp_client.close( )
 
     logger.info( f"Done uploading {saga_location}!" )
 

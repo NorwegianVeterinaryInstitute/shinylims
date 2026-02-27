@@ -20,11 +20,16 @@ def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, saga_lo
         remote filesystem errors.
     """
 
-    logger = logging.getLogger(__name__)
-    ip, port = transport.getpeername( )
+    logger                                          = logging.getLogger(__name__)
+    basedir:str                                     = str( pathlib.Path( saga_location ).parent ) # e.x. /cluster/shared/vetinst/users/georgmar/atlas_export_20260227_122753.csv -> /cluster/shared/vetinst/users/georgmar
+    attributes: paramiko.sftp_attr.SFTPAttributes   = None
+    dir_exists: bool                                = False
+    val:int                                         = 0
+    sftp_client: paramiko.SFTPClient                = None
 
-    if not os.path.isabs( remote_absolute_file_path ):
-        message = f"Remote directory is not in absolute path: {remote_absolute_file_path}"
+
+    if not os.path.isabs( saga_location ):
+        message = f"Remote directory is not in absolute path: {saga_location}"
         raise RuntimeError( message )
 
     if not transport.is_active( ):
@@ -33,36 +38,28 @@ def _ensure_remote_present_file_via_sftp( transport: paramiko.Transport, saga_lo
         raise paramiko.SSHException( message )
 
     try:
-        sftp_client: paramiko.SFTPClient = paramiko.SFTPClient.from_transport( transport )
+        sftp_client = paramiko.SFTPClient.from_transport( transport )
     except Exception as error:
         message = f"SFTPError: failed to create SFTP session at hop {ip}:{port}"
         logger.critical( message )
         raise paramiko.SSHException( message ) from error
 
     try:
-        attributes: paramiko.SFTPAttributes | None = None
-        try:
-            attributes = sftp_client.stat( remote_absolute_file_path )
-        except FileNotFoundError:
-            pass
-        except OSError as error:
-            message = f"SFTPError: stat failed for {ip}:{port}:{remote_absolute_file_path}: {error}"
-            logger.critical( message )
-            raise paramiko.SSHException( message ) from error
+        attributes  = sftp_client.stat( basedir )
+        dir_exists  = stat.S_ISDIR( attributes.st_mode )
+        logger.debug( f"directory {basedir} exists: {dir_exists}" )
 
-        if attributes is not None:
-            if stat.S_ISREG( attributes.st_mode ):
-                message = f"{ip}:{remote_absolute_file_path} already exists.\n"
-                message += "Is this a repeat upload? If yes, delete/move the existing remote file and try again."
-                logger.critical( message )
-                raise paramiko.SSHException( message )
-
-        logger.info( "Remote file does not exist, created." )
+        if not dir_exists:
+            val = sftp_client.mkdir( basedir )
+            if paramiko.sftp.SFTP_OK != val:
+                raise ValueError( f"SAGA directory {basedir} was detected to not exist. Tried to create but creation went wrong. Aborting. ")
+            logger.info( f"Remote directory {basedir} does not exist, created." )
+    except Exception as error:
+        message = f"SFTPError: failed to stat {basedir} during session at hop {ip}:{port}"
+        logger.critical( message )
+        raise paramiko.SSHException( message ) from error
     finally:
-        try:
-            sftp_client.close( )
-        except Exception:
-            pass
+        sftp_client.close( )
 
 
 def _authenticate_transport( hop:str, transport:paramiko.Transport, username:str, password:str, totp:str  ) -> None:
