@@ -51,7 +51,7 @@ def _upload_tar_via_scp( buffer: IO[str], transport: paramiko.Transport, usernam
         logger.critical( message )
         raise paramiko.SSHException( message ) from error
     try:
-        buf = io.BytesIO( buffer.getvalue( ) )  # str -> bytes
+        buf = io.BytesIO( buffer.getvalue().encode('utf-8') )  # str -> bytes
         attributes = sftp_client.putfo( fl = buf, remotepath = saga_location, confirm = True )  # file and saga_location must be in absolute format
         isinstance( attributes, paramiko.SFTPAttributes ) # success is defined by "no exception raised".
     except:
