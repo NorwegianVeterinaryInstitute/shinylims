@@ -29,7 +29,6 @@ def _upload_file_via_sftp( buffer: IO[str], transport: paramiko.Transport, usern
     """
 
     logger                                  = logging.getLogger(__name__)
-    basedir:str                             = str( pathlib.Path( saga_location ).parent ) # e.x. /cluster/shared/vetinst/users/georgmar/atlas_export_20260227_122753.csv -> /cluster/shared/vetinst/users/georgmar
     attributes: paramiko.SFTPAttributes     = None
     dir_exists: bool                        = False
     val:int                                 = 0
