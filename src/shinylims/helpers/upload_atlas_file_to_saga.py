@@ -1,15 +1,18 @@
+'''
+Upload the ATLAS csv file to saga
+'''
+import io
 import logging
 import os
-import io
 import pathlib
-import paramiko
-import paramiko.sftp
-import scp
-import stat
-
-import ssh_transport
 
 from typing import Union, IO # generic file-like object
+
+import paramiko
+import paramiko.sftp
+
+import src.shinylims.helpers.ssh_transport
+
 
 
 def _upload_file_via_sftp( buffer: IO[str], transport: paramiko.Transport, username: str, totp: str, password: str, saga_location: str ) -> None:
