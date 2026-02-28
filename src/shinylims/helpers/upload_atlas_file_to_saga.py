@@ -6,10 +6,8 @@ import paramiko
 import paramiko.sftp
 import scp
 import stat
-from src.shinylims.helpers.ssh_transport import _ensure_remote_file_present_via_sftp
-from src.shinylims.helpers.ssh_transport import _connect
-from src.shinylims.helpers.ssh_transport import _validate_hostkey
-from src.shinylims.helpers.ssh_transport import _authenticate_transport
+
+import ssh_transport
 
 from typing import Union, IO # generic file-like object
 
@@ -33,7 +31,7 @@ def _upload_file_via_sftp( buffer: IO[str], transport: paramiko.Transport, usern
     dir_exists: bool                        = False
     val:int                                 = 0
     sftp_client: paramiko.SFTPClient        = None
-    ip, port                                = transport.getpeername( )
+    ip, port                                = transport.getpeername( )[:2]
 
 
 
@@ -154,7 +152,7 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
 
 
 
-def _upload_csv_to_saga( file: Union[ str, os.PathLike, IO[ str ] ], username: str, totp: str, password: str, saga_location: str ) -> None:
+def _upload_csv_to_saga( file: Union[ str, os.PathLike, IO[ str ] ], username: str, password: str, totp: str, saga_location: str ) -> None:
     """
     Upload the ATLAS scv file to SAGA
     """
@@ -176,8 +174,8 @@ def _upload_csv_to_saga( file: Union[ str, os.PathLike, IO[ str ] ], username: s
 
     _preflight_check( buffer, username, totp, password, saga_location )
 
-    transport = _connect( hop )
-    _validate_hostkey( hop, transport )
-    _authenticate_transport( hop = hop, transport = transport, username = username, password = password, totp = totp  ) # auth only by 2FA
-    _ensure_remote_file_present_via_sftp( transport, saga_location )
-    _upload_file_via_sftp( buffer, transport, username, totp, password, saga_location ) # FIX THIS TO INCLUDE REMOTE FILE CHECKING?
+    transport = ssh_transport._connect( hop )
+    ssh_transport._validate_hostkey( hop, transport )
+    ssh_transport._authenticate_transport( hop = hop, transport = transport, username = username, password = password, totp = totp  ) # auth only by 2FA
+    ssh_transport._ensure_remote_file_present_via_sftp( transport, saga_location )
+    _upload_file_via_sftp( buffer, transport, username, totp, password, saga_location )

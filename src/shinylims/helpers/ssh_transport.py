@@ -22,7 +22,7 @@ def _ensure_remote_file_present_via_sftp( transport: paramiko.Transport, saga_lo
     """
 
     logger                                          = logging.getLogger(__name__)
-    ip, port                                        = transport.getpeername( )
+    ip, port                                        = transport.getpeername( )[:2]
     basedir:str                                     = str( pathlib.Path( saga_location ).parent ) # e.x. /cluster/shared/vetinst/users/georgmar/atlas_export_20260227_122753.csv -> /cluster/shared/vetinst/users/georgmar
     attributes: paramiko.sftp_attr.SFTPAttributes   = None
     sftp_client: paramiko.SFTPClient                = None
@@ -180,7 +180,10 @@ def _connect( hop: str, *, port: int = 22, timeout: float = 30.0, keepalive: int
     transport: paramiko.Transport = None
     hostname: str = hop
 
-    tcp_socket: socket.socket = socket.create_connection( ( hostname, port ), timeout = timeout )
+    # note; over here there is an issue with the call in windows vs linux 
+    # or there might be an issue with either the way windows calls .create_connection (preferential treatment to ipv6 or ipv4)
+    # investigate
+    tcp_socket: socket.socket = socket.create_connection( ( hostname, port ), timeout = timeout )#, family = socket.AF_INET )
     transport = paramiko.Transport( tcp_socket )
 
     # check if transport exists and is open
