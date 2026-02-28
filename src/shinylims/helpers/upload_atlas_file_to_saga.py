@@ -11,7 +11,7 @@ from typing import Union, IO # generic file-like object
 import paramiko
 import paramiko.sftp
 
-import src.shinylims.helpers.ssh_transport
+import src.shinylims.helpers.ssh_transport as ssh_transport
 
 
 
