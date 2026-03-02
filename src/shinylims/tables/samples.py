@@ -2,14 +2,21 @@
 samples.py - Table module containing UI and server logic for the Samples table tab
 '''
 
+from questionary import password
 from shiny import ui, reactive
-from shinywidgets import output_widget, render_widget
+from shinywidgets import output_widget, render_widget, reactive_read
 from itables.widget import ITable
 from itables.javascript import JavascriptFunction
 import pandas as pd
 from src.shinylims.data.db_utils import query_to_dataframe
-import pandas as pd
 import re
+import io
+from src.shinylims.helpers.upload_atlas_file_to_saga import _upload_csv_to_saga
+from datetime import datetime
+
+
+# Base path on the remote cluster — full path is built dynamically using the username
+SAGA_BASE_PATH = "/cluster/shared/vetinst/users/"
 
 
 ##############################
@@ -18,16 +25,77 @@ import re
 
 def samples_ui():
     return ui.div(
-        # Switches and buttons row
+        # CSS for upload button disabled state and dropdown menus
+        ui.tags.style("""
+            #confirm_upload:disabled {
+                opacity: 0.65;
+                cursor: not-allowed;
+                pointer-events: all !important;
+            }
+            .toolbar-dropdown {
+                position: relative;
+                display: inline-block;
+            }
+            .toolbar-dropdown-content {
+                display: none;
+                position: absolute;
+                background-color: #fff;
+                min-width: 240px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                border-radius: 6px;
+                z-index: 1000;
+                padding: 8px 0;
+            }
+            .toolbar-dropdown:hover .toolbar-dropdown-content,
+            .toolbar-dropdown:focus-within .toolbar-dropdown-content {
+                display: block;
+            }
+            .toolbar-dropdown-content .dropdown-item {
+                display: block;
+                padding: 6px 16px;
+                white-space: nowrap;
+            }
+        """),
+        # Toolbar row with dropdown menus
         ui.div(
-            ui.input_action_button(
-                "show_storage_status", 
-                "📦 Storage Box Status",
-                class_="btn-secondary btn-sm"
+            # Tools dropdown
+            ui.div(
+                ui.tags.button(
+                    "🛠️ Tools",
+                    class_="btn btn-outline-secondary btn-sm dropdown-toggle",
+                    type="button",
+                ),
+                ui.div(
+                    ui.div(
+                        ui.input_action_button(
+                            "show_storage_status",
+                            "📦 Storage Box Status",
+                            class_="btn btn-link dropdown-item",
+                        ),
+                        class_="dropdown-item",
+                    ),
+                    class_="toolbar-dropdown-content",
+                ),
+                class_="toolbar-dropdown",
             ),
-            ui.input_switch("include_hist", "Include historical samples", False),
-            style="display: flex; align-items: baseline; gap: 20px; margin-bottom: 10px;"
-            #                    ^^^^^^^^ Changed from 'center' to 'baseline'
+            # Settings dropdown
+            ui.div(
+                ui.tags.button(
+                    "⚙️ Settings",
+                    class_="btn btn-outline-secondary btn-sm dropdown-toggle",
+                    type="button",
+                ),
+                ui.div(
+                    ui.div(
+                        ui.input_switch("include_hist", "Include historical samples", False),
+                        class_="dropdown-item",
+                        style="padding: 6px 16px;",
+                    ),
+                    class_="toolbar-dropdown-content",
+                ),
+                class_="toolbar-dropdown",
+            ),
+            style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;"
         ),
         # Widget container
         ui.div(
@@ -42,27 +110,6 @@ def samples_ui():
 
 # Server logic for the Samples page
 def samples_server(samples_df, samples_historical_df, input):
-    
-    # Helper function to get indices of columns for saga export
-    def get_saga_columns(dataframe):
-        # Define the essential column names - customize this list as needed
-        essential_columns = [
-            "Sample Name",
-            "NIRD Filename"
-        ]
-        
-        # Get the indices of these columns if they exist in the dataframe
-        column_indices = []
-        for column in essential_columns:
-            if column in dataframe.columns:
-                column_indices.append(dataframe.columns.get_loc(column))
-        
-        # If no essential columns were found, return all columns
-        if not column_indices:
-            return ":visible"
-            
-        return column_indices
-
 
     @reactive.Effect
     def show_warning_modal():
@@ -88,7 +135,6 @@ def samples_server(samples_df, samples_historical_df, input):
     @reactive.Effect
     @reactive.event(input.show_storage_status)
     def show_storage_status_modal():
-        
         
         try:
             # Fetch all storage containers with their states
@@ -119,7 +165,7 @@ def samples_server(samples_df, samples_historical_df, input):
                 # Sort by number only (descending - highest first)
                 containers_df = containers_df.sort_values(
                     by='sort_num',
-                    ascending=False  # Highest number first
+                    ascending=False
                 )
                 
                 # Rename columns for display (after sorting)
@@ -166,7 +212,7 @@ def samples_server(samples_df, samples_historical_df, input):
                 # Create properly aligned HTML table
                 table_html = display_df.to_html(
                     index=False,
-                    escape=False,  # Allow HTML in Status column
+                    escape=False,
                     classes='table table-striped table-bordered table-sm',
                     border=0
                 )
@@ -248,6 +294,127 @@ def samples_server(samples_df, samples_historical_df, input):
         
         return dat.reset_index(drop=True)
 
+
+    # Step 1 — "Send to SAGA" button (triggered via Shiny.setInputValue from the export dropdown):
+    # validate selection, then show credentials modal
+    @reactive.Effect
+    @reactive.event(input.send_to_server)
+    def handle_send_to_server():
+        selected = reactive_read(data_samples.widget, "selected_rows")
+
+        if not selected:
+            ui.modal_show(
+                ui.modal(
+                    ui.p("⚠️ No rows selected. Please use 'Select Filtered Rows' first, then deselect any rows you don't want."),
+                    title="No Rows Selected",
+                    easy_close=True,
+                    footer=ui.modal_button("OK")
+                )
+            )
+            return
+
+        dat = combined_samples()
+        export_columns = [col for col in ["Sample Name", "NIRD Filename"] if col in dat.columns]
+
+        if not export_columns:
+            ui.modal_show(
+                ui.modal(
+                    ui.p("⚠️ Could not find 'Sample Name' or 'NIRD Filename' columns in the data."),
+                    title="Export Error",
+                    easy_close=True,
+                    footer=ui.modal_button("OK")
+                )
+            )
+            return
+
+        # Show credentials modal
+        ui.modal_show(
+            ui.modal(
+                ui.p(f"Uploading {len(selected)} rows with columns: {', '.join(export_columns)}",
+                     style="margin-bottom: 15px; color: #555;"),
+                ui.input_text("upload_username", "Username"),
+                ui.input_password("upload_password", "Password"),
+                ui.input_text("upload_totp", "TOTP Token (2FA)"),
+                title="📤 SAGA Credentials",
+                easy_close=True,
+                footer=ui.div(
+                    ui.modal_button("Cancel"),
+                    ui.input_action_button(
+                        "confirm_upload",
+                        "Upload",
+                        class_="btn-primary",
+                        style="margin-left: 10px;",
+                        onclick="""
+                        this.disabled = true;
+                        this.innerHTML = '⏳ Uploading...';
+                        this.style.opacity = '0.65';
+                        this.style.cursor = 'not-allowed';
+                    """
+                    ),
+                    style="display: flex; justify-content: flex-end; gap: 10px;"
+                )
+            )
+        )
+
+    # Step 2 — "Upload" button inside the modal: do the actual upload
+    @reactive.Effect
+    @reactive.event(input.confirm_upload)
+    def do_upload():
+        selected = reactive_read(data_samples.widget, "selected_rows")
+        dat = combined_samples()
+        export_columns = [col for col in ["Sample Name", "NIRD Filename"] if col in dat.columns]
+        selected_df = dat.iloc[list(selected)][export_columns]
+
+        username = input.upload_username()
+        totp = input.upload_totp()
+        password = input.upload_password()
+        timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        saga_location = SAGA_BASE_PATH + username + f"/atlas_export_{timestamp}.csv"
+
+        # Build a bytes file-like object in memory from the dataframe
+        file_buffer = io.StringIO(selected_df.to_csv(index=False))
+
+        try:
+            _upload_csv_to_saga(
+                file=file_buffer,
+                username=username,
+                totp=totp,
+                password=password,
+                saga_location=saga_location
+            )
+
+            ui.modal_show(
+                ui.modal(
+                    ui.p(f"✅ Successfully uploaded {len(selected_df)} rows to {saga_location}."),
+                    ui.p("This csv can be used with the activate_data.sh script from ATLAS. See documentation at ",
+                        ui.tags.a(
+                            "https://github.com/NorwegianVeterinaryInstitute/ATLAS",
+                            href="https://github.com/NorwegianVeterinaryInstitute/ATLAS",
+                            target="_blank"
+                        )
+                    ),
+                    title="Upload Complete",
+                    easy_close=True,
+                    footer=ui.modal_button("OK")
+                )
+            )
+
+        except Exception as e:
+            lines = str(e).split("\n")
+
+            ui.modal_show(
+                ui.modal(
+                    ui.div(
+                        ui.p("⚠️ Upload failed", style="font-weight: bold;"),
+                        *[ui.p(line) for line in lines],
+                        style="color: red;"
+                    ),
+                    title="Upload Error",
+                    easy_close=True,
+                    footer=ui.modal_button("OK")
+                )
+            )
+
     # Filter and render the filtered dataframe
     @render_widget
     def data_samples():
@@ -255,11 +422,7 @@ def samples_server(samples_df, samples_historical_df, input):
         
         # Properly format date columns for DataTables
         if "Received Date" in dat.columns:
-            # Convert to datetime type first
             dat["Received Date"] = pd.to_datetime(dat["Received Date"], errors='coerce')
-            
-            # Format dates as strings in a consistent format for display
-            # Keep NaT values as empty strings
             dat["Received Date"] = dat["Received Date"].apply(
                 lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else ''
             )
@@ -268,12 +431,11 @@ def samples_server(samples_df, samples_historical_df, input):
         column_to_sort = "Received Date"
         if column_to_sort in dat.columns:
             column_index = dat.columns.get_loc(column_to_sort)
-            date_column_index = column_index  # Store for columnDefs
+            date_column_index = column_index
         else:
-            column_index = 0  # Default to first column if Received Date not found
-            date_column_index = -1  # Indicates no date column found
+            column_index = 0
+            date_column_index = -1
 
-        # Return HTML tag with DT table element
         return ITable(
                 dat,
                 select=True, 
@@ -290,16 +452,15 @@ def samples_server(samples_df, samples_historical_df, input):
                 allow_html=True,
                 keys=True,
                 buttons=[
-                        {'extend': "spacer",
-                         'style': 'bar',
-                         'text': 'Column Settings'},
-                        # Column visibility toggle
-                        {
-                            "extend": "colvis",
-                            "text": "Selection"
-                        },
-                        # Button to select specific columns presets
-                        {
+                    # ── Column visibility ─────────────────────────────────────
+                    {'extend': "spacer",
+                     'style': 'bar',
+                     'text': 'Column Settings'},
+                    {
+                        "extend": "colvis",
+                        "text": "Selection"
+                    },
+                    {
                         "extend": "collection",
                         "text": "Presets",
                         "buttons": [
@@ -319,15 +480,12 @@ def samples_server(samples_df, samples_historical_df, input):
                                     }
                                 """)
                             },
-                            {
-                               
-                            },
+                            {},
                             {
                                 "text": "Minimal View",
                                 "action": JavascriptFunction("""
                                     function(e, dt, node, config) {
-                                        // Example: Show only specific columns by index
-                                        dt.columns().visible(false);  // Hide all first
+                                        dt.columns().visible(false);
                                         dt.column(2).visible(true);
                                         dt.column(3).visible(true);
                                         dt.column(4).visible(true);
@@ -340,75 +498,88 @@ def samples_server(samples_df, samples_historical_df, input):
                             }
                         ]
                     },
-                        {'extend': "spacer",
-                         'style': 'bar',
-                         'text': 'Row Settings'},
-                        # Page length selector
-                        "pageLength",
-                        {'extend': "spacer",
-                         'style': 'bar',
-                         'text': 'Export'},
-                        # Collection of export options
-                        {
-                            "extend": "collection", 
-                            "text": "Type",
-                            "buttons": [
-                                # Copy to clipboard
-                                {
-                                    "extend": "copyHtml5",
-                                    "exportOptions": {"columns": ":visible"},
-                                    "text": "Copy to Clipboard"
-                                },
-                                # CSV export with all visible columns
-                                {
-                                    "extend": "csvHtml5", 
-                                    "exportOptions": {"columns": ":visible"},
-                                    "text": "Export to CSV",
-                                    "title": "Sample Data Export"
-                                },
-                                # Excel export with visible columns
-                                {
-                                    "extend": "excelHtml5", 
-                                    "exportOptions": {"columns": ":visible"},
-                                    "text": "Export to Excel",
-                                    "title": "Sample Data Export"
-                                },
-                                # CSV export with specific columns for Saga
-                                {
-                                    "extend": "csvHtml5", 
-                                    "exportOptions": {
-                                        "columns": get_saga_columns(dat)
-                                    },
-                                    "text": "Export CSV for ATLAS", 
-                                    "title": "atlas_export"
-                                },
-                            ]
-                        },
-                        {'extend': "spacer",
-                         'style': 'bar'},
-                     ],
-                     order=[[column_index, "desc"]],
-                     columnDefs=[
-                        {"className": "dt-center", "targets": "_all"},
-                        {"width": "200px", "targets": "_all"},  # Set a default width for all columns
-                        
-                        # Explicitly define the Received Date column as a date type for searchBuilder
-                        {
-                            "targets": date_column_index,
-                            "type": "date",
-                            "render": JavascriptFunction("""
-                            function(data, type, row) {
-                                // For sorting and filtering
-                                if (type === 'sort' || type === 'type' || type === 'filter') {
-                                    if (!data || data === '') {
-                                        return null;
+                    # ── Row settings ──────────────────────────────────────────
+                    {'extend': "spacer",
+                     'style': 'bar',
+                     'text': 'Row Settings'},
+                    "pageLength",
+                    {
+                        "text": "☑️ Select All Filtered Rows",
+                        "action": JavascriptFunction("""
+                            function(e, dt, node, config) {
+                                dt.rows({search: 'applied'}).select();
+                            }
+                        """)
+                    },
+                    {
+                        "text": "🔲 Deselect All Rows",
+                        "action": JavascriptFunction("""
+                            function(e, dt, node, config) {
+                                dt.rows().deselect();
+                            }
+                        """)
+                    },
+                    # ── Export ────────────────────────────────────────────────
+                    {'extend': "spacer",
+                     'style': 'bar',
+                     'text': 'Export'},
+                    {
+                        "extend": "collection",
+                        "text": "📤 Export",
+                        "buttons": [
+                            # Export to CSV — selected rows, visible columns
+                            {
+                                "extend": "csvHtml5",
+                                "exportOptions": {"columns": ":visible"},
+                                "text": "📄 Export to CSV",
+                                "title": "Sample Data Export"
+                            },
+                            # Export to Excel — selected rows, visible columns
+                            {
+                                "extend": "excelHtml5",
+                                "exportOptions": {"columns": ":visible"},
+                                "text": "📊 Export to Excel",
+                                "title": "Sample Data Export"
+                            },
+                            # Send selected rows to SAGA via FTP — triggers Shiny server logic
+                            {
+                                "text": "🖥️ Send to SAGA for ATLAS",
+                                "action": JavascriptFunction("""
+                                    function(e, dt, node, config) {
+                                    if (dt.rows({selected: true}).count() === 0) {
+                                            alert('No rows selected. Please select rows first.');
+                                            return;
+                                        }
+                                        // Close the dropdown collection before opening the modal
+                                        $('div.dt-button-collection').fadeOut();
+                                        $('body').trigger('click');
+                                        Shiny.setInputValue('send_to_server', Math.random());
                                     }
-                                    return data;
+                                """)
+                            },
+                        ]
+                    },
+                    {'extend': "spacer",
+                     'style': 'bar'},
+                ],
+                order=[[column_index, "desc"]],
+                columnDefs=[
+                    {"className": "dt-center", "targets": "_all"},
+                    {"width": "200px", "targets": "_all"},
+                    {
+                        "targets": date_column_index,
+                        "type": "date",
+                        "render": JavascriptFunction("""
+                        function(data, type, row) {
+                            if (type === 'sort' || type === 'type' || type === 'filter') {
+                                if (!data || data === '') {
+                                    return null;
                                 }
-                                // For display
                                 return data;
                             }
-                            """)
+                            return data;
                         }
-                     ]
-                    )
+                        """)
+                    }
+                ]
+            )

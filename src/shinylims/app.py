@@ -108,8 +108,8 @@ app_ui = ui.page_navbar(
         style="display: flex; align-items: center;"
     ),
     
-    # Set Projects as the default selected panel
-    selected="projects",
+    # Set Samples as the default selected panel
+    selected="Samples",
 
     # Set theme from brand.yml
     theme=ui.Theme.from_brand(__file__)
