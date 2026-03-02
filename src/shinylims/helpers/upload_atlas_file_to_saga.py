@@ -5,6 +5,7 @@ import io
 import logging
 import os
 import pathlib
+import csv
 
 from typing import Union, IO # generic file-like object
 
@@ -65,6 +66,49 @@ def _upload_file_via_sftp( buffer: IO[str], transport: paramiko.Transport, usern
     logger.info( f"Done uploading {saga_location}!" )
 
 
+def _validate_atlas_csv(local_file: IO[str]) -> None:
+    logger = logging.getLogger(__name__)
+
+    # Ensure we can read from the beginning
+    if hasattr(local_file, "seek"):
+        local_file.seek(0)
+
+    # DictReader needs a header row
+    reader = csv.DictReader(local_file)
+    if reader.fieldnames is None:
+        raise RuntimeError("ATLAS CSV is empty or missing a header row.")
+
+    # Header normalization: strip whitespace, keep exact expected names
+    fieldnames = [h.strip() for h in reader.fieldnames if h is not None]
+    required = ["Sample Name", "NIRD Filename"]
+
+    missing = [c for c in required if c not in fieldnames]
+    if missing:
+        raise RuntimeError(
+            f"ATLAS CSV missing required column(s): {missing}. Found: {fieldnames}"
+        )
+
+    bad_rows = []
+    row_idx = 1  # header is row 1
+    for row in reader:
+        row_idx += 1
+        sample = (row.get("Sample Name") or "").strip()
+        nird = (row.get("NIRD Filename") or "").strip()
+        if not sample or not nird:
+            bad_rows.append(row_idx)
+
+    if bad_rows:
+        raise RuntimeError(
+            f"ATLAS CSV has empty 'Sample Name' or 'NIRD Filename' on row(s): {bad_rows[:20]}\nMost likely you have selected samples that have not yet completed sequencing. Review your selection and try again."
+            + (" (more...)" if len(bad_rows) > 20 else "")
+        )
+
+    # Reset so later code can re-read without surprises
+    if hasattr(local_file, "seek"):
+        local_file.seek(0)
+
+    logger.debug("ATLAS CSV validated (required columns present; no empty values).")
+
 
 def _preflight_check( local_file: IO[str], username: str, totp: str, password: str, saga_location: str) -> None:
     """
@@ -90,6 +134,8 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
     """
 
     logger = logging.getLogger(__name__)
+
+    _validate_atlas_csv(local_file)
 
     if len( local_file.getvalue() ) == 0:
         message = f"Length of ATLAS file to upload was zero while copying." # check if we got passed garbage

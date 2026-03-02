@@ -333,8 +333,8 @@ def samples_server(samples_df, samples_historical_df, input):
                 ui.p(f"Uploading {len(selected)} rows with columns: {', '.join(export_columns)}",
                      style="margin-bottom: 15px; color: #555;"),
                 ui.input_text("upload_username", "Username"),
-                ui.input_text("upload_totp", "TOTP Token (2FA)"),
                 ui.input_password("upload_password", "Password"),
+                ui.input_text("upload_totp", "TOTP Token (2FA)"),
                 title="📤 SAGA Credentials",
                 easy_close=True,
                 footer=ui.div(
@@ -400,15 +400,20 @@ def samples_server(samples_df, samples_historical_df, input):
             )
 
         except Exception as e:
+            lines = str(e).split("\n")
+
             ui.modal_show(
                 ui.modal(
-                    ui.p(f"⚠️ Upload failed: {str(e)}", style="color: red;"),
+                    ui.div(
+                        ui.p("⚠️ Upload failed", style="font-weight: bold;"),
+                        *[ui.p(line) for line in lines],
+                        style="color: red;"
+                    ),
                     title="Upload Error",
                     easy_close=True,
                     footer=ui.modal_button("OK")
                 )
             )
-
 
     # Filter and render the filtered dataframe
     @render_widget
