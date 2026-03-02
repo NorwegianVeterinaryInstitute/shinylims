@@ -56,6 +56,31 @@ def samples_ui():
                 white-space: nowrap;
             }
         """),
+        # DataTables adjust/redraw” after modals open/close to fix bug related to password manager injecting elements into the DOM
+        ui.tags.script("""
+            (function () {
+            function adjustTables() {
+                try {
+                if (window.jQuery && jQuery.fn && jQuery.fn.dataTable) {
+                    jQuery.fn.dataTable
+                    .tables({ visible: true, api: true })
+                    .columns.adjust()
+                    .draw(false);
+                }
+                } catch (e) {}
+            }
+
+            document.addEventListener('shown.bs.modal', function () {
+                setTimeout(adjustTables, 50);
+                setTimeout(adjustTables, 250);
+            });
+
+            document.addEventListener('hidden.bs.modal', function () {
+                setTimeout(adjustTables, 50);
+                setTimeout(adjustTables, 250);
+            });
+            })();
+            """),
         # Toolbar row with dropdown menus
         ui.div(
             # Tools dropdown
