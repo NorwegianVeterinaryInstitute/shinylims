@@ -201,7 +201,7 @@ def _upload_csv_to_saga( file: Union[ str, os.PathLike, IO[ str ] ], username: s
     """
 
     logger = logging.getLogger(__name__)
-    logging.basicConfig( level = logging.DEBUG )
+    logging.basicConfig( level = logging.INFO )
     hop:str = "login.saga.sigma2.no"              # we can nail this here. this DNS entry in Round-Robin format and there are 5 login nodes
                                                   # the only real concern is to add the ssh host key for all five nodes
 
