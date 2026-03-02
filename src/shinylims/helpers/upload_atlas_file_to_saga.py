@@ -131,11 +131,6 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
         logger.critical( message )
         raise RuntimeError( message )
 
-    if '*' in password:
-        message = "Password for uploading ATLAS csv file to SAGA cannot contain '*'. Aborting."
-        logger.critical( message )
-        raise RuntimeError( message )
-
     if not saga_location:
         message = f"SAGA upload location is required to upload ATLAS file." # check if we got passed garbage
         logger.critical( message )
