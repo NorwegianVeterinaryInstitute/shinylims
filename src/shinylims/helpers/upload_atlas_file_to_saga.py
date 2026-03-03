@@ -1,11 +1,12 @@
 '''
 Upload the ATLAS csv file to saga
 '''
+import csv
 import io
 import logging
 import os
 import pathlib
-import csv
+import re
 
 from typing import Union, IO # generic file-like object
 
@@ -152,10 +153,9 @@ def _preflight_check( local_file: IO[str], username: str, totp: str, password: s
         logger.critical( message )
         raise RuntimeError( message )
 
-    if not username.isalnum( ):
-        message = f"Username must be alphanumeric with no spaces." # check if we got passed garbage
-        logger.critical( message )
-        raise RuntimeError( message )
+    # allow a-z 0-9 _ - only; blocks "/" and ".." implicitly
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", username):
+        raise RuntimeError( "Invalid username" )
 
     if not totp:
         message = f"2FA token is required to upload a file to SAGA." # check if we got passed garbage
@@ -201,7 +201,7 @@ def _upload_csv_to_saga( file: Union[ str, os.PathLike, IO[ str ] ], username: s
     """
 
     logger = logging.getLogger(__name__)
-    logging.basicConfig( level = logging.DEBUG )
+    logging.basicConfig( level = logging.INFO )
     hop:str = "login.saga.sigma2.no"              # we can nail this here. this DNS entry in Round-Robin format and there are 5 login nodes
                                                   # the only real concern is to add the ssh host key for all five nodes
 
