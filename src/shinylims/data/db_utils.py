@@ -65,6 +65,7 @@ def get_connection():
     """Context manager for SQLite connections."""
     conn = None
     try:
+        conn = None
         db_path = get_db_path()
         conn = sqlite3.connect(db_path)
         conn.execute("PRAGMA foreign_keys = ON")
