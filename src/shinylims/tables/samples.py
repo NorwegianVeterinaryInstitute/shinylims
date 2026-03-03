@@ -513,7 +513,9 @@ def samples_server(samples_df, samples_historical_df, input):
                         "text": "☑️ Select All Filtered Rows",
                         "action": JavascriptFunction("""
                             function(e, dt, node, config) {
-                                dt.rows({search: 'applied'}).select();
+                            // Replace selection (don't accumulate)
+                            dt.rows().deselect();
+                            dt.rows({ search: 'applied' }).select();
                             }
                         """)
                     },
