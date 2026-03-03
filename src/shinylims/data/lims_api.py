@@ -7,6 +7,10 @@ import os
 import requests
 from requests.auth import HTTPBasicAuth
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 
 @dataclass
@@ -17,23 +21,13 @@ class LIMSConfig:
     password: str
     
     @classmethod
-    def from_environment(cls):
-        """Load config from environment variables."""
-        return cls(
-            base_url=os.environ.get("CLARITY_API_URL", ""),
-            username=os.environ.get("CLARITY_API_USERNAME", ""),
-            password=os.environ.get("CLARITY_API_PASSWORD", "")
-        )
-    
-    @classmethod
-    def for_testing(cls):
+    def get_credentials(cls):
         """Load config for local testing - replace with your values."""
         return cls(
-            base_url="https://nvi-test.claritylims.com/api/v2",
-            username="",  # Replace for local testing
-            password=""   # Replace for local testing
+            base_url=os.getenv('CLARITY_API_BASE_URL'),
+            username= os.getenv('CLARITY_APIUSER_USERNAME'),
+            password=os.getenv('CLARITY_APIUSER_PASSWORD')
         )
-
 
 # Reagent kit URIs - these map our reagent types to LIMS kit URIs
 def get_reagent_kit_uris(base_url: str) -> dict:

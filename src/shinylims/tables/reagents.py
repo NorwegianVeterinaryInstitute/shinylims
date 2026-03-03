@@ -160,9 +160,7 @@ def reagents_ui():
 def reagents_server(input, output, session):
     
     # Initialize LIMS config
-    # For local testing, use LIMSConfig.for_testing()
-    # For production (Posit Connect), use LIMSConfig.from_environment()
-    lims_config = reactive.Value(LIMSConfig.for_testing())
+    lims_config = reactive.Value(LIMSConfig.get_credentials())
     
     # Reactive values
     pending_lots = reactive.Value(pd.DataFrame(columns=[
