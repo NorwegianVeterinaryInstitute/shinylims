@@ -2,7 +2,6 @@
 samples.py - Table module containing UI and server logic for the Samples table tab
 '''
 
-from questionary import password
 from shiny import ui, reactive
 from shinywidgets import output_widget, render_widget, reactive_read
 from itables.widget import ITable
@@ -56,31 +55,6 @@ def samples_ui():
                 white-space: nowrap;
             }
         """),
-        # DataTables adjust/redraw” after modals open/close to fix bug related to password manager injecting elements into the DOM
-        ui.tags.script("""
-            (function () {
-            function adjustTables() {
-                try {
-                if (window.jQuery && jQuery.fn && jQuery.fn.dataTable) {
-                    jQuery.fn.dataTable
-                    .tables({ visible: true, api: true })
-                    .columns.adjust()
-                    .draw(false);
-                }
-                } catch (e) {}
-            }
-
-            document.addEventListener('shown.bs.modal', function () {
-                setTimeout(adjustTables, 50);
-                setTimeout(adjustTables, 250);
-            });
-
-            document.addEventListener('hidden.bs.modal', function () {
-                setTimeout(adjustTables, 50);
-                setTimeout(adjustTables, 250);
-            });
-            })();
-            """),
         # Toolbar row with dropdown menus
         ui.div(
             # Tools dropdown
@@ -151,11 +125,6 @@ def samples_server(samples_df, samples_historical_df, input):
                 )
             )
         
-    @reactive.Effect
-    def show_warning_modal():
-        # ... existing code ...
-        pass
-    
     # Modal for storage box status
     @reactive.Effect
     @reactive.event(input.show_storage_status)
@@ -281,7 +250,7 @@ def samples_server(samples_df, samples_historical_df, input):
         
         except Exception as e:
             content = ui.div(
-                ui.p(f"⚠️ Error loading storage container data: {str(e)}", 
+                ui.p(f"⚠️ Error loading storage container data: {str(e)}",
                      style="color: red;")
             )
         
@@ -353,13 +322,25 @@ def samples_server(samples_df, samples_historical_df, input):
             return
 
         # Show credentials modal
+        # Password/autofill mitigation:
+        # - add hidden decoy username/password fields (Chrome/Edge tends to fill those instead)
+        # - rename the real inputs away from upload_username/upload_password to avoid login heuristics
         ui.modal_show(
             ui.modal(
-                ui.p(f"Uploading {len(selected)} rows with columns: {', '.join(export_columns)}",
-                     style="margin-bottom: 15px; color: #555;"),
-                ui.input_text("upload_username", "Username"),
-                ui.input_password("upload_password", "Password"),
-                ui.input_text("upload_totp", "TOTP Token (2FA)"),
+                ui.tags.form(
+                    ui.tags.input(type="text", name="username", tabindex="-1",
+                                  autocomplete="username",
+                                  style="position:absolute; left:-9999px; height:0; width:0;"),
+                    ui.tags.input(type="password", name="password", tabindex="-1",
+                                  autocomplete="current-password",
+                                  style="position:absolute; left:-9999px; height:0; width:0;"),
+
+                    ui.p(f"Uploading {len(selected)} rows with columns: {', '.join(export_columns)}",
+                         style="margin-bottom: 15px; color: #555;"),
+                    ui.input_text("saga_user", "Username"),
+                    ui.input_password("saga_password", "Password"),
+                    ui.input_text("saga_totp", "TOTP Token (2FA)"),
+                ),
                 title="📤 SAGA Credentials",
                 easy_close=True,
                 footer=ui.div(
@@ -390,9 +371,9 @@ def samples_server(samples_df, samples_historical_df, input):
         export_columns = [col for col in ["Sample Name", "NIRD Filename"] if col in dat.columns]
         selected_df = dat.iloc[list(selected)][export_columns]
 
-        username = input.upload_username()
-        totp = input.upload_totp()
-        password = input.upload_password()
+        username = input.saga_user()
+        totp = input.saga_totp()
+        password = input.saga_password()
         timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         saga_location = SAGA_BASE_PATH + username + f"/atlas_export_{timestamp}.csv"
 
@@ -463,12 +444,12 @@ def samples_server(samples_df, samples_historical_df, input):
 
         return ITable(
                 dat,
-                select=True, 
+                select=True,
                 layout={"topEnd": "search", "top1": "searchBuilder"},
-                lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]], 
-                column_filters="footer", 
+                lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],
+                column_filters="footer",
                 search={"smart": True},
-                classes="nowrap compact hover order-column cell-border", 
+                classes="nowrap compact hover order-column cell-border",
                 scrollY="75vh",
                 scrollX=True,
                 paging=True,
