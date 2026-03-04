@@ -2,7 +2,7 @@
 samples.py - Table module containing UI and server logic for the Samples table tab
 '''
 
-from shiny import ui, reactive
+from shiny import ui, reactive, render
 from shinywidgets import output_widget, render_widget, reactive_read
 from itables.widget import ITable
 from itables.javascript import JavascriptFunction
@@ -29,15 +29,16 @@ def samples_ui():
                 cursor: not-allowed;
                 pointer-events: all !important;
             }
+            div.dt-button-collection .dt-button {
+                white-space: normal !important;
+                min-width: 280px;
+            }
         """),
-        # Toolbar row with settings
-        ui.div(
-            ui.input_switch("include_hist", "Include historical samples", False),
-            style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;"
-        ),
         # Widget container
         ui.div(
+            ui.output_ui("hist_mode_indicator"),
             output_widget("data_samples", fillable=False),
+            style="position: relative;"
         ),
     )
 
@@ -48,21 +49,35 @@ def samples_ui():
 
 # Server logic for the Samples page
 def samples_server(samples_df, samples_historical_df, input):
+    has_shown_hist_warning = reactive.Value(False)
+
+    @render.ui
+    def hist_mode_indicator():
+        if not input.include_hist():
+            return None
+        return ui.div(
+            "Historical data: ON",
+            class_="badge text-bg-warning",
+            style="position: absolute; top: 8px; right: 10px; z-index: 20;"
+        )
 
     @reactive.Effect
     def show_warning_modal():
-        if input.include_hist():
-            return ui.modal_show(
-                ui.modal(
-                    ui.div(
-                        ui.p("⚠️ You are now including historical samples. The historical data was recorded before Clarity LIMS was implemented. It may not be complete or accurate. It will also make searching more difficult since data isnt formatted consistently."),
-                        ui.p("Please review the data carefully. Data can be filtered through the 'Custom Search Builder' by 'Clarity LIMS' or 'Historical' using the 'Data Source' column.")
-                    ),
-                    title="Historical Data Warning",
-                    easy_close=True,
-                    footer=ui.modal_button("OK")
-                )
+        if not input.include_hist() or has_shown_hist_warning.get():
+            return
+
+        has_shown_hist_warning.set(True)
+        return ui.modal_show(
+            ui.modal(
+                ui.div(
+                    ui.p("⚠️ You are now including historical samples. The historical data was recorded before Clarity LIMS was implemented. It may not be complete or accurate. It will also make searching more difficult since data isnt formatted consistently."),
+                    ui.p("Please review the data carefully. Data can be filtered through the 'Custom Search Builder' by 'Clarity LIMS' or 'Historical' using the 'Data Source' column.")
+                ),
+                title="Historical Data Warning",
+                easy_close=True,
+                footer=ui.modal_button("OK")
             )
+        )
         
     # Create a reactive expression for the combined dataframe
     @reactive.Calc

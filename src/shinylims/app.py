@@ -14,9 +14,10 @@ from shiny import App, render, ui, reactive
 from faicons import icon_svg
 
 # Import table modules
-from shinylims.tables.projects import projects_ui, projects_server
-from shinylims.tables.samples import samples_ui, samples_server
-from shinylims.tables.sequencing import seq_ui, seq_server
+from shinylims.tables.projects import projects_server
+from shinylims.tables.samples import samples_server
+from shinylims.tables.sequencing import seq_server
+from shinylims.tables.metadata_tables import metadata_tables_ui, metadata_tables_server
 from shinylims.tables.lab_tools import lab_tools_ui, lab_tools_server
 
 # Import database utilities
@@ -73,9 +74,7 @@ app_ui = ui.page_navbar(
     ui.nav_control(ui.output_ui("render_updated_data")), 
 
     # Define ui panels
-    ui.nav_panel("Projects", projects_ui(), value="projects"),
-    ui.nav_panel("Samples", samples_ui()),  
-    ui.nav_panel("Illumina Sequencing", seq_ui()),
+    ui.nav_panel("Metadata Tables", metadata_tables_ui(), value="metadata_tables"),
     ui.nav_panel("Lab Tools", lab_tools_ui(), value="lab_tools"),
     
     # Add another spacer after panels to push the button to the far right
@@ -111,11 +110,12 @@ app_ui = ui.page_navbar(
         style="display: flex; align-items: center;"
     ),
     
-    # Set Samples as the default selected panel
-    selected="Samples",
+    # Set Metadata Tables as the default selected panel
+    selected="metadata_tables",
 
     # Set theme from brand.yml
-    theme=ui.Theme.from_brand(__file__)
+    theme=ui.Theme.from_brand(__file__),
+    id="main_nav",
 
 )
 
@@ -130,6 +130,7 @@ def server(input, output, session):
     """
     # Create a reactive value for database update info
     db_update_info_reactive = reactive.Value(get_db_update_info())
+    metadata_tables_server(input, output, session)
     # Initialize lab tools once; it should not be reset by SQL refresh events.
     lab_tools_server(input, output, session)
 

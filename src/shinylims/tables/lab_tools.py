@@ -17,6 +17,12 @@ def lab_tools_server(input, output, session):
     current_tool = reactive.Value("landing")
 
     @reactive.Effect
+    @reactive.event(input.main_nav)
+    def reset_lab_tools_on_tab_select():
+        if input.main_nav() == "lab_tools":
+            current_tool.set("landing")
+
+    @reactive.Effect
     @reactive.event(input.open_tool_reagents)
     def open_tool_reagents():
         current_tool.set("reagents")
