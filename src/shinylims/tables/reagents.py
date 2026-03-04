@@ -14,7 +14,8 @@ from shinylims.data.lims_api import (
     create_reagent_lot, 
     test_connection,
     ReagentLotResult,
-    get_latest_prep_sequence_status
+    get_latest_prep_sequence_status,
+    get_latest_index_sequence_status
 )
 
 ##############################
@@ -23,37 +24,142 @@ from shinylims.data.lims_api import (
 
 REAGENT_TYPES = {
     "IDT-ILMN DNA/RNA UD Index Sets": {
-        "short_name": "IDT-Index",
-        "category": "Index",
         "naming_group": "index",
-        "requires_set_letter": True
     },
     "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp": {
-        "short_name": "IPB-Buffers",
-        "category": "Buffers",
         "naming_group": "prep",
-        "requires_set_letter": False
     },
     "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp": {
-        "short_name": "PCR-Buffers",
-        "category": "Buffers",
         "naming_group": "prep",
-        "requires_set_letter": False
     },
     "Illumina DNA Prep – Tagmentation (M) Beads 96sp": {
-        "short_name": "Tag-Beads",
-        "category": "Beads",
         "naming_group": "prep",
-        "requires_set_letter": False
+    },
+    "MiSeq Reagent Kit (Box 1 of 2)": {
+        "naming_group": "miseq",
+        "requires_rgt_number": True,
+        "requires_miseq_kit_type": True
+    },
+    "MiSeq Reagent Kit (Box 2 of 2)": {
+        "naming_group": "miseq",
+        "requires_rgt_number": True,
+        "requires_miseq_kit_type": True
+    },
+    "PhiX Control v3": {
+        "naming_group": "phix",
+        "requires_rgt_number": True
     }
 }
 
-INDEX_SET_LETTERS = ["A", "B", "C", "D"]
 PREP_REAGENT_TYPES = [
-    "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp",
-    "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp",
-    "Illumina DNA Prep – Tagmentation (M) Beads 96sp",
+    reagent_type
+    for reagent_type, reagent_info in REAGENT_TYPES.items()
+    if reagent_info.get("naming_group") == "prep"
 ]
+
+# Single source of truth for scanner/dropdown options.
+# Add new reagents by adding rows here; selector maps are generated below.
+SCANNABLE_REAGENTS = [
+    {
+        "ref": "20049006",
+        "label": "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp (Ref: 20049006)",
+        "reagent_type": "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp",
+    },
+    {
+        "ref": "20015829",
+        "label": "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp (Ref: 20015829)",
+        "reagent_type": "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp",
+    },
+    {
+        "ref": "20015880",
+        "label": "Illumina DNA Prep – Tagmentation (M) Beads 96sp (Ref: 20015880)",
+        "reagent_type": "Illumina DNA Prep – Tagmentation (M) Beads 96sp",
+    },
+    {
+        "ref": "20091646",
+        "label": "IDT-ILMN DNA/RNA UD Index Sets - Set A (Ref: 20091646)",
+        "reagent_type": "IDT-ILMN DNA/RNA UD Index Sets",
+        "set_letter": "A",
+    },
+    {
+        "ref": "20091647",
+        "label": "IDT-ILMN DNA/RNA UD Index Sets - Set B (Ref: 20091647)",
+        "reagent_type": "IDT-ILMN DNA/RNA UD Index Sets",
+        "set_letter": "B",
+    },
+    {
+        "ref": "20091648",
+        "label": "IDT-ILMN DNA/RNA UD Index Sets - Set C (Ref: 20091648)",
+        "reagent_type": "IDT-ILMN DNA/RNA UD Index Sets",
+        "set_letter": "C",
+    },
+    {
+        "ref": "20091649",
+        "label": "IDT-ILMN DNA/RNA UD Index Sets - Set D (Ref: 20091649)",
+        "reagent_type": "IDT-ILMN DNA/RNA UD Index Sets",
+        "set_letter": "D",
+    },
+    {
+        "ref": "15043895",
+        "label": "MiSeq Reagent Kit v3 (Box 1 of 2) (Ref: 15043895)",
+        "reagent_type": "MiSeq Reagent Kit (Box 1 of 2)",
+        "miseq_kit_type": "v3",
+    },
+    {
+        "ref": "15043894",
+        "label": "MiSeq Reagent Kit v3 (Box 2 of 2) (Ref: 15043894)",
+        "reagent_type": "MiSeq Reagent Kit (Box 2 of 2)",
+        "miseq_kit_type": "v3",
+    },
+    {
+        "ref": "11111111",
+        "label": "MiSeq Reagent Kit v2 nano (Box 1 of 2) (Ref: 11111111)",
+        "reagent_type": "MiSeq Reagent Kit (Box 1 of 2)",
+        "miseq_kit_type": "v2 nano",
+    },
+    {
+        "ref": "15036714",
+        "label": "MiSeq Reagent Kit v2 nano (Box 2 of 2) (Ref: 15036714)",
+        "reagent_type": "MiSeq Reagent Kit (Box 2 of 2)",
+        "miseq_kit_type": "v2 nano",
+    },
+    {
+        "ref": "22222222",
+        "label": "MiSeq Reagent Kit v2 micro (Box 1 of 2) (Ref: 22222222)",
+        "reagent_type": "MiSeq Reagent Kit (Box 1 of 2)",
+        "miseq_kit_type": "v2 micro",
+    },
+    {
+        "ref": "33333333",
+        "label": "MiSeq Reagent Kit v2 micro (Box 2 of 2) (Ref: 33333333)",
+        "reagent_type": "MiSeq Reagent Kit (Box 2 of 2)",
+        "miseq_kit_type": "v2 micro",
+    },
+    {
+        "ref": "15017666",
+        "label": "PhiX Control v3 (Ref: 15017666)",
+        "reagent_type": "PhiX Control v3",
+    },
+]
+
+
+def _build_reagent_selector_maps():
+    choices = {"": ""}
+    selector_to_reagent = {}
+    selector_to_miseq_kit_type = {}
+
+    for item in SCANNABLE_REAGENTS:
+        ref = item["ref"]
+        choices[ref] = item["label"]
+        selector_to_reagent[ref] = (item["reagent_type"], item.get("set_letter"))
+        miseq_kit_type = item.get("miseq_kit_type")
+        if miseq_kit_type:
+            selector_to_miseq_kit_type[ref] = miseq_kit_type
+
+    return choices, selector_to_reagent, selector_to_miseq_kit_type
+
+
+REAGENT_SELECTOR_CHOICES, SELECTOR_TO_REAGENT, SELECTOR_TO_MISEQ_KIT_TYPE = _build_reagent_selector_maps()
 
 
 ##############################
@@ -64,9 +170,8 @@ def reagents_ui():
     return ui.div(
         ui.h4("📦 Reagent Lot Registration", class_="mb-3"),
         
-        # Connection status indicator
-        ui.output_ui("connection_status"),
-        ui.output_ui("prep_sequence_status"),
+        # Compact system status
+        ui.output_ui("system_status_panel"),
         
         # Main layout
         ui.layout_columns(
@@ -74,20 +179,79 @@ def reagents_ui():
             ui.card(
                 ui.card_header("Add New Lot"),
                 ui.card_body(
-                    ui.input_select(
-                        "reagent_type",
-                        "Reagent Type",
-                        choices=list(REAGENT_TYPES.keys()),
-                        width="100%"
+                    ui.input_selectize(
+                        "reagent_selector",
+                        "Reagent Type / Scan Ref Barcode",
+                        choices=REAGENT_SELECTOR_CHOICES,
+                        selected="",
+                        width="100%",
+                        options={
+                            "create": True,
+                            "persist": False,
+                            "allowEmptyOption": True,
+                            "placeholder": "Select reagent or scan ref barcode"
+                        }
                     ),
-                    
-                    ui.output_ui("set_letter_ui"),
+                    ui.tags.script(
+                        """
+                        (function() {
+                          const bindClearOnOpen = () => {
+                            const el = document.getElementById('reagent_selector');
+                            if (!el || !el.selectize) return false;
+                            const sel = el.selectize;
+                            if (sel._clearOnOpenBound) return true;
+
+                            sel._clearOnOpenBound = true;
+                            // Mitigate password-manager/autofill heuristics on this scanner field.
+                            sel.$control_input.attr('autocomplete', 'off');
+                            sel.$control_input.attr('autocorrect', 'off');
+                            sel.$control_input.attr('autocapitalize', 'none');
+                            sel.$control_input.attr('spellcheck', 'false');
+                            sel.$control_input.attr('name', 'reagent_scan_input');
+                            sel.$control_input.attr('data-lpignore', 'true');
+                            sel.$control_input.attr('data-1p-ignore', 'true');
+                            sel.on('dropdown_open', function() {
+                              if (sel.getValue()) {
+                                sel.clear(true);
+                              }
+                            });
+                            return true;
+                          };
+
+                          if (!bindClearOnOpen()) {
+                            const iv = setInterval(() => {
+                              if (bindClearOnOpen()) clearInterval(iv);
+                            }, 200);
+                            setTimeout(() => clearInterval(iv), 5000);
+                          }
+                        })();
+                        """
+                    ),
+                    ui.output_ui("rgt_number_ui"),
                     
                     ui.input_text(
                         "lot_number",
                         "Lot Number",
-                        placeholder="e.g., 20456789",
+                        placeholder="Scan Lot Number",
                         width="100%"
+                    ),
+                    ui.tags.style(
+                        """
+                        #lot_number::placeholder {
+                          color: #6c757d;
+                          opacity: 1;
+                        }
+                        #lot_number::-webkit-input-placeholder {
+                          color: #6c757d;
+                        }
+                        #lot_number::-moz-placeholder {
+                          color: #6c757d;
+                          opacity: 1;
+                        }
+                        #lot_number:-ms-input-placeholder {
+                          color: #6c757d;
+                        }
+                        """
                     ),
                     
                     ui.layout_columns(
@@ -132,38 +296,78 @@ def reagents_ui():
                 ),
                 ui.card_body(
                     ui.div(
-                        ui.output_ui("pending_lots_table"),
-                        style="width: 100%; overflow-x: auto;"
+                        ui.div(
+                            ui.output_ui("pending_lots_table"),
+                            style="width: 100%; overflow-x: auto;"
+                        ),
+                        ui.div(
+                            ui.hr(),
+                            ui.output_ui("submit_progress_indicator"),
+                            ui.layout_columns(
+                                ui.input_action_button(
+                                    "print_queue",
+                                    "🖨️ Print Queue",
+                                    class_="btn-outline-secondary",
+                                    onclick="""
+                                    const container = document.getElementById('pending_queue_printable');
+                                    if (!container) return;
+                                    const sourceTable = container.querySelector('table');
+                                    if (!sourceTable) return;
+                                    const table = sourceTable.cloneNode(true);
+
+                                    // Remove Action column from print view.
+                                    table.querySelectorAll('thead tr').forEach((tr) => {
+                                      if (tr.cells.length > 0) tr.deleteCell(tr.cells.length - 1);
+                                    });
+                                    table.querySelectorAll('tbody tr').forEach((tr) => {
+                                      if (tr.cells.length > 0) tr.deleteCell(tr.cells.length - 1);
+                                    });
+
+                                    const userMeta = document.getElementById('lims_user_meta');
+                                    const limsUser = userMeta ? userMeta.textContent.trim() : 'Unknown';
+                                    const printDate = new Date().toLocaleString();
+                                    const win = window.open('', '_blank');
+                                    if (!win) return;
+                                    win.document.write(`
+                                      <html>
+                                      <head>
+                                        <title>Pending Reagent Lots Queue</title>
+                                        <style>
+                                          body { font-family: Arial, sans-serif; margin: 20px; }
+                                          h2 { margin-bottom: 12px; }
+                                          table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+                                          th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+                                          th { background: #f2f2f2; }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <h2>Pending Reagent Lots Queue</h2>
+                                        <p><strong>Printed:</strong> ${printDate}</p>
+                                        <p><strong>LIMS User:</strong> ${limsUser}</p>
+                                        ${table.outerHTML}
+                                      </body>
+                                      </html>
+                                    `);
+                                    win.document.close();
+                                    win.focus();
+                                    win.print();
+                                    win.close();
+                                    """
+                                ),
+                                ui.input_action_button(
+                                    "clear_queue",
+                                    "🗑️ Clear All",
+                                    class_="btn-outline-danger"
+                                ),
+                                ui.output_ui("submit_button_ui"),
+                                col_widths=[4, 4, 4]
+                            ),
+                            class_="mt-auto",
+                            style="margin-top: 28px;"
+                        ),
+                        class_="d-flex flex-column",
+                        style="min-height: 500px;"
                     ),
-                    ui.hr(),
-                    ui.layout_columns(
-                        ui.input_action_button(
-                            "clear_queue",
-                            "🗑️ Clear All",
-                            class_="btn-outline-danger"
-                        ),
-                        ui.input_action_button(
-                            "submit_to_lims",
-                            "🚀 Submit to LIMS",
-                            class_="btn-success",
-                            onclick="""
-                            const originalText = this.innerHTML;
-                            this.disabled = true;
-                            this.innerHTML = 'Submitting...';
-                            this.style.opacity = '0.65';
-                            this.style.cursor = 'not-allowed';
-                            setTimeout(() => {
-                                if (document.body.contains(this)) {
-                                    this.disabled = false;
-                                    this.innerHTML = originalText;
-                                    this.style.opacity = '';
-                                    this.style.cursor = '';
-                                }
-                            }, 3000);
-                            """
-                        ),
-                        col_widths=[6, 6]
-                    )
                 )
             ),
             col_widths=[5, 7]
@@ -185,33 +389,30 @@ def reagents_server(input, output, session):
     # LIMS auth/session state
     lims_config = reactive.Value(None)
     lims_connection_status = reactive.Value((False, "Not connected"))
-    prep_sequence_state = reactive.Value((True, "Not checked"))
+    prep_sequence_state = reactive.Value((False, "Not checked"))
+    index_sequence_state = reactive.Value((False, "Not checked", None))
     
     # Reactive values
     pending_lots = reactive.Value(pd.DataFrame(columns=[
-        "Reagent Type", "Short Name", "Lot Number",
-        "Received Date", "Expiry Date", "Internal Name", "Set Letter"
+        "Reagent Type", "Lot Number",
+        "Received Date", "Expiry Date", "Internal Name", "Set Letter",
+        "MiSeq Kit Type", "RGT Number"
     ]))
     
-    last_expiry_date = reactive.Value(None)
+    last_reagent_type = reactive.Value(None)
     
     submission_results = reactive.Value([])
+    submit_check_in_progress = reactive.Value(False)
     
-    # Sequence numbers (placeholder - should be fetched from LIMS)
+    # Latest sequence numbers loaded from LIMS after login/check.
     sequence_numbers = reactive.Value({
-        "prep": 28,
-        "index_A": 62,
-        "index_B": 45,
-        "index_C": 38,
-        "index_D": 41
+        "prep": 0,
+        "index": 0
     })
     
     pending_sequence_offsets = reactive.Value({
         "prep": 0,
-        "index_A": 0,
-        "index_B": 0,
-        "index_C": 0,
-        "index_D": 0
+        "index": 0
     })
 
     def recalculate_index_offsets():
@@ -219,17 +420,13 @@ def reagents_server(input, output, session):
         df = pending_lots.get()
         offsets = {
             "prep": 0,
-            "index_A": 0,
-            "index_B": 0,
-            "index_C": 0,
-            "index_D": 0
+            "index": 0
         }
 
         if not df.empty and "Set Letter" in df.columns:
             index_type = "IDT-ILMN DNA/RNA UD Index Sets"
-            for letter in INDEX_SET_LETTERS:
-                count = int(((df["Reagent Type"] == index_type) & (df["Set Letter"] == letter)).sum())
-                offsets[f"index_{letter}"] = count
+            count = int((df["Reagent Type"] == index_type).sum())
+            offsets["index"] = count
 
         pending_sequence_offsets.set(offsets)
 
@@ -255,18 +452,60 @@ def reagents_server(input, output, session):
         prep_sequence_state.set((False, status.message))
         return False
 
+    def refresh_index_sequence_state(config):
+        status = get_latest_index_sequence_status(config)
+        if not status.success:
+            index_sequence_state.set((False, status.message, None))
+            return False, status.message
+
+        seq_nums = sequence_numbers.get().copy()
+        if status.latest_sequence is not None:
+            seq_nums["index"] = status.latest_sequence
+        sequence_numbers.set(seq_nums)
+        index_sequence_state.set((True, status.message, status.latest_sequence))
+        return True, status.message
+
     def show_lims_login_modal():
         existing = lims_config.get()
         config_for_defaults = existing or default_lims_config
         default_base_url = config_for_defaults.base_url if config_for_defaults else ""
-        default_username = config_for_defaults.username if config_for_defaults else ""
+        # Do not prefill username from environment defaults.
+        # Keep current in-session username only when user is already logged in.
+        default_username = existing.username if existing else ""
 
         ui.modal_show(
             ui.modal(
                 ui.p("Enter your Clarity LIMS credentials to continue."),
-                ui.input_text("lims_base_url", "LIMS Base URL", value=default_base_url),
+                ui.p(
+                    ui.strong("LIMS Base URL: "),
+                    default_base_url,
+                    class_="small text-muted"
+                ),
                 ui.input_text("lims_username", "Username", value=default_username),
                 ui.input_password("lims_password", "Password"),
+                ui.tags.script(
+                    """
+                    (function() {
+                      // Encourage password managers to detect these as real login fields.
+                      setTimeout(function() {
+                        const user = document.getElementById('lims_username');
+                        const pass = document.getElementById('lims_password');
+                        if (user) {
+                          user.setAttribute('autocomplete', 'username');
+                          user.setAttribute('name', 'username');
+                          user.removeAttribute('data-1p-ignore');
+                          user.removeAttribute('data-lpignore');
+                        }
+                        if (pass) {
+                          pass.setAttribute('autocomplete', 'current-password');
+                          pass.setAttribute('name', 'password');
+                          pass.removeAttribute('data-1p-ignore');
+                          pass.removeAttribute('data-lpignore');
+                        }
+                      }, 0);
+                    })();
+                    """
+                ),
                 title="🔐 LIMS Login",
                 easy_close=True,
                 footer=ui.div(
@@ -295,12 +534,16 @@ def reagents_server(input, output, session):
     @reactive.event(input.save_lims_login)
     def save_lims_login():
         current_config = lims_config.get()
-        base_url = (input.lims_base_url() or "").strip()
+        base_url = (default_lims_config.base_url or "").strip() if default_lims_config else ""
         username = (input.lims_username() or "").strip()
         password = input.lims_password() or ""
 
-        if not base_url or not username or not password:
-            ui.notification_show("Base URL, username, and password are required", type="warning")
+        if not base_url:
+            ui.notification_show("LIMS base URL is not configured", type="error")
+            return
+
+        if not username or not password:
+            ui.notification_show("Username and password are required", type="warning")
             return
 
         config = LIMSConfig(base_url=base_url, username=username, password=password)
@@ -310,11 +553,18 @@ def reagents_server(input, output, session):
             lims_config.set(config)
             lims_connection_status.set((True, message))
             is_prep_valid = refresh_prep_sequence_state(config)
+            index_ok, index_message = refresh_index_sequence_state(config)
             ui.modal_remove()
             ui.notification_show("Connected to LIMS", type="message", duration=3)
             if not is_prep_valid:
                 ui.notification_show(
                     "Prep reagent set in LIMS is incomplete/misaligned. Resolve before submitting.",
+                    type="warning",
+                    duration=8
+                )
+            if not index_ok:
+                ui.notification_show(
+                    f"Index sequence refresh failed: {index_message}",
                     type="warning",
                     duration=8
                 )
@@ -340,116 +590,242 @@ def reagents_server(input, output, session):
                 duration=8
             )
 
-    # Connection status check
-    @output
-    @render.ui
-    def connection_status():
-        config = lims_config.get()
-
-        if not config:
-            return ui.div(
-                ui.div(
-                    ui.span("🔒 Not logged in to LIMS", class_="text-warning-emphasis"),
-                    ui.input_action_button("open_lims_login", "Log in to LIMS", class_="btn-sm btn-outline-primary"),
-                    style="display:flex; align-items:center; justify-content:space-between; gap:10px;"
-                ),
-                class_="mb-3 p-2 bg-warning-subtle rounded"
+        index_ok, index_message = refresh_index_sequence_state(config)
+        if not index_ok:
+            ui.notification_show(
+                f"Index sequence refresh failed: {index_message}",
+                type="warning",
+                duration=8
             )
 
-        success, message = lims_connection_status.get()
+    @reactive.Effect
+    def reset_expiry_on_reagent_type_change():
+        reagent_type, _ = get_selected_reagent()
+        previous = last_reagent_type.get()
 
-        if success:
-            return ui.div(
-                ui.div(
-                    ui.div(
-                        ui.span("✅ Connected to LIMS", class_="text-success"),
-                        ui.span(f" ({config.base_url})", class_="text-muted small"),
-                    ),
-                    ui.input_action_button("open_lims_login", "Change Login", class_="btn-sm btn-outline-secondary"),
-                    style="display:flex; align-items:center; justify-content:space-between; gap:10px;"
-                ),
-                class_="mb-3 p-2 bg-success-subtle rounded"
-            )
+        if previous is None:
+            last_reagent_type.set(reagent_type)
+            return
 
-        return ui.div(
-            ui.div(
-                ui.div(
-                    ui.span("❌ LIMS Connection Failed", class_="text-danger"),
-                    ui.span(f" - {message}", class_="text-muted small"),
-                ),
-                ui.input_action_button("open_lims_login", "Try Again", class_="btn-sm btn-outline-primary"),
-                style="display:flex; align-items:center; justify-content:space-between; gap:10px;"
-            ),
-            class_="mb-3 p-2 bg-warning-subtle rounded"
-        )
+        if reagent_type != previous:
+            ui.update_date("expiry_date", value=None)
+            last_reagent_type.set(reagent_type)
 
     @output
     @render.ui
-    def prep_sequence_status():
+    def system_status_panel():
         config = lims_config.get()
-        if not config:
-            return None
-
-        is_valid, message = prep_sequence_state.get()
+        lims_ok, lims_message = lims_connection_status.get()
+        prep_ok, prep_message = prep_sequence_state.get()
         seq_num = sequence_numbers.get().get("prep", 0)
+        index_ok, index_message, index_latest = index_sequence_state.get()
 
-        if is_valid:
-            return ui.div(
-                ui.div(
-                    ui.div(
-                        ui.span("✅ Prep set check passed", class_="text-success"),
-                        ui.span(f" - {message}. Next set number: #{seq_num + 1}", class_="text-muted small"),
-                    ),
-                    ui.input_action_button(
-                        "refresh_prep_sequence",
-                        "Refresh Prep Check",
-                        class_="btn-sm btn-outline-secondary",
-                        onclick="""
-                        this.disabled = true;
-                        this.innerHTML = 'Refreshing...';
-                        this.style.opacity = '0.65';
-                        this.style.cursor = 'not-allowed';
-                        """
-                    ),
-                    style="display:flex; align-items:center; justify-content:space-between; gap:10px;"
-                ),
-                class_="mb-3 p-2 bg-success-subtle rounded"
-            )
+        if config and lims_ok:
+            lims_badge = ui.span("LIMS Connected", class_="badge text-bg-success")
+            lims_summary = f"{config.base_url}"
+        elif config and not lims_ok:
+            lims_badge = ui.span("LIMS Error", class_="badge text-bg-danger")
+            lims_summary = lims_message
+        else:
+            lims_badge = ui.span("LIMS Not Logged In", class_="badge text-bg-warning")
+            lims_summary = "Log in to fetch numbering and submit."
 
-        return ui.div(
-            ui.input_action_button(
+        if config:
+            if prep_ok:
+                prep_badge = ui.span("Prep Check Passed", class_="badge text-bg-success")
+                prep_summary = f"Latest full set: #{seq_num}. Next: #{seq_num + 1}"
+            else:
+                prep_badge = ui.span("Prep Check Failed", class_="badge text-bg-danger")
+                prep_summary = prep_message
+        else:
+            prep_badge = ui.span("Prep Check Pending", class_="badge text-bg-secondary")
+            prep_summary = "Available after login."
+
+        if config:
+            if index_ok and index_latest is not None:
+                index_badge = ui.span("Index Ready", class_="badge text-bg-success")
+                index_summary = f"Latest: #{index_latest}. Next: #{index_latest + 1}"
+            elif index_ok:
+                index_badge = ui.span("Index Ready", class_="badge text-bg-success")
+                index_summary = index_message
+            else:
+                index_badge = ui.span("Index Check Failed", class_="badge text-bg-danger")
+                index_summary = index_message
+        else:
+            index_badge = ui.span("Index Check Pending", class_="badge text-bg-secondary")
+            index_summary = "Available after login."
+
+        if config:
+            login_button_label = "Change Login" if lims_ok else "Try Login Again"
+            login_button_class = "btn-sm btn-outline-secondary"
+            refresh_button = ui.input_action_button(
                 "refresh_prep_sequence",
-                "Re-check Prep Set",
-                class_="btn-sm btn-outline-danger",
+                "Refresh Prep Check",
+                class_="btn-sm btn-outline-secondary",
                 onclick="""
                 this.disabled = true;
                 this.innerHTML = 'Refreshing...';
                 this.style.opacity = '0.65';
                 this.style.cursor = 'not-allowed';
                 """
-            ),
-            ui.div(ui.span("⚠️ Prep set check failed", class_="text-danger")),
-            ui.p(message, class_="mb-1 small"),
-            ui.p(
-                "Please clean up prep reagent lots in Clarity LIMS before submitting new reagents.",
-                class_="mb-0 small"
-            ),
-            class_="mb-3 p-2 bg-warning-subtle rounded"
+            )
+            login_hint = None
+        else:
+            login_button_label = "🔐 Log in to LIMS"
+            login_button_class = "btn-sm btn-primary"
+            refresh_button = None
+            login_hint = ui.span("Start here", class_="small fw-semibold text-primary")
+
+        details_body = ui.div(
+            ui.p(ui.strong("LIMS: "), lims_summary, class_="mb-1 small"),
+            ui.p(ui.strong("Prep: "), prep_summary, class_="mb-1 small"),
+            ui.p(ui.strong("Index: "), index_summary, class_="mb-0 small"),
+            class_="mt-2"
         )
 
-    # Set letter dropdown
+        return ui.div(
+            ui.div(
+                ui.div(
+                    lims_badge,
+                    prep_badge,
+                    index_badge,
+                    class_="d-flex flex-wrap align-items-center gap-2"
+                ),
+                ui.div(
+                    login_hint,
+                    ui.input_action_button("open_lims_login", login_button_label, class_=login_button_class),
+                    refresh_button,
+                    class_="d-flex align-items-center gap-2"
+                ),
+                style="display:flex; align-items:center; justify-content:space-between; gap:10px;"
+            ),
+            ui.tags.details(
+                ui.tags.summary("Details", class_="small text-muted"),
+                details_body
+            ),
+            ui.tags.span(config.username if config else "", id="lims_user_meta", style="display:none;"),
+            class_="mb-3 p-2 border rounded bg-light-subtle"
+        )
+
+    def get_selected_reagent():
+        selector_value = (input.reagent_selector() or "").strip()
+        if not selector_value:
+            return (None, None)
+
+        if selector_value in SELECTOR_TO_REAGENT:
+            return SELECTOR_TO_REAGENT[selector_value]
+
+        # Fallback for scanner inputs that may include extra text around the ref id.
+        match = re.search(r"(\d{8})", selector_value)
+        if match:
+            barcode = match.group(1)
+            return SELECTOR_TO_REAGENT.get(barcode, (None, None))
+
+        return (None, None)
+
+    def get_selected_miseq_kit_type():
+        selector_value = (input.reagent_selector() or "").strip()
+        if not selector_value:
+            return None
+
+        if selector_value in SELECTOR_TO_MISEQ_KIT_TYPE:
+            return SELECTOR_TO_MISEQ_KIT_TYPE[selector_value]
+
+        match = re.search(r"(\d{8})", selector_value)
+        if not match:
+            return None
+        return SELECTOR_TO_MISEQ_KIT_TYPE.get(match.group(1))
+
     @output
     @render.ui
-    def set_letter_ui():
-        reagent_type = input.reagent_type()
-        if reagent_type and REAGENT_TYPES[reagent_type].get("requires_set_letter"):
-            return ui.input_select(
-                "set_letter",
-                "Index Set",
-                choices=INDEX_SET_LETTERS,
+    def rgt_number_ui():
+        reagent_type, _ = get_selected_reagent()
+        if not reagent_type:
+            return None
+
+        reagent_info = REAGENT_TYPES.get(reagent_type, {})
+        if reagent_info.get("requires_rgt_number"):
+            field = ui.input_text(
+                "rgt_number",
+                "RGT Number",
+                placeholder="Scan RGT Number (e.g., RGT36182951)",
                 width="100%"
             )
+            return ui.TagList(
+                field,
+                ui.tags.style(
+                    """
+                    #rgt_number::placeholder {
+                      color: #6c757d;
+                      opacity: 1;
+                    }
+                    #rgt_number::-webkit-input-placeholder {
+                      color: #6c757d;
+                    }
+                    #rgt_number::-moz-placeholder {
+                      color: #6c757d;
+                      opacity: 1;
+                    }
+                    #rgt_number:-ms-input-placeholder {
+                      color: #6c757d;
+                    }
+                    """
+                )
+            )
         return None
+
+    def can_generate_internal_names(reagent_type):
+        if lims_config.get() is None:
+            return False
+
+        reagent_info = REAGENT_TYPES.get(reagent_type, {})
+        naming_group = reagent_info.get("naming_group")
+        if naming_group in {"prep", "index"}:
+            prep_ok, _ = prep_sequence_state.get()
+            index_ok, _, _ = index_sequence_state.get()
+            return prep_ok and index_ok
+
+        return True
+
+    @output
+    @render.ui
+    def submit_button_ui():
+        if lims_config.get() is None:
+            return ui.input_action_button(
+                "submit_to_lims",
+                "Next",
+                class_="btn-success disabled",
+                disabled=True
+            )
+
+        if submit_check_in_progress.get():
+            return ui.input_action_button(
+                "submit_to_lims",
+                "Checking LIMS...",
+                class_="btn-secondary disabled",
+                disabled=True
+            )
+
+        return ui.input_action_button(
+            "submit_to_lims",
+            "Next",
+            class_="btn-success"
+        )
+
+    @output
+    @render.ui
+    def submit_progress_indicator():
+        if not submit_check_in_progress.get():
+            return None
+        return ui.div(
+            ui.tags.span(
+                class_="spinner-border spinner-border-sm me-2",
+                role="status",
+                aria_hidden="true"
+            ),
+            ui.span("Checking LIMS status before confirmation..."),
+            class_="d-flex align-items-center text-muted small mb-2"
+        )
     
     # Naming logic
     def get_next_prep_sequence_number(reagent_type: str):
@@ -467,8 +843,8 @@ def reagents_server(input, output, session):
         if naming_group == "prep":
             return get_next_prep_sequence_number(reagent_type)
 
-        if naming_group == "index" and set_letter:
-            key = f"index_{set_letter}"
+        if naming_group == "index":
+            key = "index"
         else:
             key = naming_group
             
@@ -476,10 +852,22 @@ def reagents_server(input, output, session):
         offset = offsets.get(key, 0)
         return base_num + offset + 1
     
-    def generate_internal_name(reagent_type, set_letter=None):
+    def generate_internal_name(reagent_type, set_letter=None, miseq_kit_type=None, rgt_number=None):
         reagent_info = REAGENT_TYPES.get(reagent_type, {})
         naming_group = reagent_info.get("naming_group", "unknown")
-        
+
+        if naming_group == "miseq":
+            rgt = (rgt_number or "").strip()
+            kit_type = (miseq_kit_type or "").strip()
+            if not rgt or not kit_type:
+                return "Provide RGT Number and MiSeq Kit Type"
+            return f"{rgt} {kit_type}"
+        if naming_group == "phix":
+            rgt = (rgt_number or "").strip()
+            if not rgt:
+                return "Provide RGT Number"
+            return rgt
+
         next_num = get_next_sequence_number(naming_group, set_letter, reagent_type)
         
         if naming_group == "index" and set_letter:
@@ -490,26 +878,21 @@ def reagents_server(input, output, session):
     @output
     @render.text
     def preview_internal_name():
-        reagent_type = input.reagent_type()
+        reagent_type, set_letter = get_selected_reagent()
         if not reagent_type:
             return "Select a reagent type"
-        
+        if not can_generate_internal_names(reagent_type):
+            return "Log in to LIMS and refresh checks to load latest numbering"
+
         reagent_info = REAGENT_TYPES.get(reagent_type, {})
-        
-        if reagent_info.get("requires_set_letter"):
-            try:
-                set_letter = input.set_letter()
-            except:
-                set_letter = "A"
-            return generate_internal_name(reagent_type, set_letter)
-        else:
-            return generate_internal_name(reagent_type)
-    
-    @reactive.Effect
-    def restore_expiry_date():
-        stored_date = last_expiry_date.get()
-        if stored_date:
-            ui.update_date("expiry_date", value=stored_date)
+        miseq_kit_type = None
+        rgt_number = None
+        if reagent_info.get("requires_miseq_kit_type"):
+            miseq_kit_type = get_selected_miseq_kit_type()
+        if reagent_info.get("requires_rgt_number"):
+            rgt_number = input.rgt_number()
+
+        return generate_internal_name(reagent_type, set_letter, miseq_kit_type, rgt_number)
     
     # Add lot to queue
     @reactive.Effect
@@ -523,41 +906,58 @@ def reagents_server(input, output, session):
             ui.notification_show("Please enter an expiry date", type="warning")
             return
         
-        reagent_type = input.reagent_type()
+        reagent_type, set_letter = get_selected_reagent()
+        if not reagent_type:
+            ui.notification_show("Please select a reagent type or scan a valid ref barcode", type="warning")
+            return
+
+        if not can_generate_internal_names(reagent_type):
+            ui.notification_show(
+                "Log in to LIMS and refresh checks before assigning Internal Names",
+                type="warning",
+                duration=5
+            )
+            return
         reagent_info = REAGENT_TYPES[reagent_type]
+
+        miseq_kit_type = None
+        rgt_number = None
+        if reagent_info.get("requires_miseq_kit_type"):
+            miseq_kit_type = (get_selected_miseq_kit_type() or "").strip()
+            if not miseq_kit_type:
+                ui.notification_show("Could not resolve MiSeq kit type from selected/scanned reagent ref", type="warning")
+                return
+        if reagent_info.get("requires_rgt_number"):
+            rgt_number = (input.rgt_number() or "").strip()
+            if not rgt_number:
+                ui.notification_show("Please scan RGT number for MiSeq kit", type="warning")
+                return
+            if not rgt_number.upper().startswith("RGT"):
+                ui.notification_show("RGT number must start with 'RGT'", type="warning")
+                return
+            rgt_number = rgt_number.upper()
         
-        set_letter = None
-        if reagent_info.get("requires_set_letter"):
-            try:
-                set_letter = input.set_letter()
-            except:
-                set_letter = "A"
-        
-        internal_name = generate_internal_name(reagent_type, set_letter)
+        internal_name = generate_internal_name(reagent_type, set_letter, miseq_kit_type, rgt_number)
         
         # Update offsets
         offsets = pending_sequence_offsets.get().copy()
         naming_group = reagent_info.get("naming_group")
         
         if naming_group == "index":
-            if set_letter:
-                key = f"index_{set_letter}"
-            else:
-                key = naming_group
+            key = "index"
             offsets[key] = offsets.get(key, 0) + 1
             pending_sequence_offsets.set(offsets)
-        
-        last_expiry_date.set(input.expiry_date())
         
         current_df = pending_lots.get().copy()
         new_row = pd.DataFrame([{
             "Reagent Type": reagent_type,
-            "Short Name": reagent_info["short_name"],
             "Lot Number": input.lot_number(),
             "Received Date": str(input.received_date()),
             "Expiry Date": str(input.expiry_date()),
             "Internal Name": internal_name,
-            "Set Letter": set_letter
+            "Set Letter": set_letter,
+            "MiSeq Kit Type": miseq_kit_type,
+            "RGT Number": rgt_number
         }])
         
         updated_df = pd.concat([current_df, new_row], ignore_index=True)
@@ -571,15 +971,13 @@ def reagents_server(input, output, session):
     @reactive.event(input.clear_queue)
     def clear_queue():
         pending_lots.set(pd.DataFrame(columns=[
-            "Reagent Type", "Short Name", "Lot Number",
-            "Received Date", "Expiry Date", "Internal Name", "Set Letter"
+            "Reagent Type", "Lot Number",
+            "Received Date", "Expiry Date", "Internal Name", "Set Letter",
+            "MiSeq Kit Type", "RGT Number"
         ]))
         pending_sequence_offsets.set({
             "prep": 0,
-            "index_A": 0,
-            "index_B": 0,
-            "index_C": 0,
-            "index_D": 0
+            "index": 0
         })
         submission_results.set([])
     
@@ -600,7 +998,7 @@ def reagents_server(input, output, session):
                 class_="text-muted text-center py-4"
             )
         
-        display_df = df[["Internal Name", "Short Name", "Lot Number", "Expiry Date"]].copy()
+        display_df = df[["Internal Name", "Reagent Type", "Lot Number", "Expiry Date"]].copy()
         
         table_html = """
         <table class="table table-sm table-striped table-hover" style="width: 100%; table-layout: fixed;">
@@ -620,7 +1018,7 @@ def reagents_server(input, output, session):
             table_html += f"""
                 <tr>
                     <td><strong>{row['Internal Name']}</strong></td>
-                    <td>{row['Short Name']}</td>
+                    <td>{row['Reagent Type']}</td>
                     <td>{row['Lot Number']}</td>
                     <td>{row['Expiry Date']}</td>
                     <td>
@@ -636,7 +1034,7 @@ def reagents_server(input, output, session):
         
         table_html += "</tbody></table>"
         
-        return ui.HTML(f'<div style="max-height: 300px; overflow-y: auto;">{table_html}</div>')
+        return ui.HTML(f'<div id="pending_queue_printable" style="max-height: 300px; overflow-y: auto;">{table_html}</div>')
 
     @reactive.Effect
     @reactive.event(input.remove_lot_idx)
@@ -657,19 +1055,27 @@ def reagents_server(input, output, session):
 
         row = df.iloc[idx]
         reagent_type = row["Reagent Type"]
-        if reagent_type in PREP_REAGENT_TYPES:
-            prep_rows = df[df["Reagent Type"].isin(PREP_REAGENT_TYPES)]
-            prep_numbers = [
-                extract_internal_sequence(name)
-                for name in prep_rows["Internal Name"].tolist()
+        reagent_info = REAGENT_TYPES.get(reagent_type, {})
+        naming_group = reagent_info.get("naming_group")
+        if naming_group in {"prep", "index"}:
+            group_types = [
+                rtype for rtype, rinfo in REAGENT_TYPES.items()
+                if rinfo.get("naming_group") == naming_group
             ]
-            prep_numbers = [n for n in prep_numbers if n is not None]
-            if prep_numbers:
-                latest_prep_num = max(prep_numbers)
+            group_rows = df[df["Reagent Type"].isin(group_types)]
+            group_numbers = [
+                extract_internal_sequence(name)
+                for name in group_rows["Internal Name"].tolist()
+            ]
+            group_numbers = [n for n in group_numbers if n is not None]
+
+            if group_numbers:
+                latest_group_num = max(group_numbers)
                 row_num = extract_internal_sequence(row["Internal Name"])
-                if row_num != latest_prep_num:
+                if row_num != latest_group_num:
+                    label = "prep" if naming_group == "prep" else "index"
                     ui.notification_show(
-                        f"For prep kits, remove the latest number first (#{latest_prep_num}).",
+                        f"For {label} lots, remove the latest number first (#{latest_group_num}).",
                         type="warning",
                         duration=4
                     )
@@ -690,86 +1096,136 @@ def reagents_server(input, output, session):
         if df.empty:
             ui.notification_show("No lots to submit", type="warning")
             return
-
-        prep_counts = {
-            reagent_type: int((df["Reagent Type"] == reagent_type).sum())
-            for reagent_type in PREP_REAGENT_TYPES
-        }
-        if len(set(prep_counts.values())) > 1:
-            details = ", ".join(
-                f"{REAGENT_TYPES[rt]['short_name']}: {count}"
-                for rt, count in prep_counts.items()
-            )
-            ui.modal_show(
-                ui.modal(
-                    ui.p("Pending prep reagents must be submitted as full sets."),
-                    ui.p(f"Current queue counts: {details}"),
-                    ui.p("Add missing prep reagent types or remove extras before submitting."),
-                    title="⚠️ Incomplete Prep Set In Queue",
-                    easy_close=True,
-                    footer=ui.modal_button("OK")
-                )
-            )
-            return
-
-        config = lims_config.get()
-        if not config:
-            show_lims_login_modal()
-            ui.notification_show("Log in to LIMS before submitting", type="warning")
-            return
-
-        # Always re-check current LIMS state before allowing submission.
-        refresh_prep_sequence_state(config)
-        prep_ok, prep_message = prep_sequence_state.get()
-        if not prep_ok:
-            ui.modal_show(
-                ui.modal(
-                    ui.p("Cannot submit new reagents while Illumina DNA Prep reagents are incomplete/misaligned."),
-                    ui.p(prep_message),
-                    ui.p("Please clean up the prep reagents in Clarity LIMS, then re-check."),
-                    title="⚠️ Prep Reagent Set Incomplete",
-                    easy_close=True,
-                    footer=ui.modal_button("OK")
-                )
-            )
-            return
         
-        ui.modal_show(
-            ui.modal(
-                ui.div(
-                    ui.p(f"Submit {len(df)} lot(s) to Clarity LIMS?"),
-                    ui.HTML(df[["Internal Name", "Short Name", "Lot Number"]].to_html(
-                        index=False, 
-                        classes="table table-sm"
-                    )),
-                ),
+        submit_check_in_progress.set(True)
+
+        try:
+            with ui.Progress(min=0, max=3) as p:
+                p.set(0, message="Preparing submission checks...")
+
+                prep_counts = {
+                    reagent_type: int((df["Reagent Type"] == reagent_type).sum())
+                    for reagent_type in PREP_REAGENT_TYPES
+                }
+                if len(set(prep_counts.values())) > 1:
+                    details = ", ".join(
+                        f"{rt}: {count}"
+                        for rt, count in prep_counts.items()
+                    )
+                    ui.modal_show(
+                        ui.modal(
+                            ui.p("Pending prep reagents must be submitted as full sets."),
+                            ui.p(f"Current queue counts: {details}"),
+                            ui.p("Add missing prep reagent types or remove extras before submitting."),
+                            title="⚠️ Incomplete Prep Set In Queue",
+                            easy_close=True,
+                            footer=ui.modal_button("OK")
+                        )
+                    )
+                    return
+
+                p.set(1, message="Validating LIMS login...")
+                config = lims_config.get()
+                if not config:
+                    show_lims_login_modal()
+                    ui.notification_show("Log in to LIMS before submitting", type="warning")
+                    return
+
+                p.set(2, message="Checking current prep/index status in LIMS...")
+                # Always re-check current LIMS state before allowing submission.
+                refresh_prep_sequence_state(config)
+                refresh_index_sequence_state(config)
+                prep_ok, prep_message = prep_sequence_state.get()
+                if not prep_ok:
+                    ui.modal_show(
+                        ui.modal(
+                            ui.p("Cannot submit new reagents while Illumina DNA Prep reagents are incomplete/misaligned."),
+                            ui.p(prep_message),
+                            ui.p("Please clean up the prep reagents in Clarity LIMS, then re-check."),
+                            title="⚠️ Prep Reagent Set Incomplete",
+                            easy_close=True,
+                            footer=ui.modal_button("OK")
+                        )
+                    )
+                    return
+
+                p.set(3, message="Opening confirmation...")
+
+            confirm_df = df[["Internal Name", "Reagent Type", "Lot Number"]].copy()
+            confirm_table = confirm_df.to_html(
+                index=False,
+                escape=False,
+                classes="table table-sm table-striped table-bordered confirm-submit-table",
+                border=0
+            )
+
+            ui.modal_show(
+                ui.modal(
+                    ui.div(
+                        ui.p(f"Submit {len(df)} lot(s) to Clarity LIMS?"),
+                        ui.div(
+                            ui.strong("⚠️ Remember: "),
+                            "Label your physical reagent boxes with the Internal Names before submitting.",
+                            class_="alert alert-warning py-2 px-3 mb-3"
+                        ),
+                        ui.HTML(f"""
+                            <style>
+                                .confirm-submit-wrap {{
+                                    max-height: 45vh;
+                                    overflow-y: auto;
+                                    overflow-x: auto;
+                                }}
+                                .confirm-submit-table {{
+                                    width: 100%;
+                                    table-layout: fixed;
+                                    margin-bottom: 0;
+                                }}
+                                .confirm-submit-table th,
+                                .confirm-submit-table td {{
+                                    text-align: left !important;
+                                    vertical-align: middle;
+                                }}
+                                .confirm-submit-table th {{
+                                    position: sticky;
+                                    top: 0;
+                                    background: #f8f9fa;
+                                    z-index: 2;
+                                }}
+                            </style>
+                            <div class="confirm-submit-wrap">{confirm_table}</div>
+                        """),
+                    )
+                    ,
                 title="🚀 Confirm Submission",
                 easy_close=True,
+                size="xl",
                 footer=ui.div(
                     ui.modal_button("Cancel", class_="btn-secondary"),
-                    ui.input_action_button(
-                        "confirm_submit", 
-                        "Submit to LIMS", 
-                        class_="btn-success ms-2",
-                        onclick="""
-                        const originalText = this.innerHTML;
-                        this.disabled = true;
-                        this.innerHTML = 'Submitting...';
-                        this.style.opacity = '0.65';
-                        this.style.cursor = 'not-allowed';
-                        setTimeout(() => {
-                            if (document.body.contains(this)) {
-                                this.disabled = false;
-                                this.innerHTML = originalText;
-                                this.style.opacity = '';
-                                this.style.cursor = '';
-                            }
-                        }, 8000);
-                        """
+                        ui.input_action_button(
+                            "confirm_submit", 
+                            "Submit to LIMS", 
+                            class_="btn-success ms-2",
+                            onclick="""
+                            const originalText = this.innerHTML;
+                            this.disabled = true;
+                            this.innerHTML = 'Submitting...';
+                            this.style.opacity = '0.65';
+                            this.style.cursor = 'not-allowed';
+                            setTimeout(() => {
+                                if (document.body.contains(this)) {
+                                    this.disabled = false;
+                                    this.innerHTML = originalText;
+                                    this.style.opacity = '';
+                                    this.style.cursor = '';
+                                }
+                            }, 8000);
+                            """
+                        )
                     )
                 )
             )
-        )
+        finally:
+            submit_check_in_progress.set(False)
     
     # Actual submission
     @reactive.Effect
@@ -780,6 +1236,7 @@ def reagents_server(input, output, session):
         df = pending_lots.get()
         config = lims_config.get()
         results = []
+        submission_entries = []
         
         with ui.Progress(min=0, max=len(df)) as p:
             p.set(message="Submitting to LIMS...")
@@ -798,6 +1255,10 @@ def reagents_server(input, output, session):
                 )
                 
                 results.append(result)
+                submission_entries.append({
+                    "row": row,
+                    "result": result
+                })
             
             p.set(len(df), message="Done!")
         
@@ -815,8 +1276,9 @@ def reagents_server(input, output, session):
             )
             # Clear the queue on full success
             pending_lots.set(pd.DataFrame(columns=[
-                "Reagent Type", "Short Name", "Lot Number",
-                "Received Date", "Expiry Date", "Internal Name", "Set Letter"
+                "Reagent Type", "Lot Number",
+                "Received Date", "Expiry Date", "Internal Name", "Set Letter",
+                "MiSeq Kit Type", "RGT Number"
             ]))
         else:
             ui.notification_show(
@@ -825,9 +1287,141 @@ def reagents_server(input, output, session):
                 duration=10
             )
 
+        result_rows = []
+        failed_log_lines = []
+        for entry in submission_entries:
+            row = entry["row"]
+            result = entry["result"]
+            status_text = "Success" if result.success else "Failed"
+            lims_id = result.lims_id or "-"
+            message_text = result.message or "-"
+            result_rows.append({
+                "Internal Name": row["Internal Name"],
+                "Type": row["Reagent Type"],
+                "Lot Number": row["Lot Number"],
+                "Status": status_text,
+                "LIMS ID": lims_id,
+                "Message": message_text,
+            })
+            if not result.success:
+                failed_log_lines.append(
+                    f"- {row['Internal Name']} | {row['Reagent Type']} | lot={row['Lot Number']} | {message_text}"
+                )
+
+        result_df = pd.DataFrame(result_rows)
+        result_table = result_df.to_html(
+            index=False,
+            escape=True,
+            classes="table table-sm table-striped table-bordered submit-result-table",
+            border=0
+        )
+        logs_text = "\n".join(failed_log_lines) if failed_log_lines else "No errors."
+        modal_title = "✅ Submission Complete" if failures == 0 else "⚠️ Submission Completed With Errors"
+        summary_class = "alert alert-success py-2 px-3 mb-3" if failures == 0 else "alert alert-warning py-2 px-3 mb-3"
+        summary_text = f"{successes} succeeded, {failures} failed."
+        print_reminder = (
+            "Please print this result now so errors can be reviewed and resolved."
+            if failures > 0
+            else "Optional: print this result for your records."
+        )
+
+        ui.modal_show(
+            ui.modal(
+                ui.div(
+                    ui.div(summary_text, class_=summary_class),
+                    ui.div(print_reminder, class_="alert alert-info py-2 px-3 mb-3"),
+                    ui.HTML(f"""
+                        <style>
+                            .submit-result-wrap {{
+                                max-height: 42vh;
+                                overflow-y: auto;
+                                overflow-x: auto;
+                            }}
+                            .submit-result-table {{
+                                width: 100%;
+                                table-layout: fixed;
+                                margin-bottom: 0;
+                            }}
+                            .submit-result-table th,
+                            .submit-result-table td {{
+                                text-align: left !important;
+                                vertical-align: middle;
+                            }}
+                            .submit-result-table th {{
+                                position: sticky;
+                                top: 0;
+                                background: #f8f9fa;
+                                z-index: 2;
+                            }}
+                        </style>
+                        <div id="submit_result_printable" class="submit-result-wrap">{result_table}</div>
+                    """),
+                    ui.h6("Admin Error Log", class_="mt-3"),
+                    ui.tags.pre(
+                        logs_text,
+                        id="submit_result_error_log",
+                        class_="p-2 bg-light border rounded small",
+                        style="max-height: 180px; overflow:auto; white-space: pre-wrap;"
+                    ),
+                ),
+                title=modal_title,
+                easy_close=True,
+                size="l",
+                footer=ui.div(
+                    ui.input_action_button(
+                        "print_submit_result",
+                        "🖨️ Print Result",
+                        class_="btn-outline-secondary",
+                        onclick="""
+                        const tableWrap = document.getElementById('submit_result_printable');
+                        if (!tableWrap) return;
+                        const table = tableWrap.querySelector('table');
+                        if (!table) return;
+                        const logEl = document.getElementById('submit_result_error_log');
+                        const logText = logEl ? logEl.textContent : 'No errors.';
+                        const summary = tableWrap.parentElement?.querySelector('.alert')?.textContent?.trim() || '';
+                        const printDate = new Date().toLocaleString();
+
+                        const win = window.open('', '_blank');
+                        if (!win) return;
+                        win.document.write(`
+                          <html>
+                          <head>
+                            <title>LIMS Submission Result</title>
+                            <style>
+                              body { font-family: Arial, sans-serif; margin: 20px; }
+                              h2 { margin-bottom: 10px; }
+                              table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 10px; }
+                              th, td { border: 1px solid #ccc; padding: 8px; text-align: left; word-break: break-word; }
+                              th { background: #f2f2f2; }
+                              pre { white-space: pre-wrap; border: 1px solid #ccc; padding: 8px; background: #fafafa; }
+                            </style>
+                          </head>
+                          <body>
+                            <h2>LIMS Submission Result</h2>
+                            <p><strong>Printed:</strong> ${printDate}</p>
+                            <p><strong>Summary:</strong> ${summary}</p>
+                            ${table.outerHTML}
+                            <h3 style="margin-top: 16px;">Admin Error Log</h3>
+                            <pre>${logText}</pre>
+                          </body>
+                          </html>
+                        `);
+                        win.document.close();
+                        win.focus();
+                        win.print();
+                        win.close();
+                        """
+                    ),
+                    ui.modal_button("Close", class_="btn-secondary ms-2")
+                )
+            )
+        )
+
         # Refresh prep state after submission so next number/status reflects LIMS.
         if config:
             refresh_prep_sequence_state(config)
+            refresh_index_sequence_state(config)
     
     # Show submission results
     @output

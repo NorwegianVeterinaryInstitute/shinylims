@@ -17,7 +17,7 @@ from faicons import icon_svg
 from shinylims.tables.projects import projects_ui, projects_server
 from shinylims.tables.samples import samples_ui, samples_server
 from shinylims.tables.sequencing import seq_ui, seq_server
-from shinylims.tables.reagents import reagents_ui, reagents_server
+from shinylims.tables.lab_tools import lab_tools_ui, lab_tools_server
 
 # Import database utilities
 from src.shinylims.data.db_utils import get_db_update_info, refresh_db_connection, get_formatted_update_info
@@ -76,7 +76,7 @@ app_ui = ui.page_navbar(
     ui.nav_panel("Projects", projects_ui(), value="projects"),
     ui.nav_panel("Samples", samples_ui()),  
     ui.nav_panel("Illumina Sequencing", seq_ui()),
-    ui.nav_panel("Reagents", reagents_ui(), value="reagents"),
+    ui.nav_panel("Lab Tools", lab_tools_ui(), value="lab_tools"),
     
     # Add another spacer after panels to push the button to the far right
     ui.nav_spacer(),
@@ -130,6 +130,8 @@ def server(input, output, session):
     """
     # Create a reactive value for database update info
     db_update_info_reactive = reactive.Value(get_db_update_info())
+    # Initialize lab tools once; it should not be reset by SQL refresh events.
+    lab_tools_server(input, output, session)
 
     # Fetch initial data
     with ui.Progress(min=1, max=15) as p:  # Increased max for additional data
@@ -292,9 +294,6 @@ def server(input, output, session):
             input
         )
         seq_server(seq_df_reactive.get())
-        
-        # Initialize reagents server
-        reagents_server(input, output, session)
     
         return ui.TagList()  # Return an empty UI element
     

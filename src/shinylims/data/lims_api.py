@@ -15,6 +15,20 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Single source of truth for the LIMS API base URI used by the app.
+HARDCODED_LIMS_BASE_URL = "https://nvi-test.claritylims.com/api/v2"
+
+# Single source of truth for kit IDs per reagent type.
+REAGENT_KIT_IDS = {
+    "IDT-ILMN DNA/RNA UD Index Sets": "302",
+    "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp": "203",
+    "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp": "202",
+    "Illumina DNA Prep – Tagmentation (M) Beads 96sp": "102",
+    "MiSeq Reagent Kit (Box 1 of 2)": "35",
+    "MiSeq Reagent Kit (Box 2 of 2)": "252",
+    "PhiX Control v3": "152",
+}
+
 
 @dataclass
 class LIMSConfig:
@@ -27,8 +41,8 @@ class LIMSConfig:
     def get_credentials(cls):
         """Load config for local testing - replace with your values."""
         return cls(
-            base_url=os.getenv('CLARITY_API_BASE_URL'),
-            username= os.getenv('CLARITY_APIUSER_USERNAME'),
+            base_url=HARDCODED_LIMS_BASE_URL,
+            username=os.getenv('CLARITY_APIUSER_USERNAME'),
             password=os.getenv('CLARITY_APIUSER_PASSWORD')
         )
 
@@ -36,10 +50,8 @@ class LIMSConfig:
 def get_reagent_kit_uris(base_url: str) -> dict:
     """Get reagent kit URI mapping for a given base URL."""
     return {
-        "IDT-ILMN DNA/RNA UD Index Sets": f"{base_url}/reagentkits/302",
-        "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp": f"{base_url}/reagentkits/203",
-        "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp": f"{base_url}/reagentkits/202",
-        "Illumina DNA Prep – Tagmentation (M) Beads 96sp": f"{base_url}/reagentkits/102",
+        reagent_type: f"{base_url}/reagentkits/{kit_id}"
+        for reagent_type, kit_id in REAGENT_KIT_IDS.items()
     }
 
 
@@ -59,6 +71,22 @@ class PrepSequenceStatus:
     latest_complete_sequence: int | None
     message: str
     latest_by_reagent_type: dict[str, int | None]
+
+
+@dataclass
+class IndexSequenceStatus:
+    """Latest IDT index sequence status."""
+    success: bool
+    latest_sequence: int | None
+    message: str
+
+
+@dataclass
+class ActiveReagentOverviewResult:
+    """Result for active reagent overview fetch."""
+    success: bool
+    rows: list[dict[str, str]]
+    message: str
 
 
 def _local_name(tag: str) -> str:
@@ -114,6 +142,36 @@ def _parse_lot_name_and_kit_from_xml(xml_content: bytes) -> tuple[str, str, str]
     return name, reagent_kit_uri, status
 
 
+def _parse_lot_fields_from_xml(xml_content: bytes) -> dict[str, str]:
+    """Parse common lot fields from a reagent lot XML payload."""
+    try:
+        root = ET.fromstring(xml_content)
+    except ET.ParseError:
+        return {}
+
+    def child_text(child_name: str) -> str:
+        child = _find_child(root, child_name)
+        if child is not None and child.text:
+            return child.text.strip()
+        return str(root.attrib.get(child_name, "") or "").strip()
+
+    kit_uri = ""
+    kit_child = _find_child(root, "reagent-kit")
+    if kit_child is not None:
+        kit_uri = (kit_child.attrib.get("uri") or "").strip()
+    elif root.attrib.get("reagent-kit"):
+        kit_uri = str(root.attrib.get("reagent-kit") or "").strip()
+
+    return {
+        "name": child_text("name"),
+        "lot_number": child_text("lot-number"),
+        "expiry_date": child_text("expiry-date"),
+        "status": child_text("status"),
+        "storage_location": child_text("storage-location"),
+        "reagent_kit_uri": kit_uri,
+    }
+
+
 def _fetch_lot_detail(
     lot_uri: str,
     username: str,
@@ -134,6 +192,27 @@ def _fetch_lot_detail(
         return lot_uri, name, reagent_kit_uri, status
     except requests.exceptions.RequestException:
         return lot_uri, "", "", ""
+
+
+def _fetch_lot_detail_fields(
+    lot_uri: str,
+    username: str,
+    password: str,
+    timeout: int = 5
+) -> tuple[str, dict[str, str]]:
+    """Fetch lot detail endpoint and return parsed lot fields."""
+    try:
+        detail_resp = requests.get(
+            lot_uri,
+            auth=HTTPBasicAuth(username, password),
+            headers={"Accept": "application/xml"},
+            timeout=timeout
+        )
+        if detail_resp.status_code != 200:
+            return lot_uri, {}
+        return lot_uri, _parse_lot_fields_from_xml(detail_resp.content)
+    except requests.exceptions.RequestException:
+        return lot_uri, {}
 
 
 def get_latest_prep_sequence_status(
@@ -367,6 +446,295 @@ def get_latest_prep_sequence_status(
         latest_complete_sequence=latest_complete,
         message=f"Latest complete prep set is #{latest_complete}",
         latest_by_reagent_type=latest_by_type
+    )
+
+
+def get_latest_index_sequence_status(
+    config: LIMSConfig,
+    max_detail_fetches: int = 250
+) -> IndexSequenceStatus:
+    """
+    Get latest shared IDT index sequence number.
+
+    Index names are expected to contain '#NN (192)'.
+    The numeric sequence is shared across set letters.
+    """
+    latest_sequence = None
+    kit_uris = get_reagent_kit_uris(config.base_url)
+    index_kit_uri = kit_uris.get("IDT-ILMN DNA/RNA UD Index Sets")
+    index_kit_id = _extract_reagentkit_id(index_kit_uri)
+
+    if not index_kit_id:
+        return IndexSequenceStatus(
+            success=False,
+            latest_sequence=None,
+            message="Missing reagent kit URI mapping for IDT index kit.",
+        )
+
+    try:
+        response = requests.get(
+            f"{config.base_url}/reagentlots",
+            auth=HTTPBasicAuth(config.username, config.password),
+            headers={"Accept": "application/xml"},
+            timeout=30
+        )
+    except requests.exceptions.RequestException as e:
+        return IndexSequenceStatus(
+            success=False,
+            latest_sequence=None,
+            message=f"Connection error while reading index lots: {str(e)}",
+        )
+
+    if response.status_code != 200:
+        return IndexSequenceStatus(
+            success=False,
+            latest_sequence=None,
+            message=f"Unable to read index lots (HTTP {response.status_code})",
+        )
+
+    try:
+        root = ET.fromstring(response.content)
+    except ET.ParseError as e:
+        return IndexSequenceStatus(
+            success=False,
+            latest_sequence=None,
+            message=f"Could not parse index lots XML: {str(e)}",
+        )
+
+    seq_pattern = re.compile(r"#(\d+)\s*\(192\)")
+
+    detail_candidates: list[str] = []
+    detail_seen: set[str] = set()
+
+    def apply_lot(name: str, reagent_kit_uri: str, status: str):
+        nonlocal latest_sequence
+        if status and status.upper() != "ACTIVE":
+            return
+
+        kit_id = _extract_reagentkit_id(reagent_kit_uri)
+        if kit_id != index_kit_id:
+            return
+
+        match = seq_pattern.search(name or "")
+        if not match:
+            return
+
+        seq_num = int(match.group(1))
+        if latest_sequence is None or seq_num > latest_sequence:
+            latest_sequence = seq_num
+
+    for element in root.iter():
+        if _local_name(element.tag) not in {"reagent-lot", "reagentlot"}:
+            continue
+
+        name = ""
+        reagent_kit_uri = ""
+        status = ""
+        lot_uri = (element.attrib.get("uri") or "").strip()
+
+        name_child = _find_child(element, "name")
+        if name_child is not None and name_child.text:
+            name = name_child.text.strip()
+        elif element.attrib.get("name"):
+            name = element.attrib["name"].strip()
+
+        kit_child = _find_child(element, "reagent-kit")
+        if kit_child is not None:
+            reagent_kit_uri = (kit_child.attrib.get("uri") or "").strip()
+        else:
+            for attr_name, attr_value in element.attrib.items():
+                if "reagent" in attr_name and "kit" in attr_name and "/reagentkits/" in str(attr_value):
+                    reagent_kit_uri = str(attr_value).strip()
+                    break
+
+        status_child = _find_child(element, "status")
+        if status_child is not None and status_child.text:
+            status = status_child.text.strip()
+        elif element.attrib.get("status"):
+            status = str(element.attrib.get("status") or "").strip()
+
+        if (not name or not reagent_kit_uri) and lot_uri:
+            if lot_uri not in detail_seen:
+                detail_candidates.append(lot_uri)
+                detail_seen.add(lot_uri)
+            continue
+
+        apply_lot(name, reagent_kit_uri, status)
+
+    limited_candidates = detail_candidates[:max_detail_fetches]
+    if limited_candidates:
+        max_workers = min(16, len(limited_candidates))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(
+                    _fetch_lot_detail,
+                    lot_uri,
+                    config.username,
+                    config.password,
+                    5
+                )
+                for lot_uri in limited_candidates
+            ]
+
+            for future in as_completed(futures):
+                _, name, reagent_kit_uri, status = future.result()
+                if not name or not reagent_kit_uri:
+                    continue
+                apply_lot(name, reagent_kit_uri, status)
+
+    if latest_sequence is None:
+        return IndexSequenceStatus(
+            success=False,
+            latest_sequence=None,
+            message="Could not determine latest index sequence from ACTIVE IDT index lots.",
+        )
+
+    return IndexSequenceStatus(
+        success=True,
+        latest_sequence=latest_sequence,
+        message=f"Loaded latest index number #{latest_sequence} from LIMS.",
+    )
+
+
+def get_active_reagent_overview(
+    config: LIMSConfig,
+    max_detail_fetches: int = 400
+) -> ActiveReagentOverviewResult:
+    """Fetch overview rows for ACTIVE reagent lots."""
+    try:
+        response = requests.get(
+            f"{config.base_url}/reagentlots",
+            auth=HTTPBasicAuth(config.username, config.password),
+            headers={"Accept": "application/xml"},
+            timeout=30
+        )
+    except requests.exceptions.RequestException as e:
+        return ActiveReagentOverviewResult(
+            success=False,
+            rows=[],
+            message=f"Connection error while reading reagent lots: {str(e)}",
+        )
+
+    if response.status_code != 200:
+        return ActiveReagentOverviewResult(
+            success=False,
+            rows=[],
+            message=f"Unable to read reagent lots (HTTP {response.status_code})",
+        )
+
+    try:
+        root = ET.fromstring(response.content)
+    except ET.ParseError as e:
+        return ActiveReagentOverviewResult(
+            success=False,
+            rows=[],
+            message=f"Could not parse reagent lots XML: {str(e)}",
+        )
+
+    kit_uri_to_type = get_reagent_kit_uris(config.base_url)
+    kit_id_to_type = {
+        _extract_reagentkit_id(uri): reagent_type
+        for reagent_type, uri in kit_uri_to_type.items()
+        if _extract_reagentkit_id(uri)
+    }
+
+    rows: list[dict[str, str]] = []
+    detail_candidates: list[str] = []
+    detail_seen: set[str] = set()
+
+    def append_if_active(fields: dict[str, str]):
+        if not fields:
+            return
+        status = (fields.get("status") or "").upper()
+        if status != "ACTIVE":
+            return
+
+        kit_uri = fields.get("reagent_kit_uri") or ""
+        kit_id = _extract_reagentkit_id(kit_uri)
+        reagent_type = kit_id_to_type.get(kit_id, f"Unknown kit {kit_id}" if kit_id else "Unknown")
+
+        rows.append({
+            "Reagent Type": reagent_type,
+            "Internal Name": fields.get("name") or "",
+            "Lot Number": fields.get("lot_number") or "",
+            "Expiry Date": fields.get("expiry_date") or "",
+            "Status": fields.get("status") or "",
+            "Storage": fields.get("storage_location") or "",
+        })
+
+    for element in root.iter():
+        if _local_name(element.tag) not in {"reagent-lot", "reagentlot"}:
+            continue
+
+        lot_uri = (element.attrib.get("uri") or "").strip()
+        name = ""
+        lot_number = ""
+        expiry_date = ""
+        status = ""
+        reagent_kit_uri = ""
+
+        name_child = _find_child(element, "name")
+        if name_child is not None and name_child.text:
+            name = name_child.text.strip()
+        elif element.attrib.get("name"):
+            name = str(element.attrib.get("name") or "").strip()
+
+        lot_number_child = _find_child(element, "lot-number")
+        if lot_number_child is not None and lot_number_child.text:
+            lot_number = lot_number_child.text.strip()
+
+        expiry_child = _find_child(element, "expiry-date")
+        if expiry_child is not None and expiry_child.text:
+            expiry_date = expiry_child.text.strip()
+
+        status_child = _find_child(element, "status")
+        if status_child is not None and status_child.text:
+            status = status_child.text.strip()
+        elif element.attrib.get("status"):
+            status = str(element.attrib.get("status") or "").strip()
+
+        kit_child = _find_child(element, "reagent-kit")
+        if kit_child is not None:
+            reagent_kit_uri = (kit_child.attrib.get("uri") or "").strip()
+
+        if (not name or not lot_number or not reagent_kit_uri) and lot_uri:
+            if lot_uri not in detail_seen:
+                detail_candidates.append(lot_uri)
+                detail_seen.add(lot_uri)
+            continue
+
+        append_if_active({
+            "name": name,
+            "lot_number": lot_number,
+            "expiry_date": expiry_date,
+            "status": status,
+            "storage_location": "",
+            "reagent_kit_uri": reagent_kit_uri,
+        })
+
+    limited_candidates = detail_candidates[:max_detail_fetches]
+    if limited_candidates:
+        max_workers = min(16, len(limited_candidates))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(
+                    _fetch_lot_detail_fields,
+                    lot_uri,
+                    config.username,
+                    config.password,
+                    5
+                )
+                for lot_uri in limited_candidates
+            ]
+            for future in as_completed(futures):
+                _, fields = future.result()
+                append_if_active(fields)
+
+    rows.sort(key=lambda r: (r.get("Reagent Type", ""), r.get("Internal Name", "")))
+    return ActiveReagentOverviewResult(
+        success=True,
+        rows=rows,
+        message=f"Loaded {len(rows)} active reagent lots.",
     )
 
 
