@@ -15,7 +15,7 @@ except ImportError:  # pragma: no cover
 if load_dotenv is not None:
     load_dotenv()
 
-CONNECT_ALLOWED_GROUP = "LIMS_Lab_Users"
+CONNECT_ALLOWED_GROUP = "116-Molekylærbiologi"
 REAGENTS_ALLOWED_USERS_ENV = "REAGENTS_ALLOWED_USERS"
 
 
