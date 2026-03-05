@@ -46,7 +46,7 @@ See .env.example file.
 On Posit Connect, configure these values in **Vars / Secrets** for the content item instead of using `.env`.
 
 Reagents authorization:
-- On Connect, users are allowed if they are in configured group(s):
-  - `CONNECT_ALLOWED_GROUPS` (comma-separated), or fallback to built-in default group in code.
-  - If groups are unavailable from runtime session, fallback is `REAGENTS_ALLOWED_USERS`.
-- Locally (development), access is allowed only when `DEV_BYPASS_SECURITY=1`.
+- Authorization is configured in `src/shinylims/security.py`:
+  - `CONNECT_ALLOWED_GROUP` (required Connect group)
+  - `CONNECT_ALLOWED_USERS` (optional individual usernames)
+  - `LOCAL_DEV_ALLOW_ALL` for local development behavior

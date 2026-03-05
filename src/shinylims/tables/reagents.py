@@ -18,7 +18,11 @@ from shinylims.data.lims_api import (
     get_latest_prep_sequence_status,
     get_latest_index_sequence_status
 )
-from shinylims.security import get_runtime_user, is_allowed_reagents_user
+from shinylims.security import (
+    get_runtime_user,
+    is_allowed_reagents_user,
+    reagents_access_denied_message,
+)
 
 ##############################
 # REAGENT CONFIGURATION
@@ -498,7 +502,11 @@ def reagents_server(input, output, session):
         return username
 
     def show_unauthorized(action: str = "perform this action"):
-        ui.notification_show(f"Unauthorized: you are not allowed to {action}.", type="error", duration=6)
+        ui.notification_show(
+            f"Unauthorized: {reagents_access_denied_message()}",
+            type="error",
+            duration=8
+        )
 
     def ensure_authorized(action: str) -> bool:
         if is_allowed_reagents_user(session):

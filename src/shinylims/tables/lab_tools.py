@@ -4,7 +4,7 @@ import re
 
 from src.shinylims.data.db_utils import query_to_dataframe
 from shinylims.tables.reagents import reagents_ui, reagents_server
-from shinylims.security import is_allowed_reagents_user
+from shinylims.security import is_allowed_reagents_user, reagents_access_policy_summary
 
 
 def lab_tools_ui():
@@ -85,9 +85,10 @@ def lab_tools_server(input, output, session):
                         ui.card_body(
                             ui.h5("You do not have access"),
                             ui.p(
-                                "Only authorized users in the LIMS_Lab_Users group (or explicit allow-list) may use this tool.",
-                                class_="text-muted mb-0"
+                                f"Allowed access is {reagents_access_policy_summary()}.",
+                                class_="text-muted mb-1"
                             ),
+                            ui.p("Contact admin to be added as an individual user if needed.", class_="text-muted mb-0"),
                         ),
                         class_="border-danger"
                     )
