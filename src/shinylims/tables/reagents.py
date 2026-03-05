@@ -693,7 +693,7 @@ def reagents_server(input, output, session):
 
         refresh_button = ui.input_action_button(
             "refresh_prep_sequence",
-            "Refresh Prep Check",
+            "Refresh Reagent Check",
             class_="btn-sm btn-outline-secondary",
             disabled=submit_check_in_progress.get() or submit_in_progress.get()
         )
@@ -1316,7 +1316,8 @@ def reagents_server(input, output, session):
                         reagent_type=row["Reagent Type"],
                         expiry_date=row["Expiry Date"],
                         storage_location="",
-                        notes=f"Created via Shiny App on {date.today()} by {requester}"
+                        notes=f"Created via Shiny App on {date.today()} by {requester}",
+                        status="PENDING" if row["Reagent Type"] in PREP_REAGENT_TYPES else "ACTIVE",
                     )
 
                     results.append(result)

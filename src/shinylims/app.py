@@ -64,6 +64,33 @@ app_ui = ui.page_navbar(
         ),
         # Include CSS file
         ui.include_css(css_path),
+        ui.tags.script(
+            """
+            (function() {
+              function bindMainNavHeaderClicks() {
+                const links = document.querySelectorAll('.nav-link[data-value]');
+                if (!links.length) return false;
+                links.forEach((el) => {
+                  if (el._mainNavHeaderBound) return;
+                  el._mainNavHeaderBound = true;
+                  el.addEventListener('click', function() {
+                    if (window.Shiny && typeof window.Shiny.setInputValue === 'function') {
+                      window.Shiny.setInputValue('main_nav_header_click', this.getAttribute('data-value') || '', { priority: 'event' });
+                    }
+                  });
+                });
+                return true;
+              }
+
+              if (!bindMainNavHeaderClicks()) {
+                const iv = setInterval(() => {
+                  if (bindMainNavHeaderClicks()) clearInterval(iv);
+                }, 250);
+                setTimeout(() => clearInterval(iv), 10000);
+              }
+            })();
+            """
+        ),
         
     ),
     

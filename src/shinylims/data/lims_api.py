@@ -280,6 +280,7 @@ def get_latest_prep_sequence_status(
         )
 
     seq_pattern = re.compile(r"#(\d+)\s*\(192\)")
+    prep_counted_statuses = {"ACTIVE", "PENDING"}
     kit_id_to_type = {}
     for reagent_type, uri in prep_kit_uris.items():
         kit_id = _extract_reagentkit_id(uri)
@@ -334,7 +335,7 @@ def get_latest_prep_sequence_status(
                 detail_seen.add(lot_uri)
             continue
 
-        if status and status.upper() != "ACTIVE":
+        if status and status.upper() not in prep_counted_statuses:
             continue
 
         if not name or not reagent_kit_uri:
@@ -384,7 +385,7 @@ def get_latest_prep_sequence_status(
             for future in as_completed(futures):
                 detail_fetches += 1
                 _, name, reagent_kit_uri, status = future.result()
-                if status and status.upper() != "ACTIVE":
+                if status and status.upper() not in prep_counted_statuses:
                     continue
                 if not name or not reagent_kit_uri:
                     continue
@@ -747,7 +748,8 @@ def create_reagent_lot(
     reagent_type: str,
     expiry_date: str,
     storage_location: str = "",
-    notes: str = ""
+    notes: str = "",
+    status: str = "ACTIVE",
 ) -> ReagentLotResult:
     """
     Create a new reagent lot in Clarity LIMS.
@@ -760,6 +762,7 @@ def create_reagent_lot(
         expiry_date: Format YYYY-MM-DD
         storage_location: Optional storage location
         notes: Optional notes
+        status: LIMS lot status, e.g. ACTIVE or PENDING
     
     Returns:
         ReagentLotResult with success status and details
@@ -783,6 +786,7 @@ def create_reagent_lot(
     safe_expiry_date = xml_escape(str(expiry_date or ""))
     safe_storage_location = xml_escape(str(storage_location or ""))
     safe_notes = xml_escape(str(notes or ""))
+    safe_status = xml_escape(str(status or "ACTIVE"))
     
     xml_payload = f"""<?xml version="1.0" encoding="UTF-8"?>
 <lot:reagent-lot xmlns:lot="http://genologics.com/ri/reagentlot">
@@ -792,7 +796,7 @@ def create_reagent_lot(
     <expiry-date>{safe_expiry_date}</expiry-date>
     <storage-location>{safe_storage_location}</storage-location>
     <notes>{safe_notes}</notes>
-    <status>ACTIVE</status>
+    <status>{safe_status}</status>
 </lot:reagent-lot>"""
     
     try:

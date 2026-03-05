@@ -22,6 +22,12 @@ def metadata_tables_server(input, output, session):
             current_table.set("landing")
 
     @reactive.Effect
+    @reactive.event(input.main_nav_header_click)
+    def reset_metadata_on_tab_header_click():
+        if (input.main_nav_header_click() or "") == "metadata_tables":
+            current_table.set("landing")
+
+    @reactive.Effect
     @reactive.event(input.open_table_projects)
     def open_table_projects():
         current_table.set("projects")
