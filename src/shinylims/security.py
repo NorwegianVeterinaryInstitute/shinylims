@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import os
 from typing import Any
+import unicodedata
+from datetime import datetime, timezone
 
 try:
     from dotenv import load_dotenv
@@ -16,7 +18,9 @@ if load_dotenv is not None:
     load_dotenv()
 
 CONNECT_ALLOWED_GROUP = "116-Molekylærbiologi"
+CONNECT_ALLOWED_GROUPS_ENV = "CONNECT_ALLOWED_GROUPS"
 REAGENTS_ALLOWED_USERS_ENV = "REAGENTS_ALLOWED_USERS"
+REAGENTS_AUTH_DEBUG_ENV = "REAGENTS_AUTH_DEBUG"
 
 
 def is_running_on_connect() -> bool:
@@ -42,6 +46,30 @@ def _as_string_list(value: Any) -> list[str]:
 def _get_allowed_usernames() -> set[str]:
     raw = os.getenv(REAGENTS_ALLOWED_USERS_ENV, "")
     return {user for user in _as_string_list(raw)}
+
+
+def _auth_debug_enabled() -> bool:
+    return (os.getenv(REAGENTS_AUTH_DEBUG_ENV) or "").strip() == "1"
+
+
+def _auth_log(event: str, **fields: Any) -> None:
+    """Emit compact auth debug lines to stdout (visible in Connect logs)."""
+    if not _auth_debug_enabled():
+        return
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    parts = [f"{k}={v}" for k, v in fields.items()]
+    print(f"[reagents-auth] ts={ts} event={event} " + " ".join(parts), flush=True)
+
+
+def _normalize_identity(value: str) -> str:
+    return unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
+
+
+def _get_allowed_connect_groups() -> set[str]:
+    configured = _as_string_list(os.getenv(CONNECT_ALLOWED_GROUPS_ENV, ""))
+    if not configured:
+        configured = [CONNECT_ALLOWED_GROUP]
+    return {_normalize_identity(group) for group in configured if _normalize_identity(group)}
 
 
 def get_runtime_user(session) -> tuple[str | None, list[str]]:
@@ -76,6 +104,11 @@ def get_runtime_user(session) -> tuple[str | None, list[str]]:
     if username is not None:
         username = str(username).strip() or None
 
+    _auth_log(
+        "runtime_user_resolved",
+        username=username or "-",
+        groups="|".join(groups) if groups else "-",
+    )
     return username, groups
 
 
@@ -93,8 +126,38 @@ def is_allowed_reagents_user(session) -> bool:
     if is_running_on_connect():
         allowed_users = _get_allowed_usernames()
         username, groups = get_runtime_user(session)
+        matched_group = False
         if groups:
-            return CONNECT_ALLOWED_GROUP in groups
-        return bool(username and username in allowed_users)
+            normalized_groups = {_normalize_identity(g) for g in groups if g}
+            matched_group = bool(normalized_groups.intersection(_get_allowed_connect_groups()))
+            if matched_group:
+                _auth_log(
+                    "connect_auth_decision",
+                    decision="allow",
+                    reason="group_match",
+                    username=username or "-",
+                    groups="|".join(groups),
+                )
+                return True
 
-    return os.getenv("DEV_BYPASS_SECURITY", "").strip() == "1"
+        user_allowed = bool(username and username in allowed_users)
+        _auth_log(
+            "connect_auth_decision",
+            decision="allow" if user_allowed else "deny",
+            reason="user_fallback" if user_allowed else "no_group_or_user_match",
+            username=username or "-",
+            groups="|".join(groups) if groups else "-",
+            allowed_groups="|".join(sorted(_get_allowed_connect_groups())),
+            user_in_allowlist=user_allowed,
+            matched_group=matched_group,
+        )
+        return user_allowed
+
+    local_allowed = os.getenv("DEV_BYPASS_SECURITY", "").strip() == "1"
+    _auth_log(
+        "local_auth_decision",
+        decision="allow" if local_allowed else "deny",
+        reason="dev_bypass_security",
+        dev_bypass=os.getenv("DEV_BYPASS_SECURITY", ""),
+    )
+    return local_allowed
