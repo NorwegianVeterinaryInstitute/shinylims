@@ -62,7 +62,16 @@ def _auth_log(event: str, **fields: Any) -> None:
 
 
 def _normalize_identity(value: str) -> str:
-    return unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
+    raw = str(value or "").strip()
+    # Connect/headers can occasionally surface UTF-8 bytes decoded as latin-1
+    # (e.g. "MolekylÃ¦rbiologi"). Try to repair before matching.
+    try:
+        repaired = raw.encode("latin-1").decode("utf-8")
+        if repaired:
+            raw = repaired
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
+    return unicodedata.normalize("NFKC", raw).strip().casefold()
 
 
 def _get_allowed_connect_groups() -> set[str]:
