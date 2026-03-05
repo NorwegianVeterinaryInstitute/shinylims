@@ -4,6 +4,7 @@ import re
 
 from src.shinylims.data.db_utils import query_to_dataframe
 from shinylims.tables.reagents import reagents_ui, reagents_server
+from shinylims.security import is_allowed_reagents_user
 
 
 def lab_tools_ui():
@@ -68,6 +69,23 @@ def lab_tools_server(input, output, session):
             )
 
         if page == "reagents":
+            if not is_allowed_reagents_user(session):
+                return ui.div(
+                    ui.div(
+                        ui.input_action_button("back_to_tools", "← Back to Tools", class_="btn btn-outline-secondary btn-sm mb-3")
+                    ),
+                    ui.card(
+                        ui.card_header("📦 Reagent Lot Registration"),
+                        ui.card_body(
+                            ui.h5("You do not have access"),
+                            ui.p(
+                                "Only authorized users in the LIMS_Lab_Users group (or explicit allow-list) may use this tool.",
+                                class_="text-muted mb-0"
+                            ),
+                        ),
+                        class_="border-danger"
+                    )
+                )
             return ui.div(
                 ui.div(
                     ui.input_action_button("back_to_tools", "← Back to Tools", class_="btn btn-outline-secondary btn-sm mb-3")
@@ -122,9 +140,9 @@ def lab_tools_server(input, output, session):
 
             def format_status(status):
                 if status == "Discarded":
-                    return f'<span style="color: red; font-weight: bold;">🗑️ {status}</span>'
+                    return f"🗑️ {status}"
                 if status == "Populated":
-                    return f'<span style="color: green; font-weight: bold;">✅ {status}</span>'
+                    return f"✅ {status}"
                 return status
 
             containers_df["Status"] = containers_df["Status"].apply(format_status)
@@ -141,7 +159,7 @@ def lab_tools_server(input, output, session):
             display_df = containers_df.drop("sort_num", axis=1)
             table_html = display_df.to_html(
                 index=False,
-                escape=False,
+                escape=True,
                 classes="table table-striped table-bordered table-sm",
                 border=0,
             )

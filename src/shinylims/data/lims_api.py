@@ -6,17 +6,19 @@ Location: src/shinylims/data/lims_api.py
 import os
 import re
 import xml.etree.ElementTree as ET
+from xml.sax.saxutils import escape as xml_escape
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from requests.auth import HTTPBasicAuth
 from dataclasses import dataclass
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    load_dotenv = None
 
 # Load environment variables
-load_dotenv()
-
-# Single source of truth for the LIMS API base URI used by the app.
-HARDCODED_LIMS_BASE_URL = "https://nvi-test.claritylims.com/api/v2"
+if load_dotenv is not None:
+    load_dotenv()
 
 # Single source of truth for kit IDs per reagent type.
 REAGENT_KIT_IDS = {
@@ -39,11 +41,11 @@ class LIMSConfig:
     
     @classmethod
     def get_credentials(cls):
-        """Load config for local testing - replace with your values."""
+        """Load LIMS API config from environment variables."""
         return cls(
-            base_url=HARDCODED_LIMS_BASE_URL,
-            username=os.getenv('CLARITY_APIUSER_USERNAME'),
-            password=os.getenv('CLARITY_APIUSER_PASSWORD')
+            base_url=(os.getenv("LIMS_BASE_URL") or "").strip(),
+            username=(os.getenv("LIMS_API_USER") or "").strip(),
+            password=os.getenv("LIMS_API_PASS") or "",
         )
 
 # Reagent kit URIs - these map our reagent types to LIMS kit URIs
@@ -775,15 +777,21 @@ def create_reagent_lot(
         )
     
     url = f"{config.base_url}/reagentlots"
+
+    safe_name = xml_escape(str(name or ""))
+    safe_lot_number = xml_escape(str(lot_number or ""))
+    safe_expiry_date = xml_escape(str(expiry_date or ""))
+    safe_storage_location = xml_escape(str(storage_location or ""))
+    safe_notes = xml_escape(str(notes or ""))
     
     xml_payload = f"""<?xml version="1.0" encoding="UTF-8"?>
 <lot:reagent-lot xmlns:lot="http://genologics.com/ri/reagentlot">
     <reagent-kit uri="{reagent_kit_uri}"/>
-    <name>{name}</name>
-    <lot-number>{lot_number}</lot-number>
-    <expiry-date>{expiry_date}</expiry-date>
-    <storage-location>{storage_location}</storage-location>
-    <notes>{notes}</notes>
+    <name>{safe_name}</name>
+    <lot-number>{safe_lot_number}</lot-number>
+    <expiry-date>{safe_expiry_date}</expiry-date>
+    <storage-location>{safe_storage_location}</storage-location>
+    <notes>{safe_notes}</notes>
     <status>ACTIVE</status>
 </lot:reagent-lot>"""
     

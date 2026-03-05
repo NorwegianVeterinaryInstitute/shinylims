@@ -31,3 +31,20 @@ The idea here is to first implement any changes on an instance running on your l
 For doing code development locally, the api-key and Posit Connect URL must be provided in an .env file. Variables for the credentials are named ```POSIT_API_KEY``` and ```POSIT_SERVER_URL```.
 
 The deployment is handled by the github actions workflow stored in .github\workflows\deploy.yml. This action will create the manifest and requirement files for posit deployment.
+
+## Reagents security and secrets
+
+The Reagents tool reads LIMS credentials only from environment variables:
+
+- `LIMS_BASE_URL`
+- `LIMS_API_USER`
+- `LIMS_API_PASS`
+
+Local development can use a `.env` file (loaded automatically when `python-dotenv` is available).
+See .env.example file.
+
+On Posit Connect, configure these values in **Vars / Secrets** for the content item instead of using `.env`.
+
+Reagents authorization:
+- On Connect, users are allowed if they are in group `LIMS_Lab_Users` (preferred), otherwise by `REAGENTS_ALLOWED_USERS`.
+- Locally (development), access is allowed only when `DEV_BYPASS_SECURITY=1`.

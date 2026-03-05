@@ -1,6 +1,42 @@
 /* ─────────────────────────────────────────────────────────────── */
 /* Utility Classes - Alignment Helpers */
 /* ─────────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: light !important;
+}
+
+html,
+body {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+}
+
+.form-control,
+.form-select,
+input,
+select,
+textarea,
+.selectize-input,
+.selectize-dropdown,
+.selectize-input input,
+.reactable-filter-input,
+.dataTables_filter input,
+.dtsb-input,
+.dtsb-value,
+.dtsb-list-items,
+.dtsb-dropDown,
+.dtsb-searchBuilder input,
+.dtsb-searchBuilder select {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+  border-color: #ced4da !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #6c757d !important;
+}
+
 .dt-center { text-align: center; }
 .dt-left { text-align: left; }
 .nowrap { white-space: nowrap; }

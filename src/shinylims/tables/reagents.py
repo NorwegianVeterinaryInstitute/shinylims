@@ -6,6 +6,7 @@ Allows batch entry of reagent lots for Illumina Clarity LIMS
 from shiny import ui, reactive, render
 import pandas as pd
 from datetime import date
+import html
 import re
 
 # Import the LIMS API module
@@ -17,6 +18,7 @@ from shinylims.data.lims_api import (
     get_latest_prep_sequence_status,
     get_latest_index_sequence_status
 )
+from shinylims.security import get_runtime_user, is_allowed_reagents_user
 
 ##############################
 # REAGENT CONFIGURATION
@@ -267,6 +269,52 @@ def reagents_ui():
                         ),
                         col_widths=[6, 6]
                     ),
+                    ui.tags.script(
+                        """
+                        (function() {
+                          function positionExpiryDatepicker() {
+                            const input = document.getElementById('expiry_date');
+                            if (!input) return;
+
+                            const pickers = Array.from(document.querySelectorAll('.datepicker-dropdown'));
+                            if (!pickers.length) return;
+
+                            // Bootstrap datepicker appends to body; grab currently visible popup.
+                            const picker = pickers.find((el) => el.offsetParent !== null) || pickers[pickers.length - 1];
+                            if (!picker) return;
+
+                            const rect = input.getBoundingClientRect();
+                            const top = window.scrollY + rect.bottom + 6;
+                            const left = window.scrollX + rect.left;
+
+                            picker.style.top = `${top}px`;
+                            picker.style.left = `${left}px`;
+                          }
+
+                          const bind = () => {
+                            const input = document.getElementById('expiry_date');
+                            if (!input) return false;
+                            if (input._expiryDatepickerBound) return true;
+                            input._expiryDatepickerBound = true;
+
+                            input.addEventListener('focus', () => setTimeout(positionExpiryDatepicker, 0));
+                            input.addEventListener('click', () => setTimeout(positionExpiryDatepicker, 0));
+                            window.addEventListener('scroll', positionExpiryDatepicker, { passive: true });
+                            window.addEventListener('resize', positionExpiryDatepicker);
+
+                            document.addEventListener('click', () => setTimeout(positionExpiryDatepicker, 0), true);
+                            return true;
+                          };
+
+                          if (!bind()) {
+                            const iv = setInterval(() => {
+                              if (bind()) clearInterval(iv);
+                            }, 200);
+                            setTimeout(() => clearInterval(iv), 6000);
+                          }
+                        })();
+                        """
+                    ),
                     
                     ui.div(
                         ui.strong("Internal Name: "),
@@ -326,6 +374,12 @@ def reagents_ui():
                                     const userMeta = document.getElementById('lims_user_meta');
                                     const limsUser = userMeta ? userMeta.textContent.trim() : 'Unknown';
                                     const printDate = new Date().toLocaleString();
+                                    const esc = (s) => String(s)
+                                      .replace(/&/g, '&amp;')
+                                      .replace(/</g, '&lt;')
+                                      .replace(/>/g, '&gt;')
+                                      .replace(/"/g, '&quot;')
+                                      .replace(/'/g, '&#39;');
                                     const win = window.open('', '_blank');
                                     if (!win) return;
                                     win.document.write(`
@@ -342,8 +396,8 @@ def reagents_ui():
                                       </head>
                                       <body>
                                         <h2>Pending Reagent Lots Queue</h2>
-                                        <p><strong>Printed:</strong> ${printDate}</p>
-                                        <p><strong>LIMS User:</strong> ${limsUser}</p>
+                                        <p><strong>Printed:</strong> ${esc(printDate)}</p>
+                                        <p><strong>LIMS User:</strong> ${esc(limsUser)}</p>
                                         ${table.outerHTML}
                                       </body>
                                       </html>
@@ -374,7 +428,7 @@ def reagents_ui():
         ),
         
         # Submission results (shows after submit)
-        ui.output_ui("submission_results"),
+        ui.output_ui("submission_results_ui"),
         
         class_="p-3"
     )
@@ -386,9 +440,10 @@ def reagents_ui():
 
 def reagents_server(input, output, session):
     
-    # LIMS auth/session state
+    # LIMS/auth state
     lims_config = reactive.Value(None)
-    lims_connection_status = reactive.Value((False, "Not connected"))
+    # (status_code, details) where status_code is "connected" | "missing" | "failed"
+    lims_connection_status = reactive.Value(("missing", "Missing credentials"))
     prep_sequence_state = reactive.Value((False, "Not checked"))
     index_sequence_state = reactive.Value((False, "Not checked", None))
     
@@ -400,9 +455,10 @@ def reagents_server(input, output, session):
     ]))
     
     last_reagent_type = reactive.Value(None)
-    
+
     submission_results = reactive.Value([])
     submit_check_in_progress = reactive.Value(False)
+    submit_in_progress = reactive.Value(False)
     
     # Latest sequence numbers loaded from LIMS after login/check.
     sequence_numbers = reactive.Value({
@@ -437,7 +493,57 @@ def reagents_server(input, output, session):
         match = re.search(r"#(\d+)", name)
         return int(match.group(1)) if match else None
     
-    default_lims_config = LIMSConfig.get_credentials()
+    def current_runtime_username() -> str | None:
+        username, _ = get_runtime_user(session)
+        return username
+
+    def show_unauthorized(action: str = "perform this action"):
+        ui.notification_show(f"Unauthorized: you are not allowed to {action}.", type="error", duration=6)
+
+    def ensure_authorized(action: str) -> bool:
+        if is_allowed_reagents_user(session):
+            return True
+        show_unauthorized(action)
+        return False
+
+    def _missing_env_fields(config: LIMSConfig) -> list[str]:
+        missing = []
+        if not (config.base_url or "").strip():
+            missing.append("LIMS_BASE_URL")
+        if not (config.username or "").strip():
+            missing.append("LIMS_API_USER")
+        if not (config.password or ""):
+            missing.append("LIMS_API_PASS")
+        return missing
+
+    def _is_lims_ready() -> bool:
+        status_code, _ = lims_connection_status.get()
+        return bool(lims_config.get() is not None and status_code == "connected")
+
+    def refresh_lims_connection(notify: bool = False) -> bool:
+        config = LIMSConfig.get_credentials()
+        missing = _missing_env_fields(config)
+        if missing:
+            lims_config.set(None)
+            lims_connection_status.set(("missing", f"Missing credentials: {', '.join(missing)}"))
+            prep_sequence_state.set((False, "Not checked"))
+            index_sequence_state.set((False, "Not checked", None))
+            if notify:
+                ui.notification_show("Missing credentials in environment variables", type="warning", duration=6)
+            return False
+
+        lims_config.set(config)
+        success, message = test_connection(config)
+        if not success:
+            lims_connection_status.set(("failed", "Connection failed"))
+            prep_sequence_state.set((False, "Not checked"))
+            index_sequence_state.set((False, "Not checked", None))
+            if notify:
+                ui.notification_show("LIMS connection failed", type="error", duration=6)
+            return False
+
+        lims_connection_status.set(("connected", "Connected to LIMS"))
+        return True
 
     def refresh_prep_sequence_state(config):
         status = get_latest_prep_sequence_status(config, PREP_REAGENT_TYPES)
@@ -465,138 +571,68 @@ def reagents_server(input, output, session):
         index_sequence_state.set((True, status.message, status.latest_sequence))
         return True, status.message
 
-    def show_lims_login_modal():
-        existing = lims_config.get()
-        config_for_defaults = existing or default_lims_config
-        default_base_url = config_for_defaults.base_url if config_for_defaults else ""
-        # Do not prefill username from environment defaults.
-        # Keep current in-session username only when user is already logged in.
-        default_username = existing.username if existing else ""
-
+    @reactive.Effect
+    @reactive.event(input.open_tool_reagents)
+    def init_lims_from_env_on_reagents_open():
+        if not is_allowed_reagents_user(session):
+            return
         ui.modal_show(
             ui.modal(
-                ui.p("Enter your Clarity LIMS credentials to continue."),
-                ui.p(
-                    ui.strong("LIMS Base URL: "),
-                    default_base_url,
-                    class_="small text-muted"
+                ui.div(
+                    ui.tags.div(class_="spinner-border text-primary me-2", role="status", aria_hidden="true"),
+                    ui.span("Please wait... logging into LIMS API and doing reagents status checks."),
+                    class_="d-flex align-items-center"
                 ),
-                ui.input_text("lims_username", "Username", value=default_username),
-                ui.input_password("lims_password", "Password"),
-                ui.tags.script(
-                    """
-                    (function() {
-                      // Encourage password managers to detect these as real login fields.
-                      setTimeout(function() {
-                        const user = document.getElementById('lims_username');
-                        const pass = document.getElementById('lims_password');
-                        if (user) {
-                          user.setAttribute('autocomplete', 'username');
-                          user.setAttribute('name', 'username');
-                          user.removeAttribute('data-1p-ignore');
-                          user.removeAttribute('data-lpignore');
-                        }
-                        if (pass) {
-                          pass.setAttribute('autocomplete', 'current-password');
-                          pass.setAttribute('name', 'password');
-                          pass.removeAttribute('data-1p-ignore');
-                          pass.removeAttribute('data-lpignore');
-                        }
-                      }, 0);
-                    })();
-                    """
-                ),
-                title="🔐 LIMS Login",
-                easy_close=True,
-                footer=ui.div(
-                    ui.modal_button("Cancel", class_="btn-secondary"),
-                    ui.input_action_button(
-                        "save_lims_login",
-                        "Connect",
-                        class_="btn-primary ms-2",
-                        onclick="""
-                        this.disabled = true;
-                        this.innerHTML = 'Connecting...';
-                        this.style.opacity = '0.65';
-                        this.style.cursor = 'not-allowed';
-                        """
-                    )
-                )
+                title="Loading Reagents",
+                easy_close=False,
+                footer=None
             )
         )
-
-    @reactive.Effect
-    @reactive.event(input.open_lims_login)
-    def open_lims_login():
-        show_lims_login_modal()
-
-    @reactive.Effect
-    @reactive.event(input.save_lims_login)
-    def save_lims_login():
-        current_config = lims_config.get()
-        base_url = (default_lims_config.base_url or "").strip() if default_lims_config else ""
-        username = (input.lims_username() or "").strip()
-        password = input.lims_password() or ""
-
-        if not base_url:
-            ui.notification_show("LIMS base URL is not configured", type="error")
-            return
-
-        if not username or not password:
-            ui.notification_show("Username and password are required", type="warning")
-            return
-
-        config = LIMSConfig(base_url=base_url, username=username, password=password)
-        success, message = test_connection(config)
-
-        if success:
-            lims_config.set(config)
-            lims_connection_status.set((True, message))
-            is_prep_valid = refresh_prep_sequence_state(config)
-            index_ok, index_message = refresh_index_sequence_state(config)
+        try:
+            if refresh_lims_connection(notify=False):
+                config = lims_config.get()
+                refresh_prep_sequence_state(config)
+                refresh_index_sequence_state(config)
+        finally:
             ui.modal_remove()
-            ui.notification_show("Connected to LIMS", type="message", duration=3)
-            if not is_prep_valid:
+
+    @reactive.Effect
+    @reactive.event(input.refresh_prep_sequence)
+    def refresh_prep_sequence():
+        if not ensure_authorized("refresh LIMS checks"):
+            return
+        if submit_in_progress.get():
+            ui.notification_show("Submission is in progress; wait before refreshing checks.", type="warning")
+            return
+        if submit_check_in_progress.get():
+            ui.notification_show("A check is already in progress.", type="warning")
+            return
+
+        submit_check_in_progress.set(True)
+        config = lims_config.get()
+        try:
+            if not refresh_lims_connection(notify=True):
+                return
+
+            config = lims_config.get()
+            if refresh_prep_sequence_state(config):
+                ui.notification_show("Prep sequence status refreshed", type="message", duration=3)
+            else:
                 ui.notification_show(
-                    "Prep reagent set in LIMS is incomplete/misaligned. Resolve before submitting.",
+                    "Prep sequence check failed. Clean up LIMS prep lots before submitting.",
                     type="warning",
                     duration=8
                 )
+
+            index_ok, index_message = refresh_index_sequence_state(config)
             if not index_ok:
                 ui.notification_show(
                     f"Index sequence refresh failed: {index_message}",
                     type="warning",
                     duration=8
                 )
-        else:
-            if current_config is None:
-                lims_connection_status.set((False, message))
-            ui.notification_show(f"LIMS connection failed: {message}", type="error", duration=8)
-
-    @reactive.Effect
-    @reactive.event(input.refresh_prep_sequence)
-    def refresh_prep_sequence():
-        config = lims_config.get()
-        if not config:
-            ui.notification_show("Log in to LIMS first", type="warning")
-            return
-
-        if refresh_prep_sequence_state(config):
-            ui.notification_show("Prep sequence status refreshed", type="message", duration=3)
-        else:
-            ui.notification_show(
-                "Prep sequence check failed. Clean up LIMS prep lots before submitting.",
-                type="warning",
-                duration=8
-            )
-
-        index_ok, index_message = refresh_index_sequence_state(config)
-        if not index_ok:
-            ui.notification_show(
-                f"Index sequence refresh failed: {index_message}",
-                type="warning",
-                duration=8
-            )
+        finally:
+            submit_check_in_progress.set(False)
 
     @reactive.Effect
     def reset_expiry_on_reagent_type_change():
@@ -608,29 +644,29 @@ def reagents_server(input, output, session):
             return
 
         if reagent_type != previous:
-            ui.update_date("expiry_date", value=None)
+            ui.update_date("expiry_date", value=date.today())
             last_reagent_type.set(reagent_type)
 
     @output
     @render.ui
     def system_status_panel():
         config = lims_config.get()
-        lims_ok, lims_message = lims_connection_status.get()
+        lims_status, lims_message = lims_connection_status.get()
         prep_ok, prep_message = prep_sequence_state.get()
         seq_num = sequence_numbers.get().get("prep", 0)
         index_ok, index_message, index_latest = index_sequence_state.get()
 
-        if config and lims_ok:
-            lims_badge = ui.span("LIMS Connected", class_="badge text-bg-success")
-            lims_summary = f"{config.base_url}"
-        elif config and not lims_ok:
-            lims_badge = ui.span("LIMS Error", class_="badge text-bg-danger")
+        if lims_status == "connected":
+            lims_badge = ui.span("Connected to LIMS", class_="badge text-bg-success")
+            lims_summary = config.base_url if config else "Configured"
+        elif lims_status == "missing":
+            lims_badge = ui.span("Missing credentials", class_="badge text-bg-warning")
             lims_summary = lims_message
         else:
-            lims_badge = ui.span("LIMS Not Logged In", class_="badge text-bg-warning")
-            lims_summary = "Log in to fetch numbering and submit."
+            lims_badge = ui.span("Connection failed", class_="badge text-bg-danger")
+            lims_summary = lims_message
 
-        if config:
+        if _is_lims_ready():
             if prep_ok:
                 prep_badge = ui.span("Prep Check Passed", class_="badge text-bg-success")
                 prep_summary = f"Latest full set: #{seq_num}. Next: #{seq_num + 1}"
@@ -639,9 +675,9 @@ def reagents_server(input, output, session):
                 prep_summary = prep_message
         else:
             prep_badge = ui.span("Prep Check Pending", class_="badge text-bg-secondary")
-            prep_summary = "Available after login."
+            prep_summary = "Available after LIMS connection."
 
-        if config:
+        if _is_lims_ready():
             if index_ok and index_latest is not None:
                 index_badge = ui.span("Index Ready", class_="badge text-bg-success")
                 index_summary = f"Latest: #{index_latest}. Next: #{index_latest + 1}"
@@ -653,28 +689,14 @@ def reagents_server(input, output, session):
                 index_summary = index_message
         else:
             index_badge = ui.span("Index Check Pending", class_="badge text-bg-secondary")
-            index_summary = "Available after login."
+            index_summary = "Available after LIMS connection."
 
-        if config:
-            login_button_label = "Change Login" if lims_ok else "Try Login Again"
-            login_button_class = "btn-sm btn-outline-secondary"
-            refresh_button = ui.input_action_button(
-                "refresh_prep_sequence",
-                "Refresh Prep Check",
-                class_="btn-sm btn-outline-secondary",
-                onclick="""
-                this.disabled = true;
-                this.innerHTML = 'Refreshing...';
-                this.style.opacity = '0.65';
-                this.style.cursor = 'not-allowed';
-                """
-            )
-            login_hint = None
-        else:
-            login_button_label = "🔐 Log in to LIMS"
-            login_button_class = "btn-sm btn-primary"
-            refresh_button = None
-            login_hint = ui.span("Start here", class_="small fw-semibold text-primary")
+        refresh_button = ui.input_action_button(
+            "refresh_prep_sequence",
+            "Refresh Prep Check",
+            class_="btn-sm btn-outline-secondary",
+            disabled=submit_check_in_progress.get() or submit_in_progress.get()
+        )
 
         details_body = ui.div(
             ui.p(ui.strong("LIMS: "), lims_summary, class_="mb-1 small"),
@@ -692,8 +714,6 @@ def reagents_server(input, output, session):
                     class_="d-flex flex-wrap align-items-center gap-2"
                 ),
                 ui.div(
-                    login_hint,
-                    ui.input_action_button("open_lims_login", login_button_label, class_=login_button_class),
                     refresh_button,
                     class_="d-flex align-items-center gap-2"
                 ),
@@ -703,7 +723,7 @@ def reagents_server(input, output, session):
                 ui.tags.summary("Details", class_="small text-muted"),
                 details_body
             ),
-            ui.tags.span(config.username if config else "", id="lims_user_meta", style="display:none;"),
+            ui.tags.span(current_runtime_username() or "unknown", id="lims_user_meta", style="display:none;"),
             class_="mb-3 p-2 border rounded bg-light-subtle"
         )
 
@@ -775,7 +795,9 @@ def reagents_server(input, output, session):
         return None
 
     def can_generate_internal_names(reagent_type):
-        if lims_config.get() is None:
+        if not is_allowed_reagents_user(session):
+            return False
+        if not _is_lims_ready():
             return False
 
         reagent_info = REAGENT_TYPES.get(reagent_type, {})
@@ -790,18 +812,26 @@ def reagents_server(input, output, session):
     @output
     @render.ui
     def submit_button_ui():
-        if lims_config.get() is None:
+        if not is_allowed_reagents_user(session):
             return ui.input_action_button(
                 "submit_to_lims",
-                "Next",
-                class_="btn-success disabled",
+                "Unauthorized",
+                class_="btn-secondary disabled",
                 disabled=True
             )
 
-        if submit_check_in_progress.get():
+        if not _is_lims_ready():
             return ui.input_action_button(
                 "submit_to_lims",
-                "Checking LIMS...",
+                "LIMS unavailable",
+                class_="btn-secondary disabled",
+                disabled=True
+            )
+
+        if submit_check_in_progress.get() or submit_in_progress.get():
+            return ui.input_action_button(
+                "submit_to_lims",
+                "Working...",
                 class_="btn-secondary disabled",
                 disabled=True
             )
@@ -810,6 +840,16 @@ def reagents_server(input, output, session):
             "submit_to_lims",
             "Next",
             class_="btn-success"
+        )
+
+    @output
+    @render.ui
+    def confirm_submit_button_ui():
+        return ui.input_action_button(
+            "confirm_submit",
+            "Submit to LIMS",
+            class_="btn-success ms-2",
+            disabled=submit_check_in_progress.get() or submit_in_progress.get()
         )
 
     @output
@@ -898,12 +938,25 @@ def reagents_server(input, output, session):
     @reactive.Effect
     @reactive.event(input.add_lot)
     def add_lot_to_queue():
+        if not ensure_authorized("add lots to the queue"):
+            return
+        if submit_in_progress.get():
+            ui.notification_show("Submission in progress; wait before editing the queue.", type="warning")
+            return
+
         if not input.lot_number():
             ui.notification_show("Please enter a lot number", type="warning")
             return
         
         if not input.expiry_date():
             ui.notification_show("Please enter an expiry date", type="warning")
+            return
+        if str(input.expiry_date()) == str(date.today()):
+            ui.notification_show(
+                "Expiry Date cannot be today's date. Please choose the actual reagent expiry date.",
+                type="warning",
+                duration=5
+            )
             return
         
         reagent_type, set_letter = get_selected_reagent()
@@ -1015,12 +1068,16 @@ def reagents_server(input, output, session):
         """
         
         for idx, row in display_df.iterrows():
+            internal_name = html.escape(str(row["Internal Name"]))
+            reagent_type = html.escape(str(row["Reagent Type"]))
+            lot_number = html.escape(str(row["Lot Number"]))
+            expiry_date = html.escape(str(row["Expiry Date"]))
             table_html += f"""
                 <tr>
-                    <td><strong>{row['Internal Name']}</strong></td>
-                    <td>{row['Reagent Type']}</td>
-                    <td>{row['Lot Number']}</td>
-                    <td>{row['Expiry Date']}</td>
+                    <td><strong>{internal_name}</strong></td>
+                    <td>{reagent_type}</td>
+                    <td>{lot_number}</td>
+                    <td>{expiry_date}</td>
                     <td>
                         <button
                             type="button"
@@ -1091,6 +1148,15 @@ def reagents_server(input, output, session):
     @reactive.Effect
     @reactive.event(input.submit_to_lims)
     def submit_to_lims():
+        if not ensure_authorized("submit to LIMS"):
+            return
+        if submit_in_progress.get():
+            ui.notification_show("Submission is already in progress.", type="warning")
+            return
+        if submit_check_in_progress.get():
+            ui.notification_show("Submission check is already in progress.", type="warning")
+            return
+
         df = pending_lots.get()
         
         if df.empty:
@@ -1126,9 +1192,12 @@ def reagents_server(input, output, session):
 
                 p.set(1, message="Validating LIMS login...")
                 config = lims_config.get()
+                if not refresh_lims_connection(notify=True):
+                    ui.notification_show("LIMS is unavailable. Set env credentials and retry.", type="warning")
+                    return
+
+                config = lims_config.get()
                 if not config:
-                    show_lims_login_modal()
-                    ui.notification_show("Log in to LIMS before submitting", type="warning")
                     return
 
                 p.set(2, message="Checking current prep/index status in LIMS...")
@@ -1154,7 +1223,7 @@ def reagents_server(input, output, session):
             confirm_df = df[["Internal Name", "Reagent Type", "Lot Number"]].copy()
             confirm_table = confirm_df.to_html(
                 index=False,
-                escape=False,
+                escape=True,
                 classes="table table-sm table-striped table-bordered confirm-submit-table",
                 border=0
             )
@@ -1201,26 +1270,7 @@ def reagents_server(input, output, session):
                 size="xl",
                 footer=ui.div(
                     ui.modal_button("Cancel", class_="btn-secondary"),
-                        ui.input_action_button(
-                            "confirm_submit", 
-                            "Submit to LIMS", 
-                            class_="btn-success ms-2",
-                            onclick="""
-                            const originalText = this.innerHTML;
-                            this.disabled = true;
-                            this.innerHTML = 'Submitting...';
-                            this.style.opacity = '0.65';
-                            this.style.cursor = 'not-allowed';
-                            setTimeout(() => {
-                                if (document.body.contains(this)) {
-                                    this.disabled = false;
-                                    this.innerHTML = originalText;
-                                    this.style.opacity = '';
-                                    this.style.cursor = '';
-                                }
-                            }, 8000);
-                            """
-                        )
+                    ui.output_ui("confirm_submit_button_ui")
                     )
                 )
             )
@@ -1231,197 +1281,219 @@ def reagents_server(input, output, session):
     @reactive.Effect
     @reactive.event(input.confirm_submit)
     def do_submit():
+        if not ensure_authorized("confirm LIMS submission"):
+            return
+        if submit_in_progress.get():
+            ui.notification_show("Submission is already in progress.", type="warning")
+            return
+
+        submit_in_progress.set(True)
         ui.modal_remove()
-        
-        df = pending_lots.get()
-        config = lims_config.get()
-        results = []
-        submission_entries = []
-        
-        with ui.Progress(min=0, max=len(df)) as p:
-            p.set(message="Submitting to LIMS...")
-            
-            for idx, row in df.iterrows():
-                p.set(idx, message=f"Creating {row['Internal Name']}...")
-                
-                result = create_reagent_lot(
-                    config=config,
-                    name=row["Internal Name"],
-                    lot_number=row["Lot Number"],
-                    reagent_type=row["Reagent Type"],
-                    expiry_date=row["Expiry Date"],
-                    storage_location="",
-                    notes=f"Created via Shiny App on {date.today()}"
+        try:
+            if not refresh_lims_connection(notify=True):
+                ui.notification_show("LIMS is unavailable. Submission aborted.", type="error")
+                return
+
+            df = pending_lots.get()
+            config = lims_config.get()
+            if df.empty or config is None:
+                return
+
+            results = []
+            submission_entries = []
+            requester = current_runtime_username() or "unknown"
+
+            with ui.Progress(min=0, max=len(df)) as p:
+                p.set(message="Submitting to LIMS...")
+
+                for idx, row in df.iterrows():
+                    p.set(idx, message=f"Creating {row['Internal Name']}...")
+
+                    result = create_reagent_lot(
+                        config=config,
+                        name=row["Internal Name"],
+                        lot_number=row["Lot Number"],
+                        reagent_type=row["Reagent Type"],
+                        expiry_date=row["Expiry Date"],
+                        storage_location="",
+                        notes=f"Created via Shiny App on {date.today()} by {requester}"
+                    )
+
+                    results.append(result)
+                    submission_entries.append({
+                        "row": row,
+                        "result": result
+                    })
+
+                p.set(len(df), message="Done!")
+
+            submission_results.set(results)
+
+            # Count successes/failures
+            successes = sum(1 for r in results if r.success)
+            failures = len(results) - successes
+
+            if failures == 0:
+                ui.notification_show(
+                    f"✅ All {successes} lots created successfully!",
+                    type="message",
+                    duration=5
                 )
-                
-                results.append(result)
-                submission_entries.append({
-                    "row": row,
-                    "result": result
+                # Clear the queue on full success
+                pending_lots.set(pd.DataFrame(columns=[
+                    "Reagent Type", "Lot Number",
+                    "Received Date", "Expiry Date", "Internal Name", "Set Letter",
+                    "MiSeq Kit Type", "RGT Number"
+                ]))
+            else:
+                ui.notification_show(
+                    f"⚠️ {successes} succeeded, {failures} failed",
+                    type="warning",
+                    duration=10
+                )
+
+            result_rows = []
+            failed_log_lines = []
+            for entry in submission_entries:
+                row = entry["row"]
+                result = entry["result"]
+                status_text = "Success" if result.success else "Failed"
+                lims_id = result.lims_id or "-"
+                message_text = result.message or "-"
+                result_rows.append({
+                    "Internal Name": row["Internal Name"],
+                    "Type": row["Reagent Type"],
+                    "Lot Number": row["Lot Number"],
+                    "Status": status_text,
+                    "LIMS ID": lims_id,
+                    "Message": message_text,
                 })
-            
-            p.set(len(df), message="Done!")
-        
-        submission_results.set(results)
-        
-        # Count successes/failures
-        successes = sum(1 for r in results if r.success)
-        failures = len(results) - successes
-        
-        if failures == 0:
-            ui.notification_show(
-                f"✅ All {successes} lots created successfully!", 
-                type="message",
-                duration=5
+                if not result.success:
+                    failed_log_lines.append(
+                        f"- {row['Internal Name']} | {row['Reagent Type']} | lot={row['Lot Number']} | {message_text}"
+                    )
+
+            result_df = pd.DataFrame(result_rows)
+            result_table = result_df.to_html(
+                index=False,
+                escape=True,
+                classes="table table-sm table-striped table-bordered submit-result-table",
+                border=0
             )
-            # Clear the queue on full success
-            pending_lots.set(pd.DataFrame(columns=[
-                "Reagent Type", "Lot Number",
-                "Received Date", "Expiry Date", "Internal Name", "Set Letter",
-                "MiSeq Kit Type", "RGT Number"
-            ]))
-        else:
-            ui.notification_show(
-                f"⚠️ {successes} succeeded, {failures} failed", 
-                type="warning",
-                duration=10
+            logs_text = "\n".join(failed_log_lines) if failed_log_lines else "No errors."
+            modal_title = "✅ Submission Complete" if failures == 0 else "⚠️ Submission Completed With Errors"
+            summary_class = "alert alert-success py-2 px-3 mb-3" if failures == 0 else "alert alert-warning py-2 px-3 mb-3"
+            summary_text = f"{successes} succeeded, {failures} failed."
+            print_reminder = (
+                "Please print this result now so errors can be reviewed and resolved."
+                if failures > 0
+                else "Optional: print this result for your records."
             )
 
-        result_rows = []
-        failed_log_lines = []
-        for entry in submission_entries:
-            row = entry["row"]
-            result = entry["result"]
-            status_text = "Success" if result.success else "Failed"
-            lims_id = result.lims_id or "-"
-            message_text = result.message or "-"
-            result_rows.append({
-                "Internal Name": row["Internal Name"],
-                "Type": row["Reagent Type"],
-                "Lot Number": row["Lot Number"],
-                "Status": status_text,
-                "LIMS ID": lims_id,
-                "Message": message_text,
-            })
-            if not result.success:
-                failed_log_lines.append(
-                    f"- {row['Internal Name']} | {row['Reagent Type']} | lot={row['Lot Number']} | {message_text}"
-                )
-
-        result_df = pd.DataFrame(result_rows)
-        result_table = result_df.to_html(
-            index=False,
-            escape=True,
-            classes="table table-sm table-striped table-bordered submit-result-table",
-            border=0
-        )
-        logs_text = "\n".join(failed_log_lines) if failed_log_lines else "No errors."
-        modal_title = "✅ Submission Complete" if failures == 0 else "⚠️ Submission Completed With Errors"
-        summary_class = "alert alert-success py-2 px-3 mb-3" if failures == 0 else "alert alert-warning py-2 px-3 mb-3"
-        summary_text = f"{successes} succeeded, {failures} failed."
-        print_reminder = (
-            "Please print this result now so errors can be reviewed and resolved."
-            if failures > 0
-            else "Optional: print this result for your records."
-        )
-
-        ui.modal_show(
-            ui.modal(
-                ui.div(
-                    ui.div(summary_text, class_=summary_class),
-                    ui.div(print_reminder, class_="alert alert-info py-2 px-3 mb-3"),
-                    ui.HTML(f"""
-                        <style>
-                            .submit-result-wrap {{
-                                max-height: 42vh;
-                                overflow-y: auto;
-                                overflow-x: auto;
-                            }}
-                            .submit-result-table {{
-                                width: 100%;
-                                table-layout: fixed;
-                                margin-bottom: 0;
-                            }}
-                            .submit-result-table th,
-                            .submit-result-table td {{
-                                text-align: left !important;
-                                vertical-align: middle;
-                            }}
-                            .submit-result-table th {{
-                                position: sticky;
-                                top: 0;
-                                background: #f8f9fa;
-                                z-index: 2;
-                            }}
-                        </style>
-                        <div id="submit_result_printable" class="submit-result-wrap">{result_table}</div>
-                    """),
-                    ui.h6("Admin Error Log", class_="mt-3"),
-                    ui.tags.pre(
-                        logs_text,
-                        id="submit_result_error_log",
-                        class_="p-2 bg-light border rounded small",
-                        style="max-height: 180px; overflow:auto; white-space: pre-wrap;"
-                    ),
-                ),
-                title=modal_title,
-                easy_close=True,
-                size="l",
-                footer=ui.div(
-                    ui.input_action_button(
-                        "print_submit_result",
-                        "🖨️ Print Result",
-                        class_="btn-outline-secondary",
-                        onclick="""
-                        const tableWrap = document.getElementById('submit_result_printable');
-                        if (!tableWrap) return;
-                        const table = tableWrap.querySelector('table');
-                        if (!table) return;
-                        const logEl = document.getElementById('submit_result_error_log');
-                        const logText = logEl ? logEl.textContent : 'No errors.';
-                        const summary = tableWrap.parentElement?.querySelector('.alert')?.textContent?.trim() || '';
-                        const printDate = new Date().toLocaleString();
-
-                        const win = window.open('', '_blank');
-                        if (!win) return;
-                        win.document.write(`
-                          <html>
-                          <head>
-                            <title>LIMS Submission Result</title>
+            ui.modal_show(
+                ui.modal(
+                    ui.div(
+                        ui.div(summary_text, class_=summary_class),
+                        ui.div(print_reminder, class_="alert alert-info py-2 px-3 mb-3"),
+                        ui.HTML(f"""
                             <style>
-                              body { font-family: Arial, sans-serif; margin: 20px; }
-                              h2 { margin-bottom: 10px; }
-                              table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 10px; }
-                              th, td { border: 1px solid #ccc; padding: 8px; text-align: left; word-break: break-word; }
-                              th { background: #f2f2f2; }
-                              pre { white-space: pre-wrap; border: 1px solid #ccc; padding: 8px; background: #fafafa; }
+                                .submit-result-wrap {{
+                                    max-height: 42vh;
+                                    overflow-y: auto;
+                                    overflow-x: auto;
+                                }}
+                                .submit-result-table {{
+                                    width: 100%;
+                                    table-layout: fixed;
+                                    margin-bottom: 0;
+                                }}
+                                .submit-result-table th,
+                                .submit-result-table td {{
+                                    text-align: left !important;
+                                    vertical-align: middle;
+                                }}
+                                .submit-result-table th {{
+                                    position: sticky;
+                                    top: 0;
+                                    background: #f8f9fa;
+                                    z-index: 2;
+                                }}
                             </style>
-                          </head>
-                          <body>
-                            <h2>LIMS Submission Result</h2>
-                            <p><strong>Printed:</strong> ${printDate}</p>
-                            <p><strong>Summary:</strong> ${summary}</p>
-                            ${table.outerHTML}
-                            <h3 style="margin-top: 16px;">Admin Error Log</h3>
-                            <pre>${logText}</pre>
-                          </body>
-                          </html>
-                        `);
-                        win.document.close();
-                        win.focus();
-                        win.print();
-                        win.close();
-                        """
+                            <div id="submit_result_printable" class="submit-result-wrap">{result_table}</div>
+                        """),
+                        ui.h6("Admin Error Log", class_="mt-3"),
+                        ui.tags.pre(
+                            logs_text,
+                            id="submit_result_error_log",
+                            class_="p-2 bg-light border rounded small",
+                            style="max-height: 180px; overflow:auto; white-space: pre-wrap;"
+                        ),
                     ),
-                    ui.modal_button("Close", class_="btn-secondary ms-2")
+                    title=modal_title,
+                    easy_close=True,
+                    size="l",
+                    footer=ui.div(
+                        ui.input_action_button(
+                            "print_submit_result",
+                            "🖨️ Print Result",
+                            class_="btn-outline-secondary",
+                            onclick="""
+                            const tableWrap = document.getElementById('submit_result_printable');
+                            if (!tableWrap) return;
+                            const table = tableWrap.querySelector('table');
+                            if (!table) return;
+                            const logEl = document.getElementById('submit_result_error_log');
+                            const logText = logEl ? logEl.textContent : 'No errors.';
+                            const summary = tableWrap.parentElement?.querySelector('.alert')?.textContent?.trim() || '';
+                            const printDate = new Date().toLocaleString();
+                            const esc = (s) => String(s)
+                              .replace(/&/g, '&amp;')
+                              .replace(/</g, '&lt;')
+                              .replace(/>/g, '&gt;')
+                              .replace(/"/g, '&quot;')
+                              .replace(/'/g, '&#39;');
+
+                            const win = window.open('', '_blank');
+                            if (!win) return;
+                            win.document.write(`
+                              <html>
+                              <head>
+                                <title>LIMS Submission Result</title>
+                                <style>
+                                  body { font-family: Arial, sans-serif; margin: 20px; }
+                                  h2 { margin-bottom: 10px; }
+                                  table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 10px; }
+                                  th, td { border: 1px solid #ccc; padding: 8px; text-align: left; word-break: break-word; }
+                                  th { background: #f2f2f2; }
+                                  pre { white-space: pre-wrap; border: 1px solid #ccc; padding: 8px; background: #fafafa; }
+                                </style>
+                              </head>
+                              <body>
+                                <h2>LIMS Submission Result</h2>
+                                <p><strong>Printed:</strong> ${esc(printDate)}</p>
+                                <p><strong>Summary:</strong> ${esc(summary)}</p>
+                                ${table.outerHTML}
+                                <h3 style="margin-top: 16px;">Admin Error Log</h3>
+                                <pre>${esc(logText)}</pre>
+                              </body>
+                              </html>
+                            `);
+                            win.document.close();
+                            win.focus();
+                            win.print();
+                            win.close();
+                            """
+                        ),
+                        ui.modal_button("Close", class_="btn-secondary ms-2")
+                    )
                 )
             )
-        )
 
-        # Refresh prep state after submission so next number/status reflects LIMS.
-        if config:
+            # Refresh prep/index state after submission so next number/status reflects LIMS.
             refresh_prep_sequence_state(config)
             refresh_index_sequence_state(config)
+        finally:
+            submit_in_progress.set(False)
     
     # Show submission results
     @output
@@ -1435,11 +1507,14 @@ def reagents_server(input, output, session):
         rows_html = ""
         for r in results:
             if r.success:
-                status = f'<span class="text-success">✅ {r.lims_id}</span>'
+                status_value = html.escape(str(r.lims_id or ""))
+                status = f'<span class="text-success">✅ {status_value}</span>'
             else:
-                status = f'<span class="text-danger">❌ {r.message}</span>'
+                status_value = html.escape(str(r.message or ""))
+                status = f'<span class="text-danger">❌ {status_value}</span>'
             
-            rows_html += f"<tr><td>{r.name}</td><td>{status}</td></tr>"
+            name_value = html.escape(str(r.name or ""))
+            rows_html += f"<tr><td>{name_value}</td><td>{status}</td></tr>"
         
         return ui.card(
             ui.card_header("Submission Results"),
