@@ -50,3 +50,38 @@ Reagents authorization:
   - `CONNECT_ALLOWED_GROUP` (required Connect group)
   - `CONNECT_ALLOWED_USERS` (optional individual usernames)
   - `LOCAL_DEV_ALLOW_ALL` for local development behavior
+
+## Maintaining Reagents Tool Configuration
+
+The reagent register is defined in a config module:
+
+- `src/shinylims/config/reagents.py`
+
+Edit only `REAGENT_DEFINITIONS` in that file. Each entry has:
+
+- `type_name`: Reagent type name used in UI and LIMS logic.
+- `kit_id`: Clarity reagent kit ID (digits only).
+- `naming_group`: One of `prep`, `index`, `miseq`, `phix`.
+- `requires_rgt_number`: `True` if RGT scan is required.
+- `requires_miseq_kit_type`: `True` if MiSeq kit type is required.
+- `variants`: scanner/select options for that type.
+
+Each variant supports:
+
+- `ref`: scanned barcode / selector value.
+- `label`: dropdown text shown in UI.
+- `set_letter`: required for index variants.
+- `miseq_kit_type`: required when `requires_miseq_kit_type=True`.
+
+Common maintenance tasks:
+
+1. Change ref barcode or display label: update the relevant `variants` item only.
+2. Change LIMS kit mapping: update `kit_id` for that reagent type.
+3. Add a new reagent type: add one new entry with metadata + variants.
+
+The module validates configuration at import and fails early on issues (duplicate type names, duplicate refs, invalid naming group, missing required fields, etc.).
+
+Derived exports used by the app are generated automatically (`REAGENT_TYPES`, `SCANNABLE_REAGENTS`, `PREP_REAGENT_TYPES`, `REAGENT_KIT_IDS`, selector maps), so `tables/reagents.py` and `data/lims_api.py` should not be edited for reagent list changes.
+
+- `PREP_REAGENT_TYPES` is generated automatically from `REAGENT_TYPES` where `naming_group == "prep"`.
+- Prep reagents are currently submitted with LIMS status `PENDING` in the tool logic.

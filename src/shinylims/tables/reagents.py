@@ -5,9 +5,10 @@ Allows batch entry of reagent lots for Illumina Clarity LIMS
 
 from shiny import ui, reactive, render
 import pandas as pd
-from datetime import date
+from datetime import date, datetime, UTC
 import html
 import re
+from urllib.parse import urlparse
 
 # Import the LIMS API module
 from shinylims.data.lims_api import (
@@ -18,154 +19,19 @@ from shinylims.data.lims_api import (
     get_latest_prep_sequence_status,
     get_latest_index_sequence_status
 )
+from shinylims.config.reagents import (
+    INDEX_REAGENT_TYPE,
+    PREP_REAGENT_TYPES,
+    REAGENT_SELECTOR_CHOICES,
+    REAGENT_TYPES,
+    SELECTOR_TO_MISEQ_KIT_TYPE,
+    SELECTOR_TO_REAGENT,
+)
 from shinylims.security import (
     get_runtime_user,
     is_allowed_reagents_user,
     reagents_access_denied_message,
 )
-
-##############################
-# REAGENT CONFIGURATION
-##############################
-
-REAGENT_TYPES = {
-    "IDT-ILMN DNA/RNA UD Index Sets": {
-        "naming_group": "index",
-    },
-    "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp": {
-        "naming_group": "prep",
-    },
-    "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp": {
-        "naming_group": "prep",
-    },
-    "Illumina DNA Prep – Tagmentation (M) Beads 96sp": {
-        "naming_group": "prep",
-    },
-    "MiSeq Reagent Kit (Box 1 of 2)": {
-        "naming_group": "miseq",
-        "requires_rgt_number": True,
-        "requires_miseq_kit_type": True
-    },
-    "MiSeq Reagent Kit (Box 2 of 2)": {
-        "naming_group": "miseq",
-        "requires_rgt_number": True,
-        "requires_miseq_kit_type": True
-    },
-    "PhiX Control v3": {
-        "naming_group": "phix",
-        "requires_rgt_number": True
-    }
-}
-
-PREP_REAGENT_TYPES = [
-    reagent_type
-    for reagent_type, reagent_info in REAGENT_TYPES.items()
-    if reagent_info.get("naming_group") == "prep"
-]
-
-# Single source of truth for scanner/dropdown options.
-# Add new reagents by adding rows here; selector maps are generated below.
-SCANNABLE_REAGENTS = [
-    {
-        "ref": "20049006",
-        "label": "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp (Ref: 20049006)",
-        "reagent_type": "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp",
-    },
-    {
-        "ref": "20015829",
-        "label": "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp (Ref: 20015829)",
-        "reagent_type": "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp",
-    },
-    {
-        "ref": "20015880",
-        "label": "Illumina DNA Prep – Tagmentation (M) Beads 96sp (Ref: 20015880)",
-        "reagent_type": "Illumina DNA Prep – Tagmentation (M) Beads 96sp",
-    },
-    {
-        "ref": "20091646",
-        "label": "IDT-ILMN DNA/RNA UD Index Sets - Set A (Ref: 20091646)",
-        "reagent_type": "IDT-ILMN DNA/RNA UD Index Sets",
-        "set_letter": "A",
-    },
-    {
-        "ref": "20091647",
-        "label": "IDT-ILMN DNA/RNA UD Index Sets - Set B (Ref: 20091647)",
-        "reagent_type": "IDT-ILMN DNA/RNA UD Index Sets",
-        "set_letter": "B",
-    },
-    {
-        "ref": "20091648",
-        "label": "IDT-ILMN DNA/RNA UD Index Sets - Set C (Ref: 20091648)",
-        "reagent_type": "IDT-ILMN DNA/RNA UD Index Sets",
-        "set_letter": "C",
-    },
-    {
-        "ref": "20091649",
-        "label": "IDT-ILMN DNA/RNA UD Index Sets - Set D (Ref: 20091649)",
-        "reagent_type": "IDT-ILMN DNA/RNA UD Index Sets",
-        "set_letter": "D",
-    },
-    {
-        "ref": "15043895",
-        "label": "MiSeq Reagent Kit v3 (Box 1 of 2) (Ref: 15043895)",
-        "reagent_type": "MiSeq Reagent Kit (Box 1 of 2)",
-        "miseq_kit_type": "v3",
-    },
-    {
-        "ref": "15043894",
-        "label": "MiSeq Reagent Kit v3 (Box 2 of 2) (Ref: 15043894)",
-        "reagent_type": "MiSeq Reagent Kit (Box 2 of 2)",
-        "miseq_kit_type": "v3",
-    },
-    {
-        "ref": "11111111",
-        "label": "MiSeq Reagent Kit v2 nano (Box 1 of 2) (Ref: 11111111)",
-        "reagent_type": "MiSeq Reagent Kit (Box 1 of 2)",
-        "miseq_kit_type": "v2 nano",
-    },
-    {
-        "ref": "15036714",
-        "label": "MiSeq Reagent Kit v2 nano (Box 2 of 2) (Ref: 15036714)",
-        "reagent_type": "MiSeq Reagent Kit (Box 2 of 2)",
-        "miseq_kit_type": "v2 nano",
-    },
-    {
-        "ref": "22222222",
-        "label": "MiSeq Reagent Kit v2 micro (Box 1 of 2) (Ref: 22222222)",
-        "reagent_type": "MiSeq Reagent Kit (Box 1 of 2)",
-        "miseq_kit_type": "v2 micro",
-    },
-    {
-        "ref": "33333333",
-        "label": "MiSeq Reagent Kit v2 micro (Box 2 of 2) (Ref: 33333333)",
-        "reagent_type": "MiSeq Reagent Kit (Box 2 of 2)",
-        "miseq_kit_type": "v2 micro",
-    },
-    {
-        "ref": "15017666",
-        "label": "PhiX Control v3 (Ref: 15017666)",
-        "reagent_type": "PhiX Control v3",
-    },
-]
-
-
-def _build_reagent_selector_maps():
-    choices = {"": ""}
-    selector_to_reagent = {}
-    selector_to_miseq_kit_type = {}
-
-    for item in SCANNABLE_REAGENTS:
-        ref = item["ref"]
-        choices[ref] = item["label"]
-        selector_to_reagent[ref] = (item["reagent_type"], item.get("set_letter"))
-        miseq_kit_type = item.get("miseq_kit_type")
-        if miseq_kit_type:
-            selector_to_miseq_kit_type[ref] = miseq_kit_type
-
-    return choices, selector_to_reagent, selector_to_miseq_kit_type
-
-
-REAGENT_SELECTOR_CHOICES, SELECTOR_TO_REAGENT, SELECTOR_TO_MISEQ_KIT_TYPE = _build_reagent_selector_maps()
 
 
 ##############################
@@ -475,6 +341,25 @@ def reagents_server(input, output, session):
         "index": 0
     })
 
+    def _safe_base_url_for_logs(base_url: str) -> str:
+        parsed = urlparse((base_url or "").strip())
+        if parsed.scheme and parsed.hostname:
+            host = parsed.hostname
+            if parsed.port:
+                host = f"{host}:{parsed.port}"
+            path = (parsed.path or "").rstrip("/")
+            return f"{parsed.scheme}://{host}{path}"
+        return (base_url or "").strip()
+
+    def _log_lims_ui_event(event: str, **fields: object) -> None:
+        ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        parts = [f"{key}={value}" for key, value in fields.items()]
+        payload = " ".join(parts)
+        if payload:
+            print(f"[reagents-lims-ui] ts={ts} event={event} {payload}")
+        else:
+            print(f"[reagents-lims-ui] ts={ts} event={event}")
+
     def recalculate_index_offsets():
         """Recalculate index offsets from current pending queue."""
         df = pending_lots.get()
@@ -484,8 +369,7 @@ def reagents_server(input, output, session):
         }
 
         if not df.empty and "Set Letter" in df.columns:
-            index_type = "IDT-ILMN DNA/RNA UD Index Sets"
-            count = int((df["Reagent Type"] == index_type).sum())
+            count = int((df["Reagent Type"] == INDEX_REAGENT_TYPE).sum())
             offsets["index"] = count
 
         pending_sequence_offsets.set(offsets)
@@ -531,11 +415,22 @@ def reagents_server(input, output, session):
     def refresh_lims_connection(notify: bool = False) -> bool:
         config = LIMSConfig.get_credentials()
         missing = _missing_env_fields(config)
+        _log_lims_ui_event(
+            "refresh_connection_start",
+            base_url=_safe_base_url_for_logs(config.base_url),
+            username_set=bool((config.username or "").strip()),
+            password_set=bool(config.password),
+            notify=notify,
+        )
         if missing:
             lims_config.set(None)
             lims_connection_status.set(("missing", f"Missing credentials: {', '.join(missing)}"))
             prep_sequence_state.set((False, "Not checked"))
             index_sequence_state.set((False, "Not checked", None))
+            _log_lims_ui_event(
+                "refresh_connection_missing_credentials",
+                missing_fields=",".join(missing),
+            )
             if notify:
                 ui.notification_show("Missing credentials in environment variables", type="warning", duration=6)
             return False
@@ -543,14 +438,19 @@ def reagents_server(input, output, session):
         lims_config.set(config)
         success, message = test_connection(config)
         if not success:
-            lims_connection_status.set(("failed", "Connection failed"))
+            lims_connection_status.set(("failed", "Connection failed (see logs)"))
             prep_sequence_state.set((False, "Not checked"))
             index_sequence_state.set((False, "Not checked", None))
+            _log_lims_ui_event(
+                "refresh_connection_failed",
+                reason=message,
+            )
             if notify:
                 ui.notification_show("LIMS connection failed", type="error", duration=6)
             return False
 
         lims_connection_status.set(("connected", "Connected to LIMS"))
+        _log_lims_ui_event("refresh_connection_success")
         return True
 
     def refresh_prep_sequence_state(config):
@@ -584,6 +484,7 @@ def reagents_server(input, output, session):
     def init_lims_from_env_on_reagents_open():
         if not is_allowed_reagents_user(session):
             return
+        _log_lims_ui_event("reagents_open_init_start")
         ui.modal_show(
             ui.modal(
                 ui.div(
@@ -599,10 +500,17 @@ def reagents_server(input, output, session):
         try:
             if refresh_lims_connection(notify=False):
                 config = lims_config.get()
-                refresh_prep_sequence_state(config)
-                refresh_index_sequence_state(config)
+                prep_ok = refresh_prep_sequence_state(config)
+                index_ok, index_msg = refresh_index_sequence_state(config)
+                _log_lims_ui_event(
+                    "reagents_open_init_checks_complete",
+                    prep_ok=prep_ok,
+                    index_ok=index_ok,
+                    index_message=index_msg,
+                )
         finally:
             ui.modal_remove()
+            _log_lims_ui_event("reagents_open_init_done")
 
     @reactive.Effect
     @reactive.event(input.refresh_prep_sequence)

@@ -6,11 +6,14 @@ Location: src/shinylims/data/lims_api.py
 import os
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime, UTC
 from xml.sax.saxutils import escape as xml_escape
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlparse
 import requests
 from requests.auth import HTTPBasicAuth
 from dataclasses import dataclass
+from shinylims.config.reagents import INDEX_REAGENT_TYPE, REAGENT_KIT_IDS
 try:
     from dotenv import load_dotenv
 except ImportError:  # pragma: no cover
@@ -20,16 +23,28 @@ except ImportError:  # pragma: no cover
 if load_dotenv is not None:
     load_dotenv()
 
-# Single source of truth for kit IDs per reagent type.
-REAGENT_KIT_IDS = {
-    "IDT-ILMN DNA/RNA UD Index Sets": "302",
-    "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp": "203",
-    "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp": "202",
-    "Illumina DNA Prep – Tagmentation (M) Beads 96sp": "102",
-    "MiSeq Reagent Kit (Box 1 of 2)": "35",
-    "MiSeq Reagent Kit (Box 2 of 2)": "252",
-    "PhiX Control v3": "152",
-}
+
+def _safe_base_url_for_logs(base_url: str) -> str:
+    """Return a sanitized URL for logs (never includes credentials)."""
+    parsed = urlparse((base_url or "").strip())
+    if parsed.scheme and parsed.hostname:
+        host = parsed.hostname
+        if parsed.port:
+            host = f"{host}:{parsed.port}"
+        path = (parsed.path or "").rstrip("/")
+        return f"{parsed.scheme}://{host}{path}"
+    return (base_url or "").strip()
+
+
+def _log_lims_event(event: str, **fields: object) -> None:
+    """Emit one-line log events that render cleanly in Connect logs."""
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    parts = [f"{key}={value}" for key, value in fields.items()]
+    payload = " ".join(parts)
+    if payload:
+        print(f"[reagents-lims] ts={ts} event={event} {payload}")
+    else:
+        print(f"[reagents-lims] ts={ts} event={event}")
 
 
 @dataclass
@@ -464,14 +479,14 @@ def get_latest_index_sequence_status(
     """
     latest_sequence = None
     kit_uris = get_reagent_kit_uris(config.base_url)
-    index_kit_uri = kit_uris.get("IDT-ILMN DNA/RNA UD Index Sets")
+    index_kit_uri = kit_uris.get(INDEX_REAGENT_TYPE)
     index_kit_id = _extract_reagentkit_id(index_kit_uri)
 
     if not index_kit_id:
         return IndexSequenceStatus(
             success=False,
             latest_sequence=None,
-            message="Missing reagent kit URI mapping for IDT index kit.",
+            message=f"Missing reagent kit URI mapping for index kit: {INDEX_REAGENT_TYPE}.",
         )
 
     try:
@@ -853,18 +868,44 @@ def test_connection(config: LIMSConfig) -> tuple[bool, str]:
     Returns:
         Tuple of (success, message)
     """
+    endpoint = f"{config.base_url}/reagentkits"
+    _log_lims_event(
+        "test_connection_start",
+        endpoint=_safe_base_url_for_logs(endpoint),
+        username_set=bool((config.username or "").strip()),
+        password_set=bool(config.password),
+    )
+
     try:
         response = requests.get(
-            f"{config.base_url}/reagentkits",
+            endpoint,
             auth=HTTPBasicAuth(config.username, config.password),
             headers={"Accept": "application/xml"},
             timeout=10
         )
         
         if response.status_code == 200:
+            _log_lims_event(
+                "test_connection_result",
+                outcome="success",
+                status=response.status_code,
+            )
             return True, "Connection successful"
         else:
-            return False, f"HTTP {response.status_code}: {response.text[:100]}"
+            response_excerpt = re.sub(r"\s+", " ", (response.text or "")).strip()[:160]
+            _log_lims_event(
+                "test_connection_result",
+                outcome="failed",
+                status=response.status_code,
+                response_excerpt=response_excerpt or "-",
+            )
+            return False, f"HTTP {response.status_code}: {response_excerpt or 'Connection failed'}"
             
     except requests.exceptions.RequestException as e:
+        _log_lims_event(
+            "test_connection_result",
+            outcome="error",
+            error_type=type(e).__name__,
+            error_message=str(e),
+        )
         return False, f"Connection failed: {str(e)}"
