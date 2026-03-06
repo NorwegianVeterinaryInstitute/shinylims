@@ -15,7 +15,6 @@ CONNECT_ALLOWED_USERS: set[str] = set() #example {"vi2172", "other_user_id"}
 # Local authorization config (code-defined)
 LOCAL_DEV_ALLOW_ALL = False
 
-
 def is_running_on_connect() -> bool:
     """Return True when running on Posit Connect."""
     return (os.getenv("POSIT_PRODUCT") or "").strip().upper() == "CONNECT"
@@ -70,7 +69,7 @@ def reagents_access_denied_message() -> str:
 
 def get_runtime_user(session) -> tuple[str | None, list[str]]:
     """
-    Resolve runtime user and groups from the Shiny session, with safe fallbacks.
+    Resolve runtime user and groups from the Shiny session.
     """
     username = None
     groups: list[str] = []
@@ -78,24 +77,6 @@ def get_runtime_user(session) -> tuple[str | None, list[str]]:
     if session is not None:
         username = getattr(session, "user", None) or getattr(session, "username", None)
         groups = _as_string_list(getattr(session, "groups", None))
-
-        # Fallback to Connect-provided request headers when direct session attrs are missing.
-        if (not username or not groups) and hasattr(session, "http_conn"):
-            http_conn = getattr(session, "http_conn", None)
-            headers = getattr(http_conn, "headers", {}) if http_conn is not None else {}
-            if not username:
-                username = (
-                    headers.get("X-RSC-Username")
-                    or headers.get("X-Connect-Username")
-                    or headers.get("X-Auth-Request-User")
-                )
-            if not groups:
-                groups_header = (
-                    headers.get("X-RSC-Groups")
-                    or headers.get("X-Connect-Groups")
-                    or headers.get("X-Auth-Request-Groups")
-                )
-                groups = _as_string_list(groups_header)
 
     if username is not None:
         username = str(username).strip() or None
