@@ -21,10 +21,10 @@ from shinylims.tables.metadata_tables import metadata_tables_ui, metadata_tables
 from shinylims.tables.lab_tools import lab_tools_ui, lab_tools_server
 
 # Import database utilities
-from src.shinylims.data.db_utils import get_db_update_info, refresh_db_connection, get_formatted_update_info
+from shinylims.data.db_utils import get_db_update_info, refresh_db_connection
 
 # Import data utilities for fetching data
-from src.shinylims.data.data_utils import (
+from shinylims.data.data_utils import (
     fetch_projects_data, 
     fetch_all_samples_data, 
     fetch_sequencing_data,
@@ -34,6 +34,8 @@ from src.shinylims.data.data_utils import (
 
 # Add custom CSS
 from pathlib import Path
+from datetime import datetime
+import pytz
 css_path = Path(__file__).parent / "assets" / "styles.css"
 
 
@@ -155,8 +157,6 @@ def server(input, output, session):
     """
     Fetching data from SQLite database and all ui reactive rendering is done from this function.
     """
-    # Create a reactive value for database update info
-    db_update_info_reactive = reactive.Value(get_db_update_info())
     metadata_tables_server(input, output, session)
     # Initialize lab tools once; it should not be reset by SQL refresh events.
     lab_tools_server(input, output, session)
@@ -225,10 +225,39 @@ def server(input, output, session):
             samples_date_created_reactive.set(updated_samples_date_created)
             seq_date_created_reactive.set(updated_seq_date_created)
 
-            # Update the database update info
-            db_update_info_reactive.set(get_db_update_info())
-
             p.set(12, message="Datasets updated successfully")
+
+    def _format_display_timestamp(raw_timestamp: str | None) -> str:
+        if not raw_timestamp:
+            return "Not available"
+        try:
+            return datetime.fromisoformat(raw_timestamp).strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            return raw_timestamp
+
+    def get_update_display_info():
+        """Return simple display strings for tooltip/info modal."""
+        update_info = get_db_update_info()
+        display_info = {
+            "projects": "Not available",
+            "samples": "Not available",
+            "ilmn_sequencing": "Not available",
+            "app_refresh": datetime.now(pytz.timezone("Europe/Oslo")).strftime("%Y-%m-%d %H:%M"),
+        }
+
+        table_updates = update_info.get("table_updates") or {}
+        for table_name in ("projects", "samples", "ilmn_sequencing"):
+            exact_match = table_updates.get(table_name)
+            if exact_match:
+                display_info[table_name] = _format_display_timestamp(exact_match.get("timestamp"))
+                continue
+
+            for db_table, update in table_updates.items():
+                if table_name in db_table:
+                    display_info[table_name] = _format_display_timestamp(update.get("timestamp"))
+                    break
+
+        return display_info
 
     # Define an effect to handle the update button click event
     @reactive.Effect
@@ -241,24 +270,28 @@ def server(input, output, session):
     @render.ui
     def update_tooltip_output():
         '''Render the update tooltip with updated data information'''
-        # Get formatted info 
-        formatted_info = get_formatted_update_info()
-    
-        # Build a very minimal tooltip
-        text = f"""<strong>SQL db last updated:</strong><br>
-        ➡️ Projects:<br>{formatted_info['projects']['formatted']}<br>
-        ➡️ Samples:<br>{formatted_info['samples']['formatted']}<br>
-        ➡️ Sequencing:<br>{formatted_info['ilmn_sequencing']['formatted']}<br><br>
-        <strong>App last refreshed:</strong><br>
-        🔄 {formatted_info['app_refresh']}"""
-
-        return ui.HTML(text)
+        formatted_info = get_update_display_info()
+        return ui.div(
+            ui.tags.strong("SQL db last updated:"),
+            ui.tags.br(),
+            f"Projects: {formatted_info['projects']}",
+            ui.tags.br(),
+            f"Samples: {formatted_info['samples']}",
+            ui.tags.br(),
+            f"Sequencing: {formatted_info['ilmn_sequencing']}",
+            ui.tags.br(),
+            ui.tags.br(),
+            ui.tags.strong("App last refreshed:"),
+            ui.tags.br(),
+            formatted_info["app_refresh"],
+        )
     
     # Define an effect to handle the info button click event
     @reactive.Effect
     @reactive.event(input.info_button)
     def on_info_button_click():
         '''Handle the info button click event'''
+        formatted_info = get_update_display_info()
         ui.modal_show(
             ui.modal(
                 ui.h2("Clarity LIMS Metadata App Information", class_="mb-4"),
@@ -272,13 +305,13 @@ def server(input, output, session):
                     ui.h4("Last Database Updates:"),
                     ui.tags.dl(
                         ui.tags.dt("Projects"),
-                        ui.tags.dd(get_formatted_update_info()['projects']['formatted']),
+                        ui.tags.dd(formatted_info["projects"]),
                         ui.tags.dt("Samples"),
-                        ui.tags.dd(get_formatted_update_info()['samples']['formatted']),
+                        ui.tags.dd(formatted_info["samples"]),
                         ui.tags.dt("Sequencing"),
-                        ui.tags.dd(get_formatted_update_info()['ilmn_sequencing']['formatted']),
+                        ui.tags.dd(formatted_info["ilmn_sequencing"]),
                         ui.tags.dt("App Last Refreshed"),
-                        ui.tags.dd(get_formatted_update_info()['app_refresh']),
+                        ui.tags.dd(formatted_info["app_refresh"]),
                         class_="row"
                     ),
                     ui.h3("SQL Database Update Scripts"),

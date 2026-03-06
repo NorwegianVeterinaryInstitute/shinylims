@@ -15,7 +15,7 @@ Also includes functions to transform LIMS IDs and comments into HTML
 
 import pandas as pd
 import datetime
-from src.shinylims.data.db_utils import query_to_dataframe, get_db_update_info
+from shinylims.data.db_utils import query_to_dataframe, get_db_update_info
 import numpy as np
 from pathlib import Path
 import tomli
@@ -413,4 +413,3 @@ def get_app_version():
         return "Unknown"
     except Exception as e:
         return "Unknown"
-

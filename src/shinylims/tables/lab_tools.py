@@ -2,7 +2,7 @@ from shiny import ui, reactive, render
 import pandas as pd
 import re
 
-from src.shinylims.data.db_utils import query_to_dataframe
+from shinylims.data.db_utils import query_to_dataframe
 from shinylims.tables.reagents import reagents_ui, reagents_server
 from shinylims.security import is_allowed_reagents_user, reagents_access_policy_summary
 

@@ -15,7 +15,6 @@ from shinylims.data.lims_api import (
     LIMSConfig, 
     create_reagent_lot, 
     test_connection,
-    ReagentLotResult,
     get_latest_prep_sequence_status,
     get_latest_index_sequence_status
 )
@@ -297,9 +296,6 @@ def reagents_ui():
             col_widths=[5, 7]
         ),
         
-        # Submission results (shows after submit)
-        ui.output_ui("submission_results_ui"),
-        
         class_="p-3"
     )
 
@@ -326,7 +322,6 @@ def reagents_server(input, output, session):
     
     last_reagent_type = reactive.Value(None)
 
-    submission_results = reactive.Value([])
     submit_check_in_progress = reactive.Value(False)
     submit_in_progress = reactive.Value(False)
     
@@ -948,7 +943,6 @@ def reagents_server(input, output, session):
             "prep": 0,
             "index": 0
         })
-        submission_results.set([])
     
     @output
     @render.text
@@ -1244,8 +1238,6 @@ def reagents_server(input, output, session):
 
                 p.set(len(df), message="Done!")
 
-            submission_results.set(results)
-
             # Count successes/failures
             successes = sum(1 for r in results if r.success)
             failures = len(results) - successes
@@ -1411,40 +1403,6 @@ def reagents_server(input, output, session):
             refresh_index_sequence_state(config)
         finally:
             submit_in_progress.set(False)
-    
-    # Show submission results
-    @output
-    @render.ui
-    def submission_results_ui():
-        results = submission_results.get()
-        
-        if not results:
-            return None
-        
-        rows_html = ""
-        for r in results:
-            if r.success:
-                status_value = html.escape(str(r.lims_id or ""))
-                status = f'<span class="text-success">✅ {status_value}</span>'
-            else:
-                status_value = html.escape(str(r.message or ""))
-                status = f'<span class="text-danger">❌ {status_value}</span>'
-            
-            name_value = html.escape(str(r.name or ""))
-            rows_html += f"<tr><td>{name_value}</td><td>{status}</td></tr>"
-        
-        return ui.card(
-            ui.card_header("Submission Results"),
-            ui.card_body(
-                ui.HTML(f"""
-                    <table class="table table-sm">
-                        <thead><tr><th>Name</th><th>Status</th></tr></thead>
-                        <tbody>{rows_html}</tbody>
-                    </table>
-                """)
-            ),
-            class_="mt-3"
-        )
     
     return {
         "pending_lots": pending_lots,
