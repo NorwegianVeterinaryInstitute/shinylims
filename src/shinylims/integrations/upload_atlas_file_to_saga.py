@@ -13,7 +13,7 @@ from typing import Union, IO # generic file-like object
 import paramiko
 import paramiko.sftp
 
-import shinylims.helpers.ssh_transport as ssh_transport
+import shinylims.integrations.ssh_transport as ssh_transport
 
 
 

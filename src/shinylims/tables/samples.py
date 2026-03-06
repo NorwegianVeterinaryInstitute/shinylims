@@ -8,7 +8,7 @@ from itables.widget import ITable
 from itables.javascript import JavascriptFunction
 import pandas as pd
 import io
-from shinylims.helpers.upload_atlas_file_to_saga import _upload_csv_to_saga
+from shinylims.integrations.upload_atlas_file_to_saga import _upload_csv_to_saga
 from datetime import datetime
 
 

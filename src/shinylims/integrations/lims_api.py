@@ -1,6 +1,6 @@
 """
 lims_api.py - Clarity LIMS API functions for reagent lot management
-Location: src/shinylims/data/lims_api.py
+Location: src/shinylims/integrations/lims_api.py
 """
 
 import os

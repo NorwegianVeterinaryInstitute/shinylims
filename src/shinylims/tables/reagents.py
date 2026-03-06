@@ -11,7 +11,7 @@ import re
 from urllib.parse import urlparse
 
 # Import the LIMS API module
-from shinylims.data.lims_api import (
+from shinylims.integrations.lims_api import (
     LIMSConfig, 
     create_reagent_lot, 
     test_connection,

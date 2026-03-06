@@ -81,7 +81,7 @@ Common maintenance tasks:
 
 The module validates configuration at import and fails early on issues (duplicate type names, duplicate refs, invalid naming group, missing required fields, etc.).
 
-Derived exports used by the app are generated automatically (`REAGENT_TYPES`, `SCANNABLE_REAGENTS`, `PREP_REAGENT_TYPES`, `REAGENT_KIT_IDS`, selector maps), so `tables/reagents.py` and `data/lims_api.py` should not be edited for reagent list changes.
+Derived exports used by the app are generated automatically (`REAGENT_TYPES`, `SCANNABLE_REAGENTS`, `PREP_REAGENT_TYPES`, `REAGENT_KIT_IDS`, selector maps), so `tables/reagents.py` and `integrations/lims_api.py` should not be edited for reagent list changes.
 
 - `PREP_REAGENT_TYPES` is generated automatically from `REAGENT_TYPES` where `naming_group == "prep"`.
 - Prep reagents are currently submitted with LIMS status `PENDING` in the tool logic.

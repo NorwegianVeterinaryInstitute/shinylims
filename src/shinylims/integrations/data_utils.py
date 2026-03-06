@@ -13,14 +13,16 @@ Also includes functions to transform LIMS IDs and comments into HTML
 # IMPORT LIBRARIES #
 ####################
 
-import pandas as pd
 import datetime
-from shinylims.data.db_utils import query_to_dataframe, get_db_update_info
-import numpy as np
-from pathlib import Path
-import tomli
 import html
+from pathlib import Path
 from urllib.parse import quote
+
+import numpy as np
+import pandas as pd
+import tomli
+
+from shinylims.integrations.db_utils import query_to_dataframe, get_db_update_info
 
 ####################
 # HELPER FUNCTIONS #

@@ -21,10 +21,10 @@ from shinylims.tables.metadata_tables import metadata_tables_ui, metadata_tables
 from shinylims.tables.lab_tools import lab_tools_ui, lab_tools_server
 
 # Import database utilities
-from shinylims.data.db_utils import get_db_update_info, refresh_db_connection
+from shinylims.integrations.db_utils import get_db_update_info, refresh_db_connection
 
 # Import data utilities for fetching data
-from shinylims.data.data_utils import (
+from shinylims.integrations.data_utils import (
     fetch_projects_data, 
     fetch_all_samples_data, 
     fetch_sequencing_data,
