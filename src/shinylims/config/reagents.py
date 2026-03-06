@@ -1,4 +1,57 @@
-"""Canonical reagent configuration used by UI and LIMS API modules."""
+"""Canonical reagent configuration used by UI and LIMS API modules.
+
+Edit ``REAGENT_DEFINITIONS`` to maintain the reagent registry.
+
+Top-level reagent fields:
+- `type_name`: Human-readable reagent type name used as the logical key across
+  the app and in LIMS submissions.
+
+- `kit_id`: Numeric Clarity reagent kit ID as a string, for example ``"302"``.
+
+- `naming_group`: Internal naming rule group. Allowed values are `prep`,
+  `index`, `miseq`, and `phix`. This controls how the app generates the
+  `Internal Name`:
+
+  `prep` uses shared numeric prep-set numbering such as `#15 (192)`,
+  `index` uses shared numbering plus `set_letter` such as `A#15 (192)`,
+  `miseq` uses `RGT Number + MiSeq kit type`, 
+  `phix` uses the RGT number directly.
+
+- `requires_rgt_number`: Whether the UI must collect an RGT number before the
+  reagent can be queued or submitted.
+
+- `requires_miseq_kit_type`: Whether each variant must define a MiSeq kit type
+  such as `v3` or `v2 nano`.
+
+- `variants`: List of scanner/dropdown entries that map refs to this reagent
+  type.
+
+Variant fields:
+- `ref`: Scanned reference barcode / selector value shown in the UI. Used only for scan reference.
+
+- `label`: User-facing selector label.
+
+- `set_letter`: Required for index variants. Used when generating names such as `A#15 (192)`.
+
+- `miseq_kit_type`: Required when `requires_miseq_kit_type` is `True`.
+
+Derived exports:
+- `REAGENT_TYPES`: Lightweight metadata keyed by `type_name`.
+
+- `SCANNABLE_REAGENTS`: Flattened list of all selectable/scannable variants.
+
+- `PREP_REAGENT_TYPES`: All reagent types with `naming_group == "prep"`.
+
+- `REAGENT_KIT_IDS`: `type_name` to Clarity `kit_id` mapping.
+- `REAGENT_SELECTOR_CHOICES` / `SELECTOR_TO_REAGENT` /
+  `SELECTOR_TO_MISEQ_KIT_TYPE`: UI lookup structures generated from the registry.
+
+- `INDEX_REAGENT_TYPE`: The single index reagent type used by current shared
+  numbering logic.
+
+The module validates the registry at import time and raises a clear error if the
+configuration is inconsistent.
+"""
 
 from __future__ import annotations
 
