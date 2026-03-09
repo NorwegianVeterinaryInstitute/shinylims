@@ -144,13 +144,13 @@ REAGENT_DEFINITIONS = [
                 "miseq_kit_type": "v3",
             },
             {
-                "ref": "11111111",
-                "label": "MiSeq Reagent Kit v2 nano (Box 1 of 2) (Ref: 11111111)",
+                "ref": "15033625",
+                "label": "MiSeq Reagent Kit v2 nano (Box 1 of 2) (Ref: 15033625)",
                 "miseq_kit_type": "v2 nano",
             },
             {
-                "ref": "22222222",
-                "label": "MiSeq Reagent Kit v2 micro (Box 1 of 2) (Ref: 22222222)",
+                "ref": "15033624",
+                "label": "MiSeq Reagent Kit v2 micro (Box 1 of 2) (Ref: 15033624)",
                 "miseq_kit_type": "v2 micro",
             },
         ],
@@ -173,8 +173,8 @@ REAGENT_DEFINITIONS = [
                 "miseq_kit_type": "v2 nano",
             },
             {
-                "ref": "33333333",
-                "label": "MiSeq Reagent Kit v2 micro (Box 2 of 2) (Ref: 33333333)",
+                "ref": "15036715",
+                "label": "MiSeq Reagent Kit v2 micro (Box 2 of 2) (Ref: 15036715)",
                 "miseq_kit_type": "v2 micro",
             },
         ],
