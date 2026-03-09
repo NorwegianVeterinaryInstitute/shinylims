@@ -2,15 +2,13 @@
 samples.py - Table module containing UI and server logic for the Samples table tab
 '''
 
-from shiny import ui, reactive
+from shiny import ui, reactive, render
 from shinywidgets import output_widget, render_widget, reactive_read
 from itables.widget import ITable
 from itables.javascript import JavascriptFunction
 import pandas as pd
-from src.shinylims.data.db_utils import query_to_dataframe
-import re
 import io
-from src.shinylims.helpers.upload_atlas_file_to_saga import _upload_csv_to_saga
+from shinylims.integrations.upload_atlas_file_to_saga import _upload_csv_to_saga
 from datetime import datetime
 
 
@@ -31,74 +29,16 @@ def samples_ui():
                 cursor: not-allowed;
                 pointer-events: all !important;
             }
-            .toolbar-dropdown {
-                position: relative;
-                display: inline-block;
-            }
-            .toolbar-dropdown-content {
-                display: none;
-                position: absolute;
-                background-color: #fff;
-                min-width: 240px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                border-radius: 6px;
-                z-index: 1000;
-                padding: 8px 0;
-            }
-            .toolbar-dropdown:hover .toolbar-dropdown-content,
-            .toolbar-dropdown:focus-within .toolbar-dropdown-content {
-                display: block;
-            }
-            .toolbar-dropdown-content .dropdown-item {
-                display: block;
-                padding: 6px 16px;
-                white-space: nowrap;
+            div.dt-button-collection .dt-button {
+                white-space: normal !important;
+                min-width: 280px;
             }
         """),
-        # Toolbar row with dropdown menus
-        ui.div(
-            # Tools dropdown
-            ui.div(
-                ui.tags.button(
-                    "🛠️ Tools",
-                    class_="btn btn-outline-secondary btn-sm dropdown-toggle",
-                    type="button",
-                ),
-                ui.div(
-                    ui.div(
-                        ui.input_action_button(
-                            "show_storage_status",
-                            "📦 Storage Box Status",
-                            class_="btn btn-link dropdown-item",
-                        ),
-                        class_="dropdown-item",
-                    ),
-                    class_="toolbar-dropdown-content",
-                ),
-                class_="toolbar-dropdown",
-            ),
-            # Settings dropdown
-            ui.div(
-                ui.tags.button(
-                    "⚙️ Settings",
-                    class_="btn btn-outline-secondary btn-sm dropdown-toggle",
-                    type="button",
-                ),
-                ui.div(
-                    ui.div(
-                        ui.input_switch("include_hist", "Include historical samples", False),
-                        class_="dropdown-item",
-                        style="padding: 6px 16px;",
-                    ),
-                    class_="toolbar-dropdown-content",
-                ),
-                class_="toolbar-dropdown",
-            ),
-            style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;"
-        ),
         # Widget container
         ui.div(
+            ui.output_ui("hist_mode_indicator"),
             output_widget("data_samples", fillable=False),
+            style="position: relative;"
         ),
     )
 
@@ -109,163 +49,36 @@ def samples_ui():
 
 # Server logic for the Samples page
 def samples_server(samples_df, samples_historical_df, input):
+    has_shown_hist_warning = reactive.Value(False)
+
+    @render.ui
+    def hist_mode_indicator():
+        if not input.include_hist():
+            return None
+        return ui.div(
+            "Historical data: ON",
+            class_="badge text-bg-warning",
+            style="position: absolute; top: 8px; right: 10px; z-index: 20;"
+        )
 
     @reactive.Effect
     def show_warning_modal():
-        if input.include_hist():
-            return ui.modal_show(
-                ui.modal(
-                    ui.div(
-                        ui.p("⚠️ You are now including historical samples. The historical data was recorded before Clarity LIMS was implemented. It may not be complete or accurate. It will also make searching more difficult since data isnt formatted consistently."),
-                        ui.p("Please review the data carefully. Data can be filtered through the 'Custom Search Builder' by 'Clarity LIMS' or 'Historical' using the 'Data Source' column.")
-                    ),
-                    title="Historical Data Warning",
-                    easy_close=True,
-                    footer=ui.modal_button("OK")
-                )
-            )
-        
-    # Modal for storage box status
-    @reactive.Effect
-    @reactive.event(input.show_storage_status)
-    def show_storage_status_modal():
-        
-        try:
-            # Fetch all storage containers with their states
-            query = """
-            SELECT 
-                container_name,
-                state,
-                last_checked,
-                last_updated
-            FROM storage_containers
-            """
-            containers_df = query_to_dataframe(query)
-            
-            if containers_df.empty:
-                content = ui.p("No storage container data available.")
-            else:
-                # Extract numeric part for sorting
-                def extract_number(name):
-                    """Extract the numeric part from container name like 'NGS45' -> 45"""
-                    if pd.isna(name):
-                        return 0
-                    match = re.search(r'(\d+)', str(name))
-                    return int(match.group(1)) if match else 0
-                
-                # Add a numeric sort column
-                containers_df['sort_num'] = containers_df['container_name'].apply(extract_number)
-                
-                # Sort by number only (descending - highest first)
-                containers_df = containers_df.sort_values(
-                    by='sort_num',
-                    ascending=False
-                )
-                
-                # Rename columns for display (after sorting)
-                containers_df = containers_df.rename(columns={
-                    'container_name': 'Box Name',
-                    'state': 'Status',
-                    'last_checked': 'Last Checked',
-                    'last_updated': 'Last Updated'
-                })
-                
-                # Format dates
-                for col in ['Last Checked', 'Last Updated']:
-                    if col in containers_df.columns:
-                        containers_df[col] = pd.to_datetime(
-                            containers_df[col], 
-                            errors='coerce'
-                        ).dt.strftime('%Y-%m-%d %H:%M')
-                
-                # Add colored status column
-                def format_status(status):
-                    if status == 'Discarded':
-                        return f'<span style="color: red; font-weight: bold;">🗑️ {status}</span>'
-                    elif status == 'Populated':
-                        return f'<span style="color: green; font-weight: bold;">✅ {status}</span>'
-                    else:
-                        return status
-                
-                containers_df['Status'] = containers_df['Status'].apply(format_status)
-                
-                # Count boxes
-                populated_count = containers_df['Status'].str.contains('Populated', case=False).sum()
-                discarded_count = containers_df['Status'].str.contains('Discarded').sum()
-                total_count = len(containers_df)
-                
-                # Create summary text
-                summary = ui.p(
-                    f"📦 Total: {total_count} | ✅ Populated: {populated_count} | 🗑️ Discarded: {discarded_count}",
-                    style="font-weight: bold; margin-bottom: 15px; font-size: 16px;"
-                )
-                
-                # Drop the sort_num column before display
-                display_df = containers_df.drop('sort_num', axis=1)
-                
-                # Create properly aligned HTML table
-                table_html = display_df.to_html(
-                    index=False,
-                    escape=False,
-                    classes='table table-striped table-bordered table-sm',
-                    border=0
-                )
-                
-                # Add inline CSS for proper alignment
-                styled_table = f"""
-                <style>
-                    .storage-table {{
-                        width: 100%;
-                        max-height: 400px;
-                        overflow-y: auto;
-                        overflow-x: auto;
-                    }}
-                    .storage-table table {{
-                        width: 100%;
-                        margin: 0;
-                    }}
-                    .storage-table th {{
-                        position: sticky;
-                        top: 0;
-                        background-color: #f8f9fa;
-                        z-index: 10;
-                        padding: 8px;
-                        text-align: left;
-                        border-bottom: 2px solid #dee2e6;
-                    }}
-                    .storage-table td {{
-                        padding: 8px;
-                        text-align: left;
-                    }}
-                </style>
-                <div class="storage-table">
-                    {table_html}
-                </div>
-                """
-                
-                content = ui.div(
-                    summary,
-                    ui.HTML(styled_table)
-                )
-        
-        except Exception as e:
-            content = ui.div(
-                ui.p(f"⚠️ Error loading storage container data: {str(e)}",
-                     style="color: red;")
-            )
-        
-        # Show modal
-        ui.modal_show(
+        if not input.include_hist() or has_shown_hist_warning.get():
+            return
+
+        has_shown_hist_warning.set(True)
+        return ui.modal_show(
             ui.modal(
-                content,
-                title="📦 Storage Box Status",
-                size="l",
+                ui.div(
+                    ui.p("⚠️ You are now including historical samples. The historical data was recorded before Clarity LIMS was implemented. It may not be complete or accurate. It will also make searching more difficult since data isnt formatted consistently."),
+                    ui.p("Please review the data carefully. Data can be filtered through the 'Custom Search Builder' by 'Clarity LIMS' or 'Historical' using the 'Data Source' column.")
+                ),
+                title="Historical Data Warning",
                 easy_close=True,
-                footer=ui.modal_button("Close")
+                footer=ui.modal_button("OK")
             )
         )
-
-
+        
     # Create a reactive expression for the combined dataframe
     @reactive.Calc
     def combined_samples():

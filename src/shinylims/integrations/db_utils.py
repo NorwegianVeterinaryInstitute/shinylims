@@ -14,14 +14,12 @@ import os
 from pins import board_connect
 from dotenv import load_dotenv
 import datetime
-import pytz
 
 # Load environment variables
 load_dotenv()
 
 # Variables to track database file
 _DB_PATH = None
-_DB_TEMP_FILE = None
 
 
 ####################
@@ -30,7 +28,7 @@ _DB_TEMP_FILE = None
 
 def get_db_path():
     """Get the path to the SQLite database file from pin."""
-    global _DB_PATH, _DB_TEMP_FILE
+    global _DB_PATH
     
     if _DB_PATH is None:
         # Connect to Posit Connect board
@@ -77,18 +75,9 @@ def get_connection():
 
 def refresh_db_connection():
     """Force a refresh of the database connection."""
-    global _DB_PATH, _DB_TEMP_FILE
-    
-    # Clean up temporary file if it exists
-    if _DB_TEMP_FILE is not None and os.path.exists(_DB_PATH):
-        try:
-            os.unlink(_DB_PATH)
-        except:
-            pass
-    
-    # Reset paths to force new download
+    global _DB_PATH
+
     _DB_PATH = None
-    _DB_TEMP_FILE = None
 
 
 ####################
@@ -99,53 +88,6 @@ def query_to_dataframe(query, params=None):
     """Execute a SQL query and return results as a pandas DataFrame."""
     with get_connection() as conn:
         return pd.read_sql_query(query, conn, params=params)
-
-
-def execute_query(query, params=None):
-    """Execute a SQL query without returning results."""
-    with get_connection() as conn:
-        if params:
-            conn.execute(query, params)
-        else:
-            conn.execute(query)
-        conn.commit()
-
-
-def get_db_update_timestamp():
-    """
-    Get the timestamp when the SQLite database was last updated.
-    This checks for a metadata table first, then falls back to file modification time.
-    """
-    try:
-        # Try to get the database path
-        db_path = get_db_path()
-        
-        # Check if the database has a metadata table
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Check if a metadata table exists
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='metadata'")
-            has_metadata_table = cursor.fetchone() is not None
-            
-            if has_metadata_table:
-                # If metadata table exists, query it for the last update time
-                cursor.execute("SELECT value FROM metadata WHERE key='last_updated'")
-                result = cursor.fetchone()
-                if result:
-                    return result[0]
-            
-            # If no metadata table or no timestamp in metadata, use file modification time
-            import os
-            if os.path.exists(db_path):
-                mod_time = os.path.getmtime(db_path)
-                return datetime.datetime.fromtimestamp(mod_time).isoformat()
-            
-        # If all else fails, return current time
-        return datetime.datetime.now().isoformat()
-    except Exception as e:
-        print(f"Error getting database update timestamp: {e}")
-        return datetime.datetime.now().isoformat()
     
 
 def get_db_update_info():
@@ -161,7 +103,6 @@ def get_db_update_info():
             if not has_log:
                 # Fall back to file modification time
                 db_path = get_db_path()
-                import os
                 if os.path.exists(db_path):
                     mod_time = os.path.getmtime(db_path)
                     return {
@@ -242,87 +183,3 @@ def get_db_update_info():
             'recent_updates': [],
             'error': str(e)
         }
-
-
-
-def get_formatted_update_info():
-    """
-    Get formatted update information for display in the UI.
-    
-    Returns:
-        dict: A dictionary containing formatted timestamps for each table
-              and additional metadata about the updates.
-    """
-    update_info = get_db_update_info()
-    
-    # Convert timestamps to CET
-    cet = pytz.timezone('Europe/Oslo')
-    
-    # Current time for app refresh
-    now = datetime.datetime.now(cet)
-    app_refresh_time = now.strftime("%Y-%m-%d %H:%M")
-    
-    # Format timestamps for each table
-    formatted_info = {
-        'projects': {
-            'timestamp': 'Not available',
-            'formatted': 'Not available',
-            'records': 'N/A'
-        },
-        'samples': {
-            'timestamp': 'Not available',
-            'formatted': 'Not available',
-            'records': 'N/A'
-        },
-        'ilmn_sequencing': {
-            'timestamp': 'Not available',
-            'formatted': 'Not available',
-            'records': 'N/A'
-        },
-        'app_refresh': app_refresh_time
-    }
-    
-    if update_info.get('table_updates'):
-        # We need to find entries in table_updates that might refer to our tables
-        for table_name, table_info in formatted_info.items():
-            if table_name != 'app_refresh':  # Skip the app refresh time
-                # Look for an exact match first
-                if table_name in update_info['table_updates']:
-                    table_update = update_info['table_updates'][table_name]
-                    try:
-                        iso_timestamp = table_update['timestamp']
-                        dt = datetime.datetime.fromisoformat(iso_timestamp)
-                        formatted_info[table_name] = {
-                            'timestamp': iso_timestamp,
-                            'formatted': dt.strftime("%Y-%m-%d %H:%M"),
-                            'records': table_update.get('records_affected', 'N/A')
-                        }
-                    except Exception as e:
-                        print(f"Error formatting timestamp for {table_name}: {e}")
-                        formatted_info[table_name] = {
-                            'timestamp': table_update['timestamp'],
-                            'formatted': table_update['timestamp'],
-                            'records': table_update.get('records_affected', 'N/A')
-                        }
-                else:
-                    # Look for partial matches in the tables_affected field
-                    for db_table, update in update_info['table_updates'].items():
-                        if table_name in db_table:
-                            try:
-                                iso_timestamp = update['timestamp']
-                                dt = datetime.datetime.fromisoformat(iso_timestamp)
-                                formatted_info[table_name] = {
-                                    'timestamp': iso_timestamp,
-                                    'formatted': dt.strftime("%Y-%m-%d %H:%M"),
-                                    'records': update.get('records_affected', 'N/A')
-                                }
-                            except Exception as e:
-                                print(f"Error formatting timestamp for {table_name} in {db_table}: {e}")
-                                formatted_info[table_name] = {
-                                    'timestamp': update['timestamp'],
-                                    'formatted': update['timestamp'],
-                                    'records': update.get('records_affected', 'N/A')
-                                }
-                            break  # Stop after finding the first match
-    
-    return formatted_info

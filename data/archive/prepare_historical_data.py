@@ -1,6 +1,7 @@
-import pandas as pd
-import sqlite3
 from pathlib import Path
+import sqlite3
+
+import pandas as pd
 
 def prepare_historical_data(csv_path, sqlite_path):
     """
@@ -135,9 +136,9 @@ def prepare_historical_data(csv_path, sqlite_path):
 
 # Example usage:
 if __name__ == "__main__":
-    # Update these paths to match your setup
-    csv_path = "/home/magnus/shinylims/src/shinylims/helpers/wgs_historical.csv"
-    sqlite_path = "/home/magnus/shinylims/src/shinylims/helpers/historical_samples.db"
+    archive_dir = Path(__file__).resolve().parent
+    csv_path = archive_dir / "wgs_historical.csv"
+    sqlite_path = archive_dir / "historical_samples.db"
     
     # Run the preparation
     prepare_historical_data(csv_path, sqlite_path)

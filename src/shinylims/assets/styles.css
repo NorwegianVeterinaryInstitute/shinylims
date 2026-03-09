@@ -1,6 +1,42 @@
 /* ─────────────────────────────────────────────────────────────── */
 /* Utility Classes - Alignment Helpers */
 /* ─────────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: light !important;
+}
+
+html,
+body {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+}
+
+.form-control,
+.form-select,
+input,
+select,
+textarea,
+.selectize-input,
+.selectize-dropdown,
+.selectize-input input,
+.reactable-filter-input,
+.dataTables_filter input,
+.dtsb-input,
+.dtsb-value,
+.dtsb-list-items,
+.dtsb-dropDown,
+.dtsb-searchBuilder input,
+.dtsb-searchBuilder select {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+  border-color: #ced4da !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #6c757d !important;
+}
+
 .dt-center { text-align: center; }
 .dt-left { text-align: left; }
 .nowrap { white-space: nowrap; }
@@ -196,5 +232,38 @@ div.dt-button-collection {
 
   .dataTables_filter input {
     width: calc(100% - 70px); /* adjust for label space */
+  }
+
+  /* Improve navbar spacing and prevent control crowding on small screens */
+  .navbar .container-fluid {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 8px;
+    column-gap: 6px;
+    align-items: center;
+  }
+
+  .navbar .navbar-brand img {
+    height: 42px !important;
+  }
+
+  .navbar .btn {
+    margin-left: 6px;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.9rem;
+  }
+
+  .navbar .navbar-nav {
+    width: 100%;
+    justify-content: center;
+    margin-top: 4px;
+  }
+
+  .navbar .nav-link {
+    font-size: 1.25rem !important;
+  }
+
+  .navbar .nav-link.active {
+    font-size: 1.35rem !important;
   }
 }

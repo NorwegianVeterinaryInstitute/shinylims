@@ -2,6 +2,7 @@
 __pycache__/
 /src/shinylims/__pycache__
 *.pyc
+/.vscode
 
 # Other
 .env

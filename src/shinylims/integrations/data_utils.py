@@ -13,12 +13,16 @@ Also includes functions to transform LIMS IDs and comments into HTML
 # IMPORT LIBRARIES #
 ####################
 
-import pandas as pd
 import datetime
-from src.shinylims.data.db_utils import query_to_dataframe, get_db_update_info
-import numpy as np
+import html
 from pathlib import Path
+from urllib.parse import quote
+
+import numpy as np
+import pandas as pd
 import tomli
+
+from shinylims.integrations.db_utils import query_to_dataframe, get_db_update_info
 
 ####################
 # HELPER FUNCTIONS #
@@ -65,16 +69,22 @@ def transform_to_html(limsid):
 
     if pd.isna(limsid) or limsid == '':
         return limsid
-    ids = limsid.split(',')
+    ids = str(limsid).split(',')
     html_links = []
-    for id in ids:
-        parts = id.split('-')
-        if len(parts) == 2:
-            html_link = f'<a href="https://nvi-prod.claritylims.com/clarity/work-complete/{parts[1]}" target="_blank">{id}</a>'
+    for raw_id in ids:
+        lims_id = str(raw_id).strip()
+        parts = lims_id.split('-')
+        if len(parts) == 2 and parts[1].strip().isdigit():
+            work_complete_id = quote(parts[1].strip(), safe="")
+            label = html.escape(lims_id)
+            html_link = (
+                f'<a href="https://nvi-prod.claritylims.com/clarity/work-complete/{work_complete_id}" '
+                f'target="_blank" rel="noopener noreferrer">{label}</a>'
+            )
             html_links.append(html_link)
         else:
             # Handle incorrectly formatted id
-            html_links.append(id)
+            html_links.append(html.escape(lims_id))
     return ', '.join(html_links)
 
 
@@ -82,7 +92,20 @@ def transform_comments_to_html(comment):
     '''Transform comments to HTML format with line breaks (db linebraks are \n, we need <br>).'''
     if pd.isna(comment) or comment == '':
         return comment
-    return comment.replace('\n', '<br>')
+    return html.escape(str(comment)).replace('\n', '<br>')
+
+
+def sanitize_dataframe_strings(df: pd.DataFrame, skip_columns: set[str] | None = None) -> pd.DataFrame:
+    """Escape all string-like cells except explicitly skipped columns that contain trusted HTML."""
+    skip = skip_columns or set()
+    for col in df.columns:
+        if col in skip:
+            continue
+        if pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(df[col]):
+            df[col] = df[col].apply(
+                lambda v: html.escape(str(v)) if isinstance(v, str) and v != '' else v
+            )
+    return df
 
 
 
@@ -126,6 +149,8 @@ def fetch_projects_data():
     comment_columns = [col for col in df.columns if 'comment' in col.lower()]
     for col in comment_columns:
         df[col] = df[col].apply(transform_comments_to_html)
+
+    df = sanitize_dataframe_strings(df, skip_columns=set(comment_columns))
     
     return df, meta_created
 
@@ -165,11 +190,11 @@ def fetch_all_samples_data():
             if box_state == 'Discarded':
                 # Red and bold for discarded boxes
                 formatted_boxes.append(
-                    f'<span style="color: red; font-weight: bold;">{box} (discarded)</span>'
+                    f'<span style="color: red; font-weight: bold;">{html.escape(box)} (discarded)</span>'
                 )
             else:
                 # Normal formatting for active or unknown boxes
-                formatted_boxes.append(box)
+                formatted_boxes.append(html.escape(box))
         
         # Join all formatted boxes back together
         return ', '.join(formatted_boxes)
@@ -220,6 +245,11 @@ def fetch_all_samples_data():
     comment_columns = [col for col in df.columns if 'comment' in col.lower()]
     for col in comment_columns:
         df[col] = df[col].apply(transform_comments_to_html)
+
+    html_columns = set(comment_columns) | {
+        col for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid'] if col in df.columns
+    } | ({'Storage Box'} if 'Storage Box' in df.columns else set())
+    df = sanitize_dataframe_strings(df, skip_columns=html_columns)
     
     # Reorder columns to place "Storage Box" right before "Storage Well"
     cols = df.columns.tolist()
@@ -293,6 +323,11 @@ def fetch_historical_samples_data():
     for col in comment_columns:
         df[col] = df[col].apply(transform_comments_to_html)
 
+    html_columns = set(comment_columns) | {
+        col for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid'] if col in df.columns
+    }
+    df = sanitize_dataframe_strings(df, skip_columns=html_columns)
+
     return df
 
 def fetch_sequencing_data():
@@ -340,6 +375,9 @@ def fetch_sequencing_data():
         if col in df.columns:
             df[col] = df[col].apply(transform_to_html)
 
+    html_columns = {col for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid'] if col in df.columns}
+    df = sanitize_dataframe_strings(df, skip_columns=html_columns)
+
     
     meta_created = get_table_update_timestamp('ilmn_sequencing')
     
@@ -377,5 +415,3 @@ def get_app_version():
         return "Unknown"
     except Exception as e:
         return "Unknown"
-
-

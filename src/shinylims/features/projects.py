@@ -40,6 +40,10 @@ def projects_server(projects_df):
 
         # Determine column indices for ordering and formatting
         comment_index = dat.columns.get_loc("Comment") if "Comment" in dat.columns else -1
+        project_name_index = dat.columns.get_loc("Project Name") if "Project Name" in dat.columns else -1
+        samples_index = dat.columns.get_loc("Samples") if "Samples" in dat.columns else -1
+        species_index = dat.columns.get_loc("Species") if "Species" in dat.columns else -1
+        status_index = dat.columns.get_loc("Status") if "Status" in dat.columns else -1
         order_column_index = dat.columns.get_loc("Open Date") if "Open Date" in dat.columns else 0
         date_column_index = order_column_index if "Open Date" in dat.columns else -1
 
@@ -113,7 +117,50 @@ def projects_server(projects_df):
             ],
             order=[[order_column_index, "desc"]],
             columnDefs=[
-                {"targets": comment_index, "className": "left-column"} if comment_index != -1 else {},
+                {
+                    "targets": comment_index,
+                    "className": "left-column",
+                    "width": "420px",
+                    "render": JavascriptFunction("""
+                        function(data, type, row) {
+                            if (data == null || data === '') {
+                                return '';
+                            }
+
+                            const div = document.createElement('div');
+                            div.innerHTML = String(data);
+                            const fullText = (div.textContent || div.innerText || '')
+                                .replace(/\\s+/g, ' ')
+                                .trim();
+
+                            if (type === 'sort' || type === 'type' || type === 'filter') {
+                                return fullText;
+                            }
+
+                            const preview = fullText.length > 120
+                                ? fullText.slice(0, 117) + '...'
+                                : fullText;
+
+                            const escapeHtml = (value) => String(value)
+                                .replace(/&/g, '&amp;')
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;')
+                                .replace(/"/g, '&quot;')
+                                .replace(/'/g, '&#39;');
+
+                            return (
+                                '<div title="' + escapeHtml(fullText) + '"' +
+                                ' style="max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' +
+                                escapeHtml(preview) +
+                                '</div>'
+                            );
+                        }
+                    """),
+                } if comment_index != -1 else {},
+                {"targets": project_name_index, "width": "360px"} if project_name_index != -1 else {},
+                {"targets": samples_index, "width": "50px"} if samples_index != -1 else {},
+                {"targets": species_index, "width": "180px"} if species_index != -1 else {},
+                {"targets": status_index, "width": "110px"} if status_index != -1 else {},
                 {"className": "dt-center", "targets": "_all"},
                 {
                     "targets": date_column_index,
@@ -132,4 +179,3 @@ def projects_server(projects_df):
                 } if date_column_index != -1 else {},
             ],
         )
-
