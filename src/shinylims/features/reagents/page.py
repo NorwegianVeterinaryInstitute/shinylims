@@ -255,7 +255,8 @@ def reagents_ui():
                     ui.div(
                         ui.div(
                             ui.output_ui("pending_lots_table"),
-                            style="width: 100%; overflow-x: auto;"
+                            class_="flex-grow-1",
+                            style="width: 100%; overflow-x: auto; min-height: 0;"
                         ),
                         ui.div(
                             ui.hr(),
@@ -924,17 +925,23 @@ def reagents_server(input, output, session):
     @render.ui
     def pending_lots_table():
         df = pending_lots.get()
-        
+
         if df.empty:
-            return ui.p(
-                "No lots in queue. Add lots using the form.",
-                class_="text-muted text-center py-4"
+            return ui.HTML(
+                """
+                <div
+                  id="pending_queue_printable"
+                  style="height: 420px; overflow-y: auto; display: flex; align-items: center; justify-content: center;"
+                >
+                  <p class="text-muted text-center py-4 mb-0">No lots in queue. Add lots using the form.</p>
+                </div>
+                """
             )
-        
+
         display_df = df[["Internal Name", "Reagent Type", "Lot Number", "Expiry Date"]].copy()
-        
+
         return ui.HTML(
-            f'<div id="pending_queue_printable" style="max-height: 300px; overflow-y: auto;">'
+            f'<div id="pending_queue_printable" style="height: 420px; overflow-y: auto;">'
             f"{render_pending_lots_html(display_df)}"
             "</div>"
         )
