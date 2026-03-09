@@ -119,12 +119,50 @@ def _find_child(element: ET.Element, child_name: str) -> ET.Element | None:
     return None
 
 
+def _find_descendant(element: ET.Element, child_name: str) -> ET.Element | None:
+    """Find first descendant by local tag name."""
+    for child in element.iter():
+        if child is element:
+            continue
+        if _local_name(child.tag) == child_name:
+            return child
+    return None
+
+
 def _extract_reagentkit_id(uri: str | None) -> str | None:
     """Extract reagent kit numeric ID from a URI."""
     if not uri:
         return None
     match = re.search(r"/reagentkits/(\d+)", uri)
     return match.group(1) if match else None
+
+
+def _extract_reagentlot_sort_key(uri: str | None) -> tuple[int, int] | None:
+    """Extract a sortable reagent-lot ID tuple from a reagent-lot URI."""
+    if not uri:
+        return None
+    match = re.search(r"/reagentlots/(\d+)(?:-(\d+))?", uri)
+    if not match:
+        return None
+    major = int(match.group(1))
+    minor = int(match.group(2)) if match.group(2) is not None else -1
+    return (major, minor)
+
+
+def _select_recent_lot_candidates(
+    detail_candidates: list[str],
+    max_detail_fetches: int,
+) -> tuple[list[str], int]:
+    """Return up to max_detail_fetches lot URIs, preferring the highest lot IDs."""
+    sorted_candidates = sorted(
+        detail_candidates,
+        key=lambda uri: (
+            _extract_reagentlot_sort_key(uri) is not None,
+            _extract_reagentlot_sort_key(uri) or (-1, -1),
+        ),
+        reverse=True,
+    )
+    return sorted_candidates[:max_detail_fetches], len(sorted_candidates)
 
 
 def _parse_lot_name_and_kit_from_xml(xml_content: bytes) -> tuple[str, str, str]:
@@ -139,18 +177,32 @@ def _parse_lot_name_and_kit_from_xml(xml_content: bytes) -> tuple[str, str, str]
     status = ""
 
     name_child = _find_child(root, "name")
+    if name_child is None:
+        name_child = _find_descendant(root, "name")
     if name_child is not None and name_child.text:
         name = name_child.text.strip()
     elif root.attrib.get("name"):
         name = root.attrib["name"].strip()
 
     kit_child = _find_child(root, "reagent-kit")
+    if kit_child is None:
+        kit_child = _find_descendant(root, "reagent-kit")
     if kit_child is not None:
         reagent_kit_uri = (kit_child.attrib.get("uri") or "").strip()
     elif root.attrib.get("reagent-kit"):
         reagent_kit_uri = str(root.attrib.get("reagent-kit") or "").strip()
+    if not reagent_kit_uri:
+        for element in root.iter():
+            for attr_name, attr_value in element.attrib.items():
+                if "reagent" in attr_name and "kit" in attr_name and "/reagentkits/" in str(attr_value):
+                    reagent_kit_uri = str(attr_value).strip()
+                    break
+            if reagent_kit_uri:
+                break
 
     status_child = _find_child(root, "status")
+    if status_child is None:
+        status_child = _find_descendant(root, "status")
     if status_child is not None and status_child.text:
         status = status_child.text.strip()
     elif root.attrib.get("status"):
@@ -168,16 +220,28 @@ def _parse_lot_fields_from_xml(xml_content: bytes) -> dict[str, str]:
 
     def child_text(child_name: str) -> str:
         child = _find_child(root, child_name)
+        if child is None:
+            child = _find_descendant(root, child_name)
         if child is not None and child.text:
             return child.text.strip()
         return str(root.attrib.get(child_name, "") or "").strip()
 
     kit_uri = ""
     kit_child = _find_child(root, "reagent-kit")
+    if kit_child is None:
+        kit_child = _find_descendant(root, "reagent-kit")
     if kit_child is not None:
         kit_uri = (kit_child.attrib.get("uri") or "").strip()
     elif root.attrib.get("reagent-kit"):
         kit_uri = str(root.attrib.get("reagent-kit") or "").strip()
+    if not kit_uri:
+        for element in root.iter():
+            for attr_name, attr_value in element.attrib.items():
+                if "reagent" in attr_name and "kit" in attr_name and "/reagentkits/" in str(attr_value):
+                    kit_uri = str(attr_value).strip()
+                    break
+            if kit_uri:
+                break
 
     return {
         "name": child_text("name"),
@@ -366,23 +430,29 @@ def get_latest_prep_sequence_status(
             continue
 
         seq_num = int(match.group(1))
-        print(
-            "[prep-check] Matched prep lot: "
-            f"name='{name}', kit_uri='{reagent_kit_uri}', kit_id='{reagent_kit_id}', "
-            f"type='{reagent_type}', seq={seq_num}"
-        )
         current_max = latest_by_type[reagent_type]
         if current_max is None or seq_num > current_max:
             latest_by_type[reagent_type] = seq_num
 
-    limited_candidates = detail_candidates[:max_detail_fetches]
-    if len(detail_candidates) > max_detail_fetches:
+    limited_candidates, total_candidates = _select_recent_lot_candidates(
+        detail_candidates,
+        max_detail_fetches,
+    )
+    if total_candidates > max_detail_fetches:
         print(
             f"[prep-check] Limiting lot detail fetches to {max_detail_fetches} "
-            f"(total candidates={len(detail_candidates)})"
+            f"(total candidates={total_candidates}, preferring newest reagent lot IDs)"
         )
 
     detail_fetches = 0
+    detail_debug_counts = {
+        "matched": 0,
+        "status_filtered": 0,
+        "missing_name": 0,
+        "missing_kit_uri": 0,
+        "unknown_kit": 0,
+        "name_pattern_miss": 0,
+    }
     if limited_candidates:
         max_workers = min(16, len(limited_candidates))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -399,27 +469,30 @@ def get_latest_prep_sequence_status(
 
             for future in as_completed(futures):
                 detail_fetches += 1
-                _, name, reagent_kit_uri, status = future.result()
+                lot_uri, name, reagent_kit_uri, status = future.result()
                 if status and status.upper() not in prep_counted_statuses:
+                    detail_debug_counts["status_filtered"] += 1
                     continue
-                if not name or not reagent_kit_uri:
+                if not name:
+                    detail_debug_counts["missing_name"] += 1
+                    continue
+                if not reagent_kit_uri:
+                    detail_debug_counts["missing_kit_uri"] += 1
                     continue
 
                 reagent_kit_id = _extract_reagentkit_id(reagent_kit_uri)
                 reagent_type = kit_id_to_type.get(reagent_kit_id or "")
                 if not reagent_type:
+                    detail_debug_counts["unknown_kit"] += 1
                     continue
 
                 match = seq_pattern.search(name)
                 if not match:
+                    detail_debug_counts["name_pattern_miss"] += 1
                     continue
 
                 seq_num = int(match.group(1))
-                print(
-                    "[prep-check] Matched prep lot (detail): "
-                    f"name='{name}', kit_uri='{reagent_kit_uri}', kit_id='{reagent_kit_id}', "
-                    f"type='{reagent_type}', seq={seq_num}"
-                )
+                detail_debug_counts["matched"] += 1
                 current_max = latest_by_type[reagent_type]
                 if current_max is None or seq_num > current_max:
                     latest_by_type[reagent_type] = seq_num
@@ -428,6 +501,7 @@ def get_latest_prep_sequence_status(
     print(f"[prep-check] Latest sequence by type: {latest_by_type}")
     missing_sequences = [rt for rt, seq in latest_by_type.items() if seq is None]
     if missing_sequences:
+        print(f"[prep-check] Detail outcome counts: {detail_debug_counts}")
         print(f"[prep-check] Missing sequences for: {missing_sequences}")
         return PrepSequenceStatus(
             success=False,
@@ -442,6 +516,7 @@ def get_latest_prep_sequence_status(
 
     unique_latest = sorted(set(seq for seq in latest_by_type.values() if seq is not None))
     if len(unique_latest) != 1:
+        print(f"[prep-check] Detail outcome counts: {detail_debug_counts}")
         print(f"[prep-check] Mismatch detected. unique_latest={unique_latest}")
         mismatch = ", ".join(
             f"{rt}: #{seq}" for rt, seq in latest_by_type.items()
@@ -523,23 +598,32 @@ def get_latest_index_sequence_status(
 
     detail_candidates: list[str] = []
     detail_seen: set[str] = set()
+    detail_debug_counts = {
+        "matched": 0,
+        "status_filtered": 0,
+        "missing_name": 0,
+        "missing_kit_uri": 0,
+        "unknown_kit": 0,
+        "name_pattern_miss": 0,
+    }
 
-    def apply_lot(name: str, reagent_kit_uri: str, status: str):
+    def apply_lot(name: str, reagent_kit_uri: str, status: str) -> str:
         nonlocal latest_sequence
         if status and status.upper() != "ACTIVE":
-            return
+            return "status_filtered"
 
         kit_id = _extract_reagentkit_id(reagent_kit_uri)
         if kit_id != index_kit_id:
-            return
+            return "unknown_kit"
 
         match = seq_pattern.search(name or "")
         if not match:
-            return
+            return "name_pattern_miss"
 
         seq_num = int(match.group(1))
         if latest_sequence is None or seq_num > latest_sequence:
             latest_sequence = seq_num
+        return "matched"
 
     for element in root.iter():
         if _local_name(element.tag) not in {"reagent-lot", "reagentlot"}:
@@ -577,9 +661,20 @@ def get_latest_index_sequence_status(
                 detail_seen.add(lot_uri)
             continue
 
-        apply_lot(name, reagent_kit_uri, status)
+        reason = apply_lot(name, reagent_kit_uri, status)
+        detail_debug_counts[reason] += 1
 
-    limited_candidates = detail_candidates[:max_detail_fetches]
+    limited_candidates, total_candidates = _select_recent_lot_candidates(
+        detail_candidates,
+        max_detail_fetches,
+    )
+    if total_candidates > max_detail_fetches:
+        _log_lims_event(
+            "index_sequence_candidates_limited",
+            limit=max_detail_fetches,
+            total_candidates=total_candidates,
+            selection="highest_reagentlot_ids",
+        )
     if limited_candidates:
         max_workers = min(16, len(limited_candidates))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -595,12 +690,18 @@ def get_latest_index_sequence_status(
             ]
 
             for future in as_completed(futures):
-                _, name, reagent_kit_uri, status = future.result()
-                if not name or not reagent_kit_uri:
+                lot_uri, name, reagent_kit_uri, status = future.result()
+                if not name:
+                    detail_debug_counts["missing_name"] += 1
                     continue
-                apply_lot(name, reagent_kit_uri, status)
+                if not reagent_kit_uri:
+                    detail_debug_counts["missing_kit_uri"] += 1
+                    continue
+                reason = apply_lot(name, reagent_kit_uri, status)
+                detail_debug_counts[reason] += 1
 
     if latest_sequence is None:
+        _log_lims_event("index_sequence_detail_outcomes", **detail_debug_counts)
         return IndexSequenceStatus(
             success=False,
             latest_sequence=None,
@@ -730,7 +831,17 @@ def get_active_reagent_overview(
             "reagent_kit_uri": reagent_kit_uri,
         })
 
-    limited_candidates = detail_candidates[:max_detail_fetches]
+    limited_candidates, total_candidates = _select_recent_lot_candidates(
+        detail_candidates,
+        max_detail_fetches,
+    )
+    if total_candidates > max_detail_fetches:
+        _log_lims_event(
+            "active_reagent_overview_candidates_limited",
+            limit=max_detail_fetches,
+            total_candidates=total_candidates,
+            selection="highest_reagentlot_ids",
+        )
     if limited_candidates:
         max_workers = min(16, len(limited_candidates))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
