@@ -24,6 +24,9 @@ Top-level reagent fields:
 - `requires_miseq_kit_type`: Whether each variant must define a MiSeq kit type
   such as `v3` or `v2 nano`.
 
+- `submission_status`: Optional LIMS submission status. Allowed values are
+  `ACTIVE` and `PENDING`. Defaults to `ACTIVE` if omitted.
+
 - `variants`: List of scanner/dropdown entries that map refs to this reagent
   type.
 
@@ -59,6 +62,7 @@ from __future__ import annotations
 import re
 
 ALLOWED_NAMING_GROUPS = {"prep", "index", "miseq", "phix"}
+ALLOWED_SUBMISSION_STATUSES = {"ACTIVE", "PENDING"}
 
 # Canonical reagent registry.
 # Maintain reagent behavior and options by editing this list only.
@@ -69,6 +73,7 @@ REAGENT_DEFINITIONS = [
         "naming_group": "prep",
         "requires_rgt_number": False,
         "requires_miseq_kit_type": False,
+        "submission_status": "PENDING",
         "variants": [
             {
                 "ref": "20049006",
@@ -82,6 +87,7 @@ REAGENT_DEFINITIONS = [
         "naming_group": "prep",
         "requires_rgt_number": False,
         "requires_miseq_kit_type": False,
+        "submission_status": "PENDING",
         "variants": [
             {
                 "ref": "20015829",
@@ -95,6 +101,7 @@ REAGENT_DEFINITIONS = [
         "naming_group": "prep",
         "requires_rgt_number": False,
         "requires_miseq_kit_type": False,
+        "submission_status": "PENDING",
         "variants": [
             {
                 "ref": "20015880",
@@ -108,6 +115,7 @@ REAGENT_DEFINITIONS = [
         "naming_group": "index",
         "requires_rgt_number": False,
         "requires_miseq_kit_type": False,
+        "submission_status": "PENDING",
         "variants": [
             {
                 "ref": "20091646",
@@ -185,6 +193,7 @@ REAGENT_DEFINITIONS = [
         "naming_group": "phix",
         "requires_rgt_number": True,
         "requires_miseq_kit_type": False,
+        "submission_status": "PENDING",
         "variants": [
             {
                 "ref": "15017666",
@@ -244,6 +253,13 @@ def _validate_reagent_definitions() -> None:
             index_type_names.append(type_name)
 
         requires_miseq_kit_type = bool(reagent.get("requires_miseq_kit_type"))
+        submission_status = _as_clean_str(reagent.get("submission_status")) or "ACTIVE"
+        if submission_status not in ALLOWED_SUBMISSION_STATUSES:
+            allowed = ", ".join(sorted(ALLOWED_SUBMISSION_STATUSES))
+            errors.append(
+                f"Reagent '{type_name}': invalid submission_status '{submission_status}'. "
+                f"Allowed values: {allowed}."
+            )
 
         variants = reagent.get("variants")
         if not isinstance(variants, list) or len(variants) == 0:
@@ -324,6 +340,7 @@ def _build_derived_exports():
 
         reagent_types[type_name] = {
             "naming_group": naming_group,
+            "submission_status": _as_clean_str(reagent.get("submission_status")) or "ACTIVE",
         }
         if bool(reagent.get("requires_rgt_number")):
             reagent_types[type_name]["requires_rgt_number"] = True

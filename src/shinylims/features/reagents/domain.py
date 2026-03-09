@@ -231,8 +231,7 @@ def get_prep_queue_mismatch_details(pending_lots: pd.DataFrame) -> str | None:
 def submission_status_for_reagent(reagent_type: str) -> str:
     """Return the LIMS status to use when submitting this reagent type."""
     reagent_info = REAGENT_TYPES.get(reagent_type, {})
-    naming_group = reagent_info.get("naming_group")
-    return "PENDING" if naming_group in {"prep", "index"} else "ACTIVE"
+    return str(reagent_info.get("submission_status") or "ACTIVE")
 
 
 def summarize_submission_entries(
