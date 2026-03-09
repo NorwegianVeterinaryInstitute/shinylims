@@ -12,9 +12,8 @@ from urllib.parse import urlparse
 from shinylims.integrations.lims_api import (
     LIMSConfig, 
     create_reagent_lot, 
+    get_reagent_sequence_statuses,
     test_connection,
-    get_latest_prep_sequence_status,
-    get_latest_index_sequence_status
 )
 from shinylims.config.reagents import (
     PREP_REAGENT_TYPES,
@@ -107,8 +106,6 @@ def reagents_ui():
                         })();
                         """
                     ),
-                    ui.output_ui("rgt_number_ui"),
-                    
                     ui.input_text(
                         "lot_number",
                         "Lot Number",
@@ -133,6 +130,7 @@ def reagents_ui():
                         }
                         """
                     ),
+                    ui.output_ui("rgt_number_ui"),
                     
                     ui.layout_columns(
                         ui.input_date(
@@ -150,19 +148,28 @@ def reagents_ui():
                     ui.tags.script(
                         """
                         (function() {
-                          function positionExpiryDatepicker() {
-                            const input = document.getElementById('expiry_date');
-                            if (!input) return;
+                          function resolveDateInput(id) {
+                            const el = document.getElementById(id);
+                            if (!el) return null;
+                            if (el.tagName === 'INPUT') return el;
+                            return el.querySelector('input') || el;
+                          }
 
+                          function getVisibleDatepicker() {
                             const pickers = Array.from(document.querySelectorAll('.datepicker-dropdown'));
-                            if (!pickers.length) return;
+                            return pickers.find((el) => el.offsetParent !== null) || pickers[pickers.length - 1] || null;
+                          }
 
-                            // Bootstrap datepicker appends to body; grab currently visible popup.
-                            const picker = pickers.find((el) => el.offsetParent !== null) || pickers[pickers.length - 1];
+                          function positionDatepickerForInput(input) {
+                            if (!input) return;
+                            const picker = getVisibleDatepicker();
                             if (!picker) return;
 
+                            const pickerHeight = picker.getBoundingClientRect().height || picker.offsetHeight || 270;
                             const rect = input.getBoundingClientRect();
-                            const top = window.scrollY + rect.bottom + 6;
+                            const aboveTop = window.scrollY + rect.top - pickerHeight + 20;
+                            const belowTop = window.scrollY + rect.bottom + 6;
+                            const top = aboveTop >= window.scrollY ? aboveTop : belowTop;
                             const left = window.scrollX + rect.left;
 
                             picker.style.top = `${top}px`;
@@ -170,17 +177,34 @@ def reagents_ui():
                           }
 
                           const bind = () => {
-                            const input = document.getElementById('expiry_date');
-                            if (!input) return false;
-                            if (input._expiryDatepickerBound) return true;
-                            input._expiryDatepickerBound = true;
+                            const inputs = ["received_date", "expiry_date"]
+                              .map((id) => resolveDateInput(id))
+                              .filter(Boolean);
+                            if (!inputs.length) return false;
 
-                            input.addEventListener('focus', () => setTimeout(positionExpiryDatepicker, 0));
-                            input.addEventListener('click', () => setTimeout(positionExpiryDatepicker, 0));
-                            window.addEventListener('scroll', positionExpiryDatepicker, { passive: true });
-                            window.addEventListener('resize', positionExpiryDatepicker);
+                            inputs.forEach((input) => {
+                              if (input._reagentDatepickerBound) return;
+                              input._reagentDatepickerBound = true;
+                              input.addEventListener('focus', () => setTimeout(() => positionDatepickerForInput(input), 0));
+                              input.addEventListener('click', () => setTimeout(() => positionDatepickerForInput(input), 0));
+                            });
 
-                            document.addEventListener('click', () => setTimeout(positionExpiryDatepicker, 0), true);
+                            if (!window._reagentDatepickerGlobalBound) {
+                              window._reagentDatepickerGlobalBound = true;
+                              window.addEventListener('scroll', () => {
+                                const activeInput = inputs.find((input) => document.activeElement === input);
+                                if (activeInput) positionDatepickerForInput(activeInput);
+                              }, { passive: true });
+                              window.addEventListener('resize', () => {
+                                const activeInput = inputs.find((input) => document.activeElement === input);
+                                if (activeInput) positionDatepickerForInput(activeInput);
+                              });
+                              document.addEventListener('click', () => {
+                                const activeInput = inputs.find((input) => document.activeElement === input);
+                                if (activeInput) setTimeout(() => positionDatepickerForInput(activeInput), 0);
+                              }, true);
+                            }
+
                             return true;
                           };
 
@@ -443,31 +467,32 @@ def reagents_server(input, output, session):
         _log_lims_ui_event("refresh_connection_success")
         return True
 
-    def refresh_prep_sequence_state(config):
-        status = get_latest_prep_sequence_status(config, PREP_REAGENT_TYPES)
-
-        if status.success and status.latest_complete_sequence is not None:
-            seq_nums = sequence_numbers.get().copy()
-            seq_nums["prep"] = status.latest_complete_sequence
-            sequence_numbers.set(seq_nums)
-            prep_sequence_state.set((True, status.message))
-            return True
-
-        prep_sequence_state.set((False, status.message))
-        return False
-
-    def refresh_index_sequence_state(config):
-        status = get_latest_index_sequence_status(config)
-        if not status.success:
-            index_sequence_state.set((False, status.message, None))
-            return False, status.message
+    def refresh_sequence_states(config):
+        statuses = get_reagent_sequence_statuses(config, PREP_REAGENT_TYPES)
 
         seq_nums = sequence_numbers.get().copy()
-        if status.latest_sequence is not None:
-            seq_nums["index"] = status.latest_sequence
+
+        prep_status = statuses.prep
+        if prep_status.success and prep_status.latest_complete_sequence is not None:
+            seq_nums["prep"] = prep_status.latest_complete_sequence
+            prep_sequence_state.set((True, prep_status.message))
+            prep_ok = True
+        else:
+            prep_sequence_state.set((False, prep_status.message))
+            prep_ok = False
+
+        index_status = statuses.index
+        if index_status.success:
+            if index_status.latest_sequence is not None:
+                seq_nums["index"] = index_status.latest_sequence
+            index_sequence_state.set((True, index_status.message, index_status.latest_sequence))
+            index_ok = True
+        else:
+            index_sequence_state.set((False, index_status.message, None))
+            index_ok = False
+
         sequence_numbers.set(seq_nums)
-        index_sequence_state.set((True, status.message, status.latest_sequence))
-        return True, status.message
+        return prep_ok, index_ok, index_status.message
 
     @reactive.Effect
     @reactive.event(input.open_tool_reagents)
@@ -490,8 +515,7 @@ def reagents_server(input, output, session):
         try:
             if refresh_lims_connection(notify=False):
                 config = lims_config.get()
-                prep_ok = refresh_prep_sequence_state(config)
-                index_ok, index_msg = refresh_index_sequence_state(config)
+                prep_ok, index_ok, index_msg = refresh_sequence_states(config)
                 _log_lims_ui_event(
                     "reagents_open_init_checks_complete",
                     prep_ok=prep_ok,
@@ -521,7 +545,8 @@ def reagents_server(input, output, session):
                 return
 
             config = lims_config.get()
-            if refresh_prep_sequence_state(config):
+            prep_ok, index_ok, index_message = refresh_sequence_states(config)
+            if prep_ok:
                 ui.notification_show("Prep sequence status refreshed", type="message", duration=3)
             else:
                 ui.notification_show(
@@ -530,7 +555,6 @@ def reagents_server(input, output, session):
                     duration=8
                 )
 
-            index_ok, index_message = refresh_index_sequence_state(config)
             if not index_ok:
                 ui.notification_show(
                     f"Index sequence refresh failed: {index_message}",
@@ -998,8 +1022,7 @@ def reagents_server(input, output, session):
 
                 p.set(2, message="Checking current prep/index status in LIMS...")
                 # Always re-check current LIMS state before allowing submission.
-                refresh_prep_sequence_state(config)
-                refresh_index_sequence_state(config)
+                refresh_sequence_states(config)
                 prep_ok, prep_message = prep_sequence_state.get()
                 if not prep_ok:
                     ui.modal_show(
@@ -1256,8 +1279,7 @@ def reagents_server(input, output, session):
             )
 
             # Refresh prep/index state after submission so next number/status reflects LIMS.
-            refresh_prep_sequence_state(config)
-            refresh_index_sequence_state(config)
+            refresh_sequence_states(config)
         finally:
             submit_in_progress.set(False)
     

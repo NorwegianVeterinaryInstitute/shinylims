@@ -106,6 +106,30 @@ class ActiveReagentOverviewResult:
     message: str
 
 
+@dataclass
+class ReagentLotSnapshotEntry:
+    """Normalized reagent-lot fields used for sequence checks."""
+    lot_uri: str
+    name: str
+    reagent_kit_uri: str
+    status: str
+
+
+@dataclass
+class ReagentLotSnapshotResult:
+    """Result of one shared reagent-lot snapshot fetch."""
+    success: bool
+    lots: list[ReagentLotSnapshotEntry]
+    message: str
+
+
+@dataclass
+class ReagentSequenceStatuses:
+    """Combined prep and index sequence statuses from one LIMS snapshot."""
+    prep: PrepSequenceStatus
+    index: IndexSequenceStatus
+
+
 def _local_name(tag: str) -> str:
     """Return XML local tag name without namespace."""
     return tag.split("}", 1)[-1] if "}" in tag else tag
@@ -296,77 +320,90 @@ def _fetch_lot_detail_fields(
         return lot_uri, {}
 
 
-def get_latest_prep_sequence_status(
+def _extract_lot_snapshot_entry(element: ET.Element) -> ReagentLotSnapshotEntry:
+    """Extract normalized lot fields from a reagent-lot list element."""
+    name = ""
+    reagent_kit_uri = ""
+    status = ""
+    lot_uri = (element.attrib.get("uri") or "").strip()
+
+    name_child = _find_child(element, "name")
+    if name_child is not None and name_child.text:
+        name = name_child.text.strip()
+    elif element.attrib.get("name"):
+        name = element.attrib["name"].strip()
+
+    kit_child = _find_child(element, "reagent-kit")
+    if kit_child is not None:
+        reagent_kit_uri = (kit_child.attrib.get("uri") or "").strip()
+    else:
+        for attr_name, attr_value in element.attrib.items():
+            if "reagent" in attr_name and "kit" in attr_name and "/reagentkits/" in str(attr_value):
+                reagent_kit_uri = str(attr_value).strip()
+                break
+        if not reagent_kit_uri:
+            for child in element.iter():
+                if _local_name(child.tag) == "reagent-kit":
+                    reagent_kit_uri = (child.attrib.get("uri") or "").strip()
+                    if reagent_kit_uri:
+                        break
+
+    status_child = _find_child(element, "status")
+    if status_child is not None and status_child.text:
+        status = status_child.text.strip()
+    elif element.attrib.get("status"):
+        status = str(element.attrib.get("status") or "").strip()
+
+    return ReagentLotSnapshotEntry(
+        lot_uri=lot_uri,
+        name=name,
+        reagent_kit_uri=reagent_kit_uri,
+        status=status,
+    )
+
+
+def _fetch_reagent_lot_snapshot(
     config: LIMSConfig,
-    prep_reagent_types: list[str],
-    max_detail_fetches: int = 250
-) -> PrepSequenceStatus:
-    """
-    Get latest complete sequence number for Illumina DNA Prep reagent sets.
-
-    A valid state requires all three prep reagent types to share the same
-    latest sequence number (e.g., all at #29).
-    """
-    kit_uris = get_reagent_kit_uris(config.base_url)
-    prep_kit_uris = {rt: kit_uris.get(rt) for rt in prep_reagent_types}
-    latest_by_type = {rt: None for rt in prep_reagent_types}
-    print("[prep-check] Starting prep sequence check")
-    print(f"[prep-check] Prep kit URI map: {prep_kit_uris}")
-
-    missing_types = [rt for rt, uri in prep_kit_uris.items() if not uri]
-    if missing_types:
-        return PrepSequenceStatus(
-            success=False,
-            latest_complete_sequence=None,
-            message=f"Missing reagent kit URI mapping for: {', '.join(missing_types)}",
-            latest_by_reagent_type=latest_by_type
-        )
+    max_detail_fetches: int = 250,
+) -> ReagentLotSnapshotResult:
+    """Fetch one shared reagent-lot snapshot for sequence checks."""
+    _log_lims_event(
+        "reagent_lot_snapshot_start",
+        endpoint=f"{_safe_base_url_for_logs(config.base_url)}/reagentlots",
+        max_detail_fetches=max_detail_fetches,
+    )
 
     try:
         response = requests.get(
             f"{config.base_url}/reagentlots",
             auth=HTTPBasicAuth(config.username, config.password),
             headers={"Accept": "application/xml"},
-            timeout=30
+            timeout=30,
         )
-        print(f"[prep-check] GET /reagentlots status={response.status_code}")
     except requests.exceptions.RequestException as e:
-        print(f"[prep-check] Request error: {e}")
-        return PrepSequenceStatus(
+        return ReagentLotSnapshotResult(
             success=False,
-            latest_complete_sequence=None,
+            lots=[],
             message=f"Connection error while reading reagent lots: {str(e)}",
-            latest_by_reagent_type=latest_by_type
         )
 
     if response.status_code != 200:
-        return PrepSequenceStatus(
+        return ReagentLotSnapshotResult(
             success=False,
-            latest_complete_sequence=None,
+            lots=[],
             message=f"Unable to read reagent lots (HTTP {response.status_code})",
-            latest_by_reagent_type=latest_by_type
         )
 
     try:
         root = ET.fromstring(response.content)
     except ET.ParseError as e:
-        print(f"[prep-check] XML parse error: {e}")
-        return PrepSequenceStatus(
+        return ReagentLotSnapshotResult(
             success=False,
-            latest_complete_sequence=None,
+            lots=[],
             message=f"Could not parse reagent lots XML: {str(e)}",
-            latest_by_reagent_type=latest_by_type
         )
 
-    seq_pattern = re.compile(r"#(\d+)\s*\(192\)")
-    prep_counted_statuses = {"ACTIVE", "PENDING"}
-    kit_id_to_type = {}
-    for reagent_type, uri in prep_kit_uris.items():
-        kit_id = _extract_reagentkit_id(uri)
-        if kit_id:
-            kit_id_to_type[kit_id] = reagent_type
-    print(f"[prep-check] Kit ID map: {kit_id_to_type}")
-
+    lots: list[ReagentLotSnapshotEntry] = []
     detail_candidates: list[str] = []
     detail_seen: set[str] = set()
 
@@ -374,85 +411,26 @@ def get_latest_prep_sequence_status(
         if _local_name(element.tag) not in {"reagent-lot", "reagentlot"}:
             continue
 
-        name = ""
-        reagent_kit_uri = ""
-        status = ""
-        lot_uri = (element.attrib.get("uri") or "").strip()
-
-        name_child = _find_child(element, "name")
-        if name_child is not None and name_child.text:
-            name = name_child.text.strip()
-        elif element.attrib.get("name"):
-            name = element.attrib["name"].strip()
-
-        kit_child = _find_child(element, "reagent-kit")
-        if kit_child is not None:
-            reagent_kit_uri = (kit_child.attrib.get("uri") or "").strip()
-        else:
-            # Fallback for list-style payloads that expose kit URI on attributes.
-            for attr_name, attr_value in element.attrib.items():
-                if "reagent" in attr_name and "kit" in attr_name and "/reagentkits/" in str(attr_value):
-                    reagent_kit_uri = str(attr_value).strip()
-                    break
-            if not reagent_kit_uri:
-                for child in element.iter():
-                    if _local_name(child.tag) == "reagent-kit":
-                        reagent_kit_uri = (child.attrib.get("uri") or "").strip()
-                        if reagent_kit_uri:
-                            break
-
-        status_child = _find_child(element, "status")
-        if status_child is not None and status_child.text:
-            status = status_child.text.strip()
-        elif element.attrib.get("status"):
-            status = str(element.attrib.get("status") or "").strip()
-
-        # Many Clarity instances return list entries with only lot URI.
-        if (not name or not reagent_kit_uri) and lot_uri:
-            if lot_uri not in detail_seen:
-                detail_candidates.append(lot_uri)
-                detail_seen.add(lot_uri)
+        entry = _extract_lot_snapshot_entry(element)
+        if entry.name and entry.reagent_kit_uri:
+            lots.append(entry)
             continue
-
-        if status and status.upper() not in prep_counted_statuses:
-            continue
-
-        if not name or not reagent_kit_uri:
-            continue
-
-        reagent_kit_id = _extract_reagentkit_id(reagent_kit_uri)
-        reagent_type = kit_id_to_type.get(reagent_kit_id or "")
-        if not reagent_type:
-            continue
-
-        match = seq_pattern.search(name)
-        if not match:
-            continue
-
-        seq_num = int(match.group(1))
-        current_max = latest_by_type[reagent_type]
-        if current_max is None or seq_num > current_max:
-            latest_by_type[reagent_type] = seq_num
+        if entry.lot_uri and entry.lot_uri not in detail_seen:
+            detail_candidates.append(entry.lot_uri)
+            detail_seen.add(entry.lot_uri)
 
     limited_candidates, total_candidates = _select_recent_lot_candidates(
         detail_candidates,
         max_detail_fetches,
     )
     if total_candidates > max_detail_fetches:
-        print(
-            f"[prep-check] Limiting lot detail fetches to {max_detail_fetches} "
-            f"(total candidates={total_candidates}, preferring newest reagent lot IDs)"
+        _log_lims_event(
+            "reagent_lot_snapshot_candidates_limited",
+            limit=max_detail_fetches,
+            total_candidates=total_candidates,
+            selection="highest_reagentlot_ids",
         )
 
-    detail_fetches = 0
-    detail_debug_counts = {
-        "matched": 0,
-        "status_filtered": 0,
-        "missing_name": 0,
-        "missing_kit_uri": 0,
-        "unknown_kit": 0,
-        "name_pattern_miss": 0,
-    }
     if limited_candidates:
         max_workers = min(16, len(limited_candidates))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -462,46 +440,89 @@ def get_latest_prep_sequence_status(
                     lot_uri,
                     config.username,
                     config.password,
-                    5
+                    5,
                 )
                 for lot_uri in limited_candidates
             ]
-
             for future in as_completed(futures):
-                detail_fetches += 1
                 lot_uri, name, reagent_kit_uri, status = future.result()
-                if status and status.upper() not in prep_counted_statuses:
-                    detail_debug_counts["status_filtered"] += 1
+                if not name or not reagent_kit_uri:
                     continue
-                if not name:
-                    detail_debug_counts["missing_name"] += 1
-                    continue
-                if not reagent_kit_uri:
-                    detail_debug_counts["missing_kit_uri"] += 1
-                    continue
+                lots.append(
+                    ReagentLotSnapshotEntry(
+                        lot_uri=lot_uri,
+                        name=name,
+                        reagent_kit_uri=reagent_kit_uri,
+                        status=status,
+                    )
+                )
 
-                reagent_kit_id = _extract_reagentkit_id(reagent_kit_uri)
-                reagent_type = kit_id_to_type.get(reagent_kit_id or "")
-                if not reagent_type:
-                    detail_debug_counts["unknown_kit"] += 1
-                    continue
+    return ReagentLotSnapshotResult(
+        success=True,
+        lots=lots,
+        message="Loaded reagent lot snapshot.",
+    )
 
-                match = seq_pattern.search(name)
-                if not match:
-                    detail_debug_counts["name_pattern_miss"] += 1
-                    continue
 
-                seq_num = int(match.group(1))
-                detail_debug_counts["matched"] += 1
-                current_max = latest_by_type[reagent_type]
-                if current_max is None or seq_num > current_max:
-                    latest_by_type[reagent_type] = seq_num
+def _compute_prep_sequence_status_from_lots(
+    lots: list[ReagentLotSnapshotEntry],
+    prep_reagent_types: list[str],
+    base_url: str,
+) -> PrepSequenceStatus:
+    """Compute prep sequence status from a shared lot snapshot."""
+    kit_uris = get_reagent_kit_uris(base_url)
+    prep_kit_uris = {reagent_type: kit_uris.get(reagent_type) for reagent_type in prep_reagent_types}
+    latest_by_type = {rt: None for rt in prep_reagent_types}
+    missing_types = [rt for rt, uri in prep_kit_uris.items() if not uri]
+    if missing_types:
+        return PrepSequenceStatus(
+            success=False,
+            latest_complete_sequence=None,
+            message=f"Missing reagent kit URI mapping for: {', '.join(missing_types)}",
+            latest_by_reagent_type=latest_by_type,
+        )
 
-    print(f"[prep-check] Detail fetches from lot URIs: {detail_fetches}")
-    print(f"[prep-check] Latest sequence by type: {latest_by_type}")
+    seq_pattern = re.compile(r"#(\d+)\s*\(192\)")
+    prep_counted_statuses = {"ACTIVE", "PENDING"}
+    kit_id_to_type = {
+        _extract_reagentkit_id(uri): reagent_type
+        for reagent_type, uri in prep_kit_uris.items()
+        if _extract_reagentkit_id(uri)
+    }
+    outcome_counts = {
+        "matched": 0,
+        "status_filtered": 0,
+        "unknown_kit": 0,
+        "name_pattern_miss": 0,
+    }
+
+    for lot in lots:
+        status = (lot.status or "").upper()
+        if status and status not in prep_counted_statuses:
+            outcome_counts["status_filtered"] += 1
+            continue
+
+        reagent_kit_id = _extract_reagentkit_id(lot.reagent_kit_uri)
+        reagent_type = kit_id_to_type.get(reagent_kit_id or "")
+        if not reagent_type:
+            outcome_counts["unknown_kit"] += 1
+            continue
+
+        match = seq_pattern.search(lot.name)
+        if not match:
+            outcome_counts["name_pattern_miss"] += 1
+            continue
+
+        seq_num = int(match.group(1))
+        outcome_counts["matched"] += 1
+        current_max = latest_by_type[reagent_type]
+        if current_max is None or seq_num > current_max:
+            latest_by_type[reagent_type] = seq_num
+
     missing_sequences = [rt for rt, seq in latest_by_type.items() if seq is None]
     if missing_sequences:
-        print(f"[prep-check] Detail outcome counts: {detail_debug_counts}")
+        print(f"[prep-check] Outcome counts: {outcome_counts}")
+        print(f"[prep-check] Latest sequence by type: {latest_by_type}")
         print(f"[prep-check] Missing sequences for: {missing_sequences}")
         return PrepSequenceStatus(
             success=False,
@@ -511,16 +532,15 @@ def get_latest_prep_sequence_status(
                 + ", ".join(missing_sequences)
                 + ". Ensure reagent lots use names like '#NN (192)'."
             ),
-            latest_by_reagent_type=latest_by_type
+            latest_by_reagent_type=latest_by_type,
         )
 
     unique_latest = sorted(set(seq for seq in latest_by_type.values() if seq is not None))
     if len(unique_latest) != 1:
-        print(f"[prep-check] Detail outcome counts: {detail_debug_counts}")
+        print(f"[prep-check] Outcome counts: {outcome_counts}")
+        print(f"[prep-check] Latest sequence by type: {latest_by_type}")
         print(f"[prep-check] Mismatch detected. unique_latest={unique_latest}")
-        mismatch = ", ".join(
-            f"{rt}: #{seq}" for rt, seq in latest_by_type.items()
-        )
+        mismatch = ", ".join(f"{rt}: #{seq}" for rt, seq in latest_by_type.items())
         return PrepSequenceStatus(
             success=False,
             latest_complete_sequence=None,
@@ -529,34 +549,28 @@ def get_latest_prep_sequence_status(
                 f"{mismatch}. Clean up Clarity LIMS so all three prep reagents "
                 "share the same latest number before submitting new lots."
             ),
-            latest_by_reagent_type=latest_by_type
+            latest_by_reagent_type=latest_by_type,
         )
 
     latest_complete = unique_latest[0]
+    print(f"[prep-check] Latest sequence by type: {latest_by_type}")
     print(f"[prep-check] Success. latest_complete_sequence={latest_complete}")
     return PrepSequenceStatus(
         success=True,
         latest_complete_sequence=latest_complete,
         message=f"Latest complete prep set is #{latest_complete}",
-        latest_by_reagent_type=latest_by_type
+        latest_by_reagent_type=latest_by_type,
     )
 
 
-def get_latest_index_sequence_status(
-    config: LIMSConfig,
-    max_detail_fetches: int = 250
+def _compute_index_sequence_status_from_lots(
+    lots: list[ReagentLotSnapshotEntry],
+    base_url: str,
 ) -> IndexSequenceStatus:
-    """
-    Get latest shared IDT index sequence number.
-
-    Index names are expected to contain '#NN (192)'.
-    The numeric sequence is shared across set letters and counts both ACTIVE and PENDING lots.
-    """
+    """Compute index sequence status from a shared lot snapshot."""
     latest_sequence = None
-    kit_uris = get_reagent_kit_uris(config.base_url)
-    index_kit_uri = kit_uris.get(INDEX_REAGENT_TYPE)
+    index_kit_uri = get_reagent_kit_uris(base_url).get(INDEX_REAGENT_TYPE)
     index_kit_id = _extract_reagentkit_id(index_kit_uri)
-
     if not index_kit_id:
         return IndexSequenceStatus(
             success=False,
@@ -564,145 +578,38 @@ def get_latest_index_sequence_status(
             message=f"Missing reagent kit URI mapping for index kit: {INDEX_REAGENT_TYPE}.",
         )
 
-    try:
-        response = requests.get(
-            f"{config.base_url}/reagentlots",
-            auth=HTTPBasicAuth(config.username, config.password),
-            headers={"Accept": "application/xml"},
-            timeout=30
-        )
-    except requests.exceptions.RequestException as e:
-        return IndexSequenceStatus(
-            success=False,
-            latest_sequence=None,
-            message=f"Connection error while reading index lots: {str(e)}",
-        )
-
-    if response.status_code != 200:
-        return IndexSequenceStatus(
-            success=False,
-            latest_sequence=None,
-            message=f"Unable to read index lots (HTTP {response.status_code})",
-        )
-
-    try:
-        root = ET.fromstring(response.content)
-    except ET.ParseError as e:
-        return IndexSequenceStatus(
-            success=False,
-            latest_sequence=None,
-            message=f"Could not parse index lots XML: {str(e)}",
-        )
-
     seq_pattern = re.compile(r"#(\d+)\s*\(192\)")
-    index_counted_statuses = {"ACTIVE", "PENDING"}
-
-    detail_candidates: list[str] = []
-    detail_seen: set[str] = set()
-    detail_debug_counts = {
+    counted_statuses = {"ACTIVE", "PENDING"}
+    outcome_counts = {
         "matched": 0,
         "status_filtered": 0,
-        "missing_name": 0,
-        "missing_kit_uri": 0,
         "unknown_kit": 0,
         "name_pattern_miss": 0,
     }
 
-    def apply_lot(name: str, reagent_kit_uri: str, status: str) -> str:
-        nonlocal latest_sequence
-        if status and status.upper() not in index_counted_statuses:
-            return "status_filtered"
+    for lot in lots:
+        status = (lot.status or "").upper()
+        if status and status not in counted_statuses:
+            outcome_counts["status_filtered"] += 1
+            continue
 
-        kit_id = _extract_reagentkit_id(reagent_kit_uri)
+        kit_id = _extract_reagentkit_id(lot.reagent_kit_uri)
         if kit_id != index_kit_id:
-            return "unknown_kit"
+            outcome_counts["unknown_kit"] += 1
+            continue
 
-        match = seq_pattern.search(name or "")
+        match = seq_pattern.search(lot.name or "")
         if not match:
-            return "name_pattern_miss"
+            outcome_counts["name_pattern_miss"] += 1
+            continue
 
         seq_num = int(match.group(1))
+        outcome_counts["matched"] += 1
         if latest_sequence is None or seq_num > latest_sequence:
             latest_sequence = seq_num
-        return "matched"
-
-    for element in root.iter():
-        if _local_name(element.tag) not in {"reagent-lot", "reagentlot"}:
-            continue
-
-        name = ""
-        reagent_kit_uri = ""
-        status = ""
-        lot_uri = (element.attrib.get("uri") or "").strip()
-
-        name_child = _find_child(element, "name")
-        if name_child is not None and name_child.text:
-            name = name_child.text.strip()
-        elif element.attrib.get("name"):
-            name = element.attrib["name"].strip()
-
-        kit_child = _find_child(element, "reagent-kit")
-        if kit_child is not None:
-            reagent_kit_uri = (kit_child.attrib.get("uri") or "").strip()
-        else:
-            for attr_name, attr_value in element.attrib.items():
-                if "reagent" in attr_name and "kit" in attr_name and "/reagentkits/" in str(attr_value):
-                    reagent_kit_uri = str(attr_value).strip()
-                    break
-
-        status_child = _find_child(element, "status")
-        if status_child is not None and status_child.text:
-            status = status_child.text.strip()
-        elif element.attrib.get("status"):
-            status = str(element.attrib.get("status") or "").strip()
-
-        if (not name or not reagent_kit_uri) and lot_uri:
-            if lot_uri not in detail_seen:
-                detail_candidates.append(lot_uri)
-                detail_seen.add(lot_uri)
-            continue
-
-        reason = apply_lot(name, reagent_kit_uri, status)
-        detail_debug_counts[reason] += 1
-
-    limited_candidates, total_candidates = _select_recent_lot_candidates(
-        detail_candidates,
-        max_detail_fetches,
-    )
-    if total_candidates > max_detail_fetches:
-        _log_lims_event(
-            "index_sequence_candidates_limited",
-            limit=max_detail_fetches,
-            total_candidates=total_candidates,
-            selection="highest_reagentlot_ids",
-        )
-    if limited_candidates:
-        max_workers = min(16, len(limited_candidates))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [
-                executor.submit(
-                    _fetch_lot_detail,
-                    lot_uri,
-                    config.username,
-                    config.password,
-                    5
-                )
-                for lot_uri in limited_candidates
-            ]
-
-            for future in as_completed(futures):
-                lot_uri, name, reagent_kit_uri, status = future.result()
-                if not name:
-                    detail_debug_counts["missing_name"] += 1
-                    continue
-                if not reagent_kit_uri:
-                    detail_debug_counts["missing_kit_uri"] += 1
-                    continue
-                reason = apply_lot(name, reagent_kit_uri, status)
-                detail_debug_counts[reason] += 1
 
     if latest_sequence is None:
-        _log_lims_event("index_sequence_detail_outcomes", **detail_debug_counts)
+        _log_lims_event("index_sequence_outcomes", **outcome_counts)
         return IndexSequenceStatus(
             success=False,
             latest_sequence=None,
@@ -714,6 +621,77 @@ def get_latest_index_sequence_status(
         latest_sequence=latest_sequence,
         message=f"Loaded latest index number #{latest_sequence} from LIMS.",
     )
+
+
+def get_reagent_sequence_statuses(
+    config: LIMSConfig,
+    prep_reagent_types: list[str],
+    max_detail_fetches: int = 250,
+) -> ReagentSequenceStatuses:
+    """Return prep and index sequence statuses from one shared LIMS lot snapshot."""
+    snapshot = _fetch_reagent_lot_snapshot(config, max_detail_fetches=max_detail_fetches)
+    if not snapshot.success:
+        failure_message = snapshot.message
+        return ReagentSequenceStatuses(
+            prep=PrepSequenceStatus(
+                success=False,
+                latest_complete_sequence=None,
+                message=failure_message,
+                latest_by_reagent_type={rt: None for rt in prep_reagent_types},
+            ),
+            index=IndexSequenceStatus(
+                success=False,
+                latest_sequence=None,
+                message=failure_message,
+            ),
+        )
+
+    if prep_reagent_types:
+        prep_status = _compute_prep_sequence_status_from_lots(
+            snapshot.lots,
+            prep_reagent_types,
+            config.base_url,
+        )
+    else:
+        prep_status = PrepSequenceStatus(
+            success=False,
+            latest_complete_sequence=None,
+            message="Prep reagent types not requested.",
+            latest_by_reagent_type={},
+        )
+
+    return ReagentSequenceStatuses(
+        prep=prep_status,
+        index=_compute_index_sequence_status_from_lots(
+            snapshot.lots,
+            config.base_url,
+        ),
+    )
+
+
+def get_latest_prep_sequence_status(
+    config: LIMSConfig,
+    prep_reagent_types: list[str],
+    max_detail_fetches: int = 250
+) -> PrepSequenceStatus:
+    """Get latest complete sequence number for Illumina DNA Prep reagent sets."""
+    return get_reagent_sequence_statuses(
+        config,
+        prep_reagent_types,
+        max_detail_fetches=max_detail_fetches,
+    ).prep
+
+
+def get_latest_index_sequence_status(
+    config: LIMSConfig,
+    max_detail_fetches: int = 250
+) -> IndexSequenceStatus:
+    """Get latest shared IDT index sequence number."""
+    return get_reagent_sequence_statuses(
+        config,
+        prep_reagent_types=[],
+        max_detail_fetches=max_detail_fetches,
+    ).index
 
 
 def get_active_reagent_overview(

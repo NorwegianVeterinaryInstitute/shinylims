@@ -125,6 +125,58 @@ table.dataTable td.left-column {
   margin-left: 20px;
 }
 
+/* Make bootstrap datepickers stand out from the pale app background */
+.datepicker-dropdown {
+  background-color: #f7fdff !important;
+  border: 1px solid #95d9f3 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 10px 24px rgba(9, 26, 62, 0.16) !important;
+}
+
+.datepicker-dropdown table {
+  background-color: #f7fdff !important;
+}
+
+.datepicker-dropdown table tr td,
+.datepicker-dropdown table tr th {
+  border-radius: 8px !important;
+}
+
+.datepicker-dropdown .datepicker-switch,
+.datepicker-dropdown .prev,
+.datepicker-dropdown .next {
+  color: #091a3e !important;
+  font-weight: 600 !important;
+}
+
+.datepicker-dropdown .dow {
+  color: #1c4fb9 !important;
+  font-weight: 600 !important;
+}
+
+.datepicker-dropdown .day:hover,
+.datepicker-dropdown .month:hover,
+.datepicker-dropdown .year:hover,
+.datepicker-dropdown .decade:hover,
+.datepicker-dropdown .century:hover {
+  background-color: #d7f4ff !important;
+  color: #091a3e !important;
+}
+
+.datepicker-dropdown .active,
+.datepicker-dropdown .active:hover,
+.datepicker-dropdown .today,
+.datepicker-dropdown .today:hover {
+  background-image: none !important;
+  background-color: #1c4fb9 !important;
+  color: #f7fdff !important;
+}
+
+.datepicker-dropdown .old,
+.datepicker-dropdown .new {
+  color: #6c757d !important;
+}
+
 /* Style the DataTable buttons */
 div.dt-button-collection {
   max-height: 80vh;
