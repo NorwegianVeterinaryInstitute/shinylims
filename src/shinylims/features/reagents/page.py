@@ -1,13 +1,11 @@
 '''
-reagents.py - Table module containing UI and server logic for the Reagents tab
+page.py - Table module containing UI and server logic for the Reagents tab
 Allows batch entry of reagent lots for Illumina Clarity LIMS
 '''
 
 from shiny import ui, reactive, render
 import pandas as pd
 from datetime import date, datetime, UTC
-import html
-import re
 from urllib.parse import urlparse
 
 # Import the LIMS API module
@@ -19,12 +17,23 @@ from shinylims.integrations.lims_api import (
     get_latest_index_sequence_status
 )
 from shinylims.config.reagents import (
-    INDEX_REAGENT_TYPE,
     PREP_REAGENT_TYPES,
     REAGENT_SELECTOR_CHOICES,
     REAGENT_TYPES,
-    SELECTOR_TO_MISEQ_KIT_TYPE,
-    SELECTOR_TO_REAGENT,
+)
+from shinylims.features.reagents.domain import (
+    can_generate_internal_names,
+    empty_pending_lots_df,
+    generate_internal_name,
+    get_prep_queue_mismatch_details,
+    get_queue_removal_error,
+    increment_pending_offsets,
+    recalculate_sequence_offsets,
+    render_pending_lots_html,
+    resolve_selected_miseq_kit_type,
+    resolve_selected_reagent,
+    submission_status_for_reagent,
+    summarize_submission_entries,
 )
 from shinylims.security import (
     get_runtime_user,
@@ -186,8 +195,15 @@ def reagents_ui():
                     ),
                     
                     ui.div(
-                        ui.strong("Internal Name: "),
-                        ui.output_text("preview_internal_name", inline=True),
+                        ui.div(
+                            ui.strong("Internal Name: "),
+                            ui.output_text("preview_internal_name", inline=True),
+                            class_="mb-1",
+                        ),
+                        ui.div(
+                            ui.strong("Submitting Status: "),
+                            ui.output_text("preview_submission_status", inline=True),
+                        ),
                         class_="mt-3 p-2 bg-light rounded"
                     ),
                     
@@ -314,11 +330,7 @@ def reagents_server(input, output, session):
     index_sequence_state = reactive.Value((False, "Not checked", None))
     
     # Reactive values
-    pending_lots = reactive.Value(pd.DataFrame(columns=[
-        "Reagent Type", "Lot Number",
-        "Received Date", "Expiry Date", "Internal Name", "Set Letter",
-        "MiSeq Kit Type", "RGT Number"
-    ]))
+    pending_lots = reactive.Value(empty_pending_lots_df())
     
     last_reagent_type = reactive.Value(None)
 
@@ -357,24 +369,7 @@ def reagents_server(input, output, session):
 
     def recalculate_index_offsets():
         """Recalculate index offsets from current pending queue."""
-        df = pending_lots.get()
-        offsets = {
-            "prep": 0,
-            "index": 0
-        }
-
-        if not df.empty and "Set Letter" in df.columns:
-            count = int((df["Reagent Type"] == INDEX_REAGENT_TYPE).sum())
-            offsets["index"] = count
-
-        pending_sequence_offsets.set(offsets)
-
-    def extract_internal_sequence(name: str) -> int | None:
-        """Extract sequence number from internal name like '#12 (192)'."""
-        if not isinstance(name, str):
-            return None
-        match = re.search(r"#(\d+)", name)
-        return int(match.group(1)) if match else None
+        pending_sequence_offsets.set(recalculate_sequence_offsets(pending_lots.get()))
     
     def current_runtime_username() -> str | None:
         username, _ = get_runtime_user(session)
@@ -639,33 +634,10 @@ def reagents_server(input, output, session):
         )
 
     def get_selected_reagent():
-        selector_value = (input.reagent_selector() or "").strip()
-        if not selector_value:
-            return (None, None)
-
-        if selector_value in SELECTOR_TO_REAGENT:
-            return SELECTOR_TO_REAGENT[selector_value]
-
-        # Fallback for scanner inputs that may include extra text around the ref id.
-        match = re.search(r"(\d{8})", selector_value)
-        if match:
-            barcode = match.group(1)
-            return SELECTOR_TO_REAGENT.get(barcode, (None, None))
-
-        return (None, None)
+        return resolve_selected_reagent(input.reagent_selector())
 
     def get_selected_miseq_kit_type():
-        selector_value = (input.reagent_selector() or "").strip()
-        if not selector_value:
-            return None
-
-        if selector_value in SELECTOR_TO_MISEQ_KIT_TYPE:
-            return SELECTOR_TO_MISEQ_KIT_TYPE[selector_value]
-
-        match = re.search(r"(\d{8})", selector_value)
-        if not match:
-            return None
-        return SELECTOR_TO_MISEQ_KIT_TYPE.get(match.group(1))
+        return resolve_selected_miseq_kit_type(input.reagent_selector())
 
     @output
     @render.ui
@@ -705,20 +677,16 @@ def reagents_server(input, output, session):
             )
         return None
 
-    def can_generate_internal_names(reagent_type):
-        if not is_allowed_reagents_user(session):
-            return False
-        if not _is_lims_ready():
-            return False
-
-        reagent_info = REAGENT_TYPES.get(reagent_type, {})
-        naming_group = reagent_info.get("naming_group")
-        if naming_group in {"prep", "index"}:
-            prep_ok, _ = prep_sequence_state.get()
-            index_ok, _, _ = index_sequence_state.get()
-            return prep_ok and index_ok
-
-        return True
+    def can_generate_internal_names_for_current_session(reagent_type):
+        prep_ok, _ = prep_sequence_state.get()
+        index_ok, _, _ = index_sequence_state.get()
+        return can_generate_internal_names(
+            reagent_type,
+            is_authorized=is_allowed_reagents_user(session),
+            is_lims_ready=_is_lims_ready(),
+            prep_ok=prep_ok,
+            index_ok=index_ok,
+        )
 
     @output
     @render.ui
@@ -778,53 +746,21 @@ def reagents_server(input, output, session):
             class_="d-flex align-items-center text-muted small mb-2"
         )
     
-    # Naming logic
-    def get_next_prep_sequence_number(reagent_type: str):
-        """Prep numbering is based on count per prep reagent type in queue."""
-        seq_nums = sequence_numbers.get()
-        base_num = seq_nums.get("prep", 0)
-        df = pending_lots.get()
-        type_count = int((df["Reagent Type"] == reagent_type).sum())
-        return base_num + type_count + 1
-
-    def get_next_sequence_number(naming_group, set_letter=None, reagent_type=None):
-        seq_nums = sequence_numbers.get()
-        offsets = pending_sequence_offsets.get()
-        
-        if naming_group == "prep":
-            return get_next_prep_sequence_number(reagent_type)
-
-        if naming_group == "index":
-            key = "index"
-        else:
-            key = naming_group
-            
-        base_num = seq_nums.get(key, 0)
-        offset = offsets.get(key, 0)
-        return base_num + offset + 1
-    
-    def generate_internal_name(reagent_type, set_letter=None, miseq_kit_type=None, rgt_number=None):
-        reagent_info = REAGENT_TYPES.get(reagent_type, {})
-        naming_group = reagent_info.get("naming_group", "unknown")
-
-        if naming_group == "miseq":
-            rgt = (rgt_number or "").strip()
-            kit_type = (miseq_kit_type or "").strip()
-            if not rgt or not kit_type:
-                return "Provide RGT Number and MiSeq Kit Type"
-            return f"{rgt} {kit_type}"
-        if naming_group == "phix":
-            rgt = (rgt_number or "").strip()
-            if not rgt:
-                return "Provide RGT Number"
-            return rgt
-
-        next_num = get_next_sequence_number(naming_group, set_letter, reagent_type)
-        
-        if naming_group == "index" and set_letter:
-            return f"{set_letter}#{next_num} (192)"
-        else:
-            return f"#{next_num} (192)"
+    def generate_internal_name_for_current_session(
+        reagent_type,
+        set_letter=None,
+        miseq_kit_type=None,
+        rgt_number=None,
+    ):
+        return generate_internal_name(
+            reagent_type,
+            sequence_numbers=sequence_numbers.get(),
+            pending_sequence_offsets=pending_sequence_offsets.get(),
+            pending_lots=pending_lots.get(),
+            set_letter=set_letter,
+            miseq_kit_type=miseq_kit_type,
+            rgt_number=rgt_number,
+        )
     
     @output
     @render.text
@@ -832,7 +768,7 @@ def reagents_server(input, output, session):
         reagent_type, set_letter = get_selected_reagent()
         if not reagent_type:
             return "Select a reagent type"
-        if not can_generate_internal_names(reagent_type):
+        if not can_generate_internal_names_for_current_session(reagent_type):
             return "Log in to LIMS and refresh checks to load latest numbering"
 
         reagent_info = REAGENT_TYPES.get(reagent_type, {})
@@ -843,7 +779,20 @@ def reagents_server(input, output, session):
         if reagent_info.get("requires_rgt_number"):
             rgt_number = input.rgt_number()
 
-        return generate_internal_name(reagent_type, set_letter, miseq_kit_type, rgt_number)
+        return generate_internal_name_for_current_session(
+            reagent_type,
+            set_letter,
+            miseq_kit_type,
+            rgt_number,
+        )
+
+    @output
+    @render.text
+    def preview_submission_status():
+        reagent_type, _ = get_selected_reagent()
+        if not reagent_type:
+            return "Select a reagent type"
+        return submission_status_for_reagent(reagent_type)
     
     # Add lot to queue
     @reactive.Effect
@@ -875,7 +824,7 @@ def reagents_server(input, output, session):
             ui.notification_show("Please select a reagent type or scan a valid ref barcode", type="warning")
             return
 
-        if not can_generate_internal_names(reagent_type):
+        if not can_generate_internal_names_for_current_session(reagent_type):
             ui.notification_show(
                 "Log in to LIMS and refresh checks before assigning Internal Names",
                 type="warning",
@@ -901,16 +850,19 @@ def reagents_server(input, output, session):
                 return
             rgt_number = rgt_number.upper()
         
-        internal_name = generate_internal_name(reagent_type, set_letter, miseq_kit_type, rgt_number)
+        internal_name = generate_internal_name_for_current_session(
+            reagent_type,
+            set_letter,
+            miseq_kit_type,
+            rgt_number,
+        )
         
-        # Update offsets
-        offsets = pending_sequence_offsets.get().copy()
-        naming_group = reagent_info.get("naming_group")
-        
-        if naming_group == "index":
-            key = "index"
-            offsets[key] = offsets.get(key, 0) + 1
-            pending_sequence_offsets.set(offsets)
+        pending_sequence_offsets.set(
+            increment_pending_offsets(
+                pending_sequence_offsets.get(),
+                reagent_type,
+            )
+        )
         
         current_df = pending_lots.get().copy()
         new_row = pd.DataFrame([{
@@ -928,21 +880,15 @@ def reagents_server(input, output, session):
         pending_lots.set(updated_df)
         
         ui.update_text("lot_number", value="")
+        ui.update_text("rgt_number", value="")
         ui.notification_show(f"Added: {internal_name}", type="message", duration=2)
     
     # Clear queue
     @reactive.Effect
     @reactive.event(input.clear_queue)
     def clear_queue():
-        pending_lots.set(pd.DataFrame(columns=[
-            "Reagent Type", "Lot Number",
-            "Received Date", "Expiry Date", "Internal Name", "Set Letter",
-            "MiSeq Kit Type", "RGT Number"
-        ]))
-        pending_sequence_offsets.set({
-            "prep": 0,
-            "index": 0
-        })
+        pending_lots.set(empty_pending_lots_df())
+        pending_sequence_offsets.set(recalculate_sequence_offsets(empty_pending_lots_df()))
     
     @output
     @render.text
@@ -963,45 +909,11 @@ def reagents_server(input, output, session):
         
         display_df = df[["Internal Name", "Reagent Type", "Lot Number", "Expiry Date"]].copy()
         
-        table_html = """
-        <table class="table table-sm table-striped table-hover" style="width: 100%; table-layout: fixed;">
-            <thead>
-                <tr>
-                    <th style="width: 22%;">Internal Name</th>
-                    <th style="width: 24%;">Type</th>
-                    <th style="width: 22%;">Lot Number</th>
-                    <th style="width: 20%;">Expiry</th>
-                    <th style="width: 12%;">Action</th>
-                </tr>
-            </thead>
-            <tbody>
-        """
-        
-        for idx, row in display_df.iterrows():
-            internal_name = html.escape(str(row["Internal Name"]))
-            reagent_type = html.escape(str(row["Reagent Type"]))
-            lot_number = html.escape(str(row["Lot Number"]))
-            expiry_date = html.escape(str(row["Expiry Date"]))
-            table_html += f"""
-                <tr>
-                    <td><strong>{internal_name}</strong></td>
-                    <td>{reagent_type}</td>
-                    <td>{lot_number}</td>
-                    <td>{expiry_date}</td>
-                    <td>
-                        <button
-                            type="button"
-                            class="btn btn-sm btn-outline-danger"
-                            onclick="Shiny.setInputValue('remove_lot_idx', {idx}, {{priority: 'event'}})">
-                            Remove
-                        </button>
-                    </td>
-                </tr>
-            """
-        
-        table_html += "</tbody></table>"
-        
-        return ui.HTML(f'<div id="pending_queue_printable" style="max-height: 300px; overflow-y: auto;">{table_html}</div>')
+        return ui.HTML(
+            f'<div id="pending_queue_printable" style="max-height: 300px; overflow-y: auto;">'
+            f"{render_pending_lots_html(display_df)}"
+            "</div>"
+        )
 
     @reactive.Effect
     @reactive.event(input.remove_lot_idx)
@@ -1020,33 +932,14 @@ def reagents_server(input, output, session):
         if idx < 0 or idx >= len(df):
             return
 
-        row = df.iloc[idx]
-        reagent_type = row["Reagent Type"]
-        reagent_info = REAGENT_TYPES.get(reagent_type, {})
-        naming_group = reagent_info.get("naming_group")
-        if naming_group in {"prep", "index"}:
-            group_types = [
-                rtype for rtype, rinfo in REAGENT_TYPES.items()
-                if rinfo.get("naming_group") == naming_group
-            ]
-            group_rows = df[df["Reagent Type"].isin(group_types)]
-            group_numbers = [
-                extract_internal_sequence(name)
-                for name in group_rows["Internal Name"].tolist()
-            ]
-            group_numbers = [n for n in group_numbers if n is not None]
-
-            if group_numbers:
-                latest_group_num = max(group_numbers)
-                row_num = extract_internal_sequence(row["Internal Name"])
-                if row_num != latest_group_num:
-                    label = "prep" if naming_group == "prep" else "index"
-                    ui.notification_show(
-                        f"For {label} lots, remove the latest number first (#{latest_group_num}).",
-                        type="warning",
-                        duration=4
-                    )
-                    return
+        removal_error = get_queue_removal_error(df, idx)
+        if removal_error:
+            ui.notification_show(
+                removal_error,
+                type="warning",
+                duration=4,
+            )
+            return
 
         removed_name = df.iloc[idx]["Internal Name"]
         df = df.drop(df.index[idx]).reset_index(drop=True)
@@ -1079,15 +972,8 @@ def reagents_server(input, output, session):
             with ui.Progress(min=0, max=3) as p:
                 p.set(0, message="Preparing submission checks...")
 
-                prep_counts = {
-                    reagent_type: int((df["Reagent Type"] == reagent_type).sum())
-                    for reagent_type in PREP_REAGENT_TYPES
-                }
-                if len(set(prep_counts.values())) > 1:
-                    details = ", ".join(
-                        f"{rt}: {count}"
-                        for rt, count in prep_counts.items()
-                    )
+                details = get_prep_queue_mismatch_details(df)
+                if details is not None:
                     ui.modal_show(
                         ui.modal(
                             ui.p("Pending prep reagents must be submitted as full sets."),
@@ -1209,7 +1095,6 @@ def reagents_server(input, output, session):
             if df.empty or config is None:
                 return
 
-            results = []
             submission_entries = []
             requester = current_runtime_username() or "unknown"
 
@@ -1227,10 +1112,9 @@ def reagents_server(input, output, session):
                         expiry_date=row["Expiry Date"],
                         storage_location="",
                         notes=f"Created via Shiny App on {date.today()} by {requester}",
-                        status="PENDING" if row["Reagent Type"] in PREP_REAGENT_TYPES else "ACTIVE",
+                        status=submission_status_for_reagent(row["Reagent Type"]),
                     )
 
-                    results.append(result)
                     submission_entries.append({
                         "row": row,
                         "result": result
@@ -1238,9 +1122,9 @@ def reagents_server(input, output, session):
 
                 p.set(len(df), message="Done!")
 
-            # Count successes/failures
-            successes = sum(1 for r in results if r.success)
-            failures = len(results) - successes
+            successes, failures, result_df, logs_text = summarize_submission_entries(
+                submission_entries
+            )
 
             if failures == 0:
                 ui.notification_show(
@@ -1249,47 +1133,20 @@ def reagents_server(input, output, session):
                     duration=5
                 )
                 # Clear the queue on full success
-                pending_lots.set(pd.DataFrame(columns=[
-                    "Reagent Type", "Lot Number",
-                    "Received Date", "Expiry Date", "Internal Name", "Set Letter",
-                    "MiSeq Kit Type", "RGT Number"
-                ]))
+                pending_lots.set(empty_pending_lots_df())
+                pending_sequence_offsets.set(recalculate_sequence_offsets(empty_pending_lots_df()))
             else:
                 ui.notification_show(
                     f"⚠️ {successes} succeeded, {failures} failed",
                     type="warning",
                     duration=10
                 )
-
-            result_rows = []
-            failed_log_lines = []
-            for entry in submission_entries:
-                row = entry["row"]
-                result = entry["result"]
-                status_text = "Success" if result.success else "Failed"
-                lims_id = result.lims_id or "-"
-                message_text = result.message or "-"
-                result_rows.append({
-                    "Internal Name": row["Internal Name"],
-                    "Type": row["Reagent Type"],
-                    "Lot Number": row["Lot Number"],
-                    "Status": status_text,
-                    "LIMS ID": lims_id,
-                    "Message": message_text,
-                })
-                if not result.success:
-                    failed_log_lines.append(
-                        f"- {row['Internal Name']} | {row['Reagent Type']} | lot={row['Lot Number']} | {message_text}"
-                    )
-
-            result_df = pd.DataFrame(result_rows)
             result_table = result_df.to_html(
                 index=False,
                 escape=True,
                 classes="table table-sm table-striped table-bordered submit-result-table",
                 border=0
             )
-            logs_text = "\n".join(failed_log_lines) if failed_log_lines else "No errors."
             modal_title = "✅ Submission Complete" if failures == 0 else "⚠️ Submission Completed With Errors"
             summary_class = "alert alert-success py-2 px-3 mb-3" if failures == 0 else "alert alert-warning py-2 px-3 mb-3"
             summary_text = f"{successes} succeeded, {failures} failed."

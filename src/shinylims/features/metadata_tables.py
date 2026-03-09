@@ -1,8 +1,8 @@
 from shiny import ui, reactive, render
 
-from shinylims.tables.projects import projects_ui
-from shinylims.tables.samples import samples_ui
-from shinylims.tables.sequencing import seq_ui
+from shinylims.features.projects import projects_ui
+from shinylims.features.samples import samples_ui
+from shinylims.features.sequencing import seq_ui
 
 
 def metadata_tables_ui():

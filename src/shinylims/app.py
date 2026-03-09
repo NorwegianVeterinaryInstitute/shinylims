@@ -13,12 +13,12 @@ Specifically, this module defines the app_ui variable and server function to run
 from shiny import App, render, ui, reactive
 from faicons import icon_svg
 
-# Import table modules
-from shinylims.tables.projects import projects_server
-from shinylims.tables.samples import samples_server
-from shinylims.tables.sequencing import seq_server
-from shinylims.tables.metadata_tables import metadata_tables_ui, metadata_tables_server
-from shinylims.tables.lab_tools import lab_tools_ui, lab_tools_server
+# Import feature modules
+from shinylims.features.projects import projects_server
+from shinylims.features.samples import samples_server
+from shinylims.features.sequencing import seq_server
+from shinylims.features.metadata_tables import metadata_tables_ui, metadata_tables_server
+from shinylims.features.lab_tools import lab_tools_ui, lab_tools_server
 
 # Import database utilities
 from shinylims.integrations.db_utils import get_db_update_info, refresh_db_connection
