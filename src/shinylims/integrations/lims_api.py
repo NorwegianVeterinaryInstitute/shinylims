@@ -550,7 +550,7 @@ def get_latest_index_sequence_status(
     Get latest shared IDT index sequence number.
 
     Index names are expected to contain '#NN (192)'.
-    The numeric sequence is shared across set letters.
+    The numeric sequence is shared across set letters and counts both ACTIVE and PENDING lots.
     """
     latest_sequence = None
     kit_uris = get_reagent_kit_uris(config.base_url)
@@ -595,6 +595,7 @@ def get_latest_index_sequence_status(
         )
 
     seq_pattern = re.compile(r"#(\d+)\s*\(192\)")
+    index_counted_statuses = {"ACTIVE", "PENDING"}
 
     detail_candidates: list[str] = []
     detail_seen: set[str] = set()
@@ -609,7 +610,7 @@ def get_latest_index_sequence_status(
 
     def apply_lot(name: str, reagent_kit_uri: str, status: str) -> str:
         nonlocal latest_sequence
-        if status and status.upper() != "ACTIVE":
+        if status and status.upper() not in index_counted_statuses:
             return "status_filtered"
 
         kit_id = _extract_reagentkit_id(reagent_kit_uri)
@@ -705,7 +706,7 @@ def get_latest_index_sequence_status(
         return IndexSequenceStatus(
             success=False,
             latest_sequence=None,
-            message="Could not determine latest index sequence from ACTIVE IDT index lots.",
+            message="Could not determine latest index sequence from ACTIVE or PENDING IDT index lots.",
         )
 
     return IndexSequenceStatus(

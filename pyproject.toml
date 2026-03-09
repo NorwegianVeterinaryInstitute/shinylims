@@ -1,6 +1,6 @@
 [project]
 name = "shinylims-uv"
-version = "1.1.1"
+version = "1.1.2"
 authors = [
   { name="Magnus Leithaug", email="magnus.leithaug@vetinst.no" },
 ]
