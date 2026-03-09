@@ -7,6 +7,7 @@ Top-level reagent fields:
   the app and in LIMS submissions.
 
 - `kit_id`: Numeric Clarity reagent kit ID as a string, for example ``"302"``.
+  Found in BASEURI/reagentkits
 
 - `naming_group`: Internal naming rule group. Allowed values are `prep`,
   `index`, `miseq`, and `phix`. This controls how the app generates the
@@ -64,7 +65,7 @@ ALLOWED_NAMING_GROUPS = {"prep", "index", "miseq", "phix"}
 REAGENT_DEFINITIONS = [
     {
         "type_name": "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp",
-        "kit_id": "203",
+        "kit_id": "4", #nvi-test: 203
         "naming_group": "prep",
         "requires_rgt_number": False,
         "requires_miseq_kit_type": False,
@@ -77,7 +78,7 @@ REAGENT_DEFINITIONS = [
     },
     {
         "type_name": "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp",
-        "kit_id": "202",
+        "kit_id": "5", #nvi-test: 202
         "naming_group": "prep",
         "requires_rgt_number": False,
         "requires_miseq_kit_type": False,
@@ -90,7 +91,7 @@ REAGENT_DEFINITIONS = [
     },
     {
         "type_name": "Illumina DNA Prep – Tagmentation (M) Beads 96sp",
-        "kit_id": "102",
+        "kit_id": "6", #nvi-test: 102
         "naming_group": "prep",
         "requires_rgt_number": False,
         "requires_miseq_kit_type": False,
@@ -103,7 +104,7 @@ REAGENT_DEFINITIONS = [
     },
     {
         "type_name": "IDT-ILMN DNA/RNA UD Index Sets",
-        "kit_id": "302",
+        "kit_id": "3", #nvi-test: 302
         "naming_group": "index",
         "requires_rgt_number": False,
         "requires_miseq_kit_type": False,
@@ -132,7 +133,7 @@ REAGENT_DEFINITIONS = [
     },
     {
         "type_name": "MiSeq Reagent Kit (Box 1 of 2)",
-        "kit_id": "35",
+        "kit_id": "7", #nvi-test: 35
         "naming_group": "miseq",
         "requires_rgt_number": True,
         "requires_miseq_kit_type": True,
@@ -156,7 +157,7 @@ REAGENT_DEFINITIONS = [
     },
     {
         "type_name": "MiSeq Reagent Kit (Box 2 of 2)",
-        "kit_id": "252",
+        "kit_id": "8", #nvi-test: 252
         "naming_group": "miseq",
         "requires_rgt_number": True,
         "requires_miseq_kit_type": True,
@@ -180,7 +181,7 @@ REAGENT_DEFINITIONS = [
     },
     {
         "type_name": "PhiX Control v3",
-        "kit_id": "152",
+        "kit_id": "12", #nvi-test: 152
         "naming_group": "phix",
         "requires_rgt_number": True,
         "requires_miseq_kit_type": False,
