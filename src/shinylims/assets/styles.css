@@ -106,6 +106,57 @@ table.dataTable td.left-column {
   z-index: 1040 !important;
 }
 
+.reagent-form-error-modal .modal-dialog {
+  display: flex;
+  align-items: center;
+  min-height: calc(100vh - 2rem);
+  max-width: 42rem;
+}
+
+.reagent-form-error-modal .modal-content {
+  border: 2px solid #b42318;
+  box-shadow: 0 20px 48px rgba(120, 20, 20, 0.22);
+  background: linear-gradient(180deg, #fff6f6 0%, #ffffff 100%);
+}
+
+.reagent-form-error-modal .modal-title {
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: #b42318;
+}
+
+.reagent-form-error-body {
+  font-size: 1.35rem;
+  line-height: 1.5;
+}
+
+.reagent-form-error-lead {
+  margin-bottom: 0.85rem;
+  font-weight: 700;
+  color: #7a271a;
+}
+
+.reagent-form-error-body ul {
+  color: #7a271a;
+}
+
+.reagent-form-error-body li + li {
+  margin-top: 0.45rem;
+}
+
+.reagent-form-error-modal .modal-footer .btn {
+  min-width: 8rem;
+  font-size: 1.15rem;
+  background-color: #b42318;
+  border-color: #b42318;
+}
+
+.reagent-form-error-modal .modal-footer .btn:hover,
+.reagent-form-error-modal .modal-footer .btn:focus {
+  background-color: #8f1c13;
+  border-color: #8f1c13;
+}
+
 
 /* ─────────────────────────────────────────────────────────────── */
 /* Form and Button Adjustments */

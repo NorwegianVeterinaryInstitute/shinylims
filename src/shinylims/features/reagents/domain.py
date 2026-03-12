@@ -64,6 +64,47 @@ def resolve_selected_miseq_kit_type(selector_value: str | None) -> str | None:
     return SELECTOR_TO_MISEQ_KIT_TYPE.get(match.group(1))
 
 
+def extract_known_reagent_ref(scan_value: str | None) -> str | None:
+    """Return a configured reagent ref barcode found in the scanned value."""
+    value = (scan_value or "").strip()
+    if not value:
+        return None
+
+    if value in SELECTOR_TO_REAGENT:
+        return value
+
+    for match in re.finditer(r"(\d{8})", value):
+        ref = match.group(1)
+        if ref in SELECTOR_TO_REAGENT:
+            return ref
+
+    return None
+
+
+def lot_number_validation_error(lot_number: str | None) -> str | None:
+    """Return a user-facing error when the lot field contains the wrong barcode."""
+    value = (lot_number or "").strip()
+    if not value:
+        return None
+
+    if re.search(r"RGT[0-9A-Z]+", value.upper()):
+        return (
+            "Lot Number looks like an RGT barcode. Scan the lot barcode here "
+            "and scan the RGT barcode in the RGT Number field."
+        )
+
+    ref = extract_known_reagent_ref(value)
+    if ref:
+        reagent_type, set_letter = SELECTOR_TO_REAGENT[ref]
+        reagent_label = reagent_type if not set_letter else f"{reagent_type} (Set {set_letter})"
+        return (
+            f"Lot Number looks like reagent ref barcode {ref} for {reagent_label}. "
+            "Scan the lot barcode instead."
+        )
+
+    return None
+
+
 def extract_internal_sequence(name: str) -> int | None:
     """Extract the numeric sequence from an internal reagent name."""
     if not isinstance(name, str):

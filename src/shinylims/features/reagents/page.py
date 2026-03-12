@@ -27,6 +27,7 @@ from shinylims.features.reagents.domain import (
     get_prep_queue_mismatch_details,
     get_queue_removal_error,
     increment_pending_offsets,
+    lot_number_validation_error,
     recalculate_sequence_offsets,
     render_pending_lots_html,
     resolve_selected_miseq_kit_type,
@@ -405,6 +406,34 @@ def reagents_server(input, output, session):
             f"Unauthorized: {reagents_access_denied_message()}",
             type="error",
             duration=8
+        )
+
+    def show_form_error(messages: str | list[str], title: str = "Input Error") -> None:
+        error_messages = [messages] if isinstance(messages, str) else [msg for msg in messages if msg]
+        if not error_messages:
+            return
+
+        if len(error_messages) == 1:
+            body = ui.p(error_messages[0], class_="mb-0")
+        else:
+            body = ui.tags.ul(
+                *[ui.tags.li(message) for message in error_messages],
+                class_="mb-0 ps-4",
+            )
+
+        ui.modal_show(
+            ui.modal(
+                ui.div(
+                    ui.div("Please fix the following before adding the lot:", class_="reagent-form-error-lead"),
+                    body,
+                    class_="reagent-form-error-body",
+                ),
+                title=title,
+                size="l",
+                easy_close=False,
+                footer=ui.modal_button("Close", class_="btn-primary"),
+                class_="reagent-form-error-modal",
+            )
         )
 
     def ensure_authorized(action: str) -> bool:
@@ -829,51 +858,54 @@ def reagents_server(input, output, session):
             ui.notification_show("Submission in progress; wait before editing the queue.", type="warning")
             return
 
-        if not input.lot_number():
-            ui.notification_show("Please enter a lot number", type="warning")
-            return
+        lot_number = (input.lot_number() or "").strip()
+        validation_errors: list[str] = []
+        if not lot_number:
+            validation_errors.append("Please enter a lot number.")
+        else:
+            lot_error = lot_number_validation_error(lot_number)
+            if lot_error:
+                validation_errors.append(lot_error)
         
         if not input.expiry_date():
-            ui.notification_show("Please enter an expiry date", type="warning")
-            return
-        if str(input.expiry_date()) == str(date.today()):
-            ui.notification_show(
-                "Expiry Date cannot be today's date. Please choose the actual reagent expiry date.",
-                type="warning",
-                duration=5
+            validation_errors.append("Please enter an expiry date.")
+        elif str(input.expiry_date()) == str(date.today()):
+            validation_errors.append(
+                "Expiry Date cannot be today's date. Please choose the actual reagent expiry date."
             )
-            return
         
         reagent_type, set_letter = get_selected_reagent()
         if not reagent_type:
-            ui.notification_show("Please select a reagent type or scan a valid ref barcode", type="warning")
-            return
+            validation_errors.append("Please select a reagent type or scan a valid ref barcode.")
+            reagent_info = None
+            miseq_kit_type = None
+            rgt_number = None
+        else:
+            if not can_generate_internal_names_for_current_session(reagent_type):
+                validation_errors.append(
+                    "Log in to LIMS and refresh checks before assigning Internal Names."
+                )
 
-        if not can_generate_internal_names_for_current_session(reagent_type):
-            ui.notification_show(
-                "Log in to LIMS and refresh checks before assigning Internal Names",
-                type="warning",
-                duration=5
-            )
-            return
-        reagent_info = REAGENT_TYPES[reagent_type]
+            reagent_info = REAGENT_TYPES[reagent_type]
 
-        miseq_kit_type = None
-        rgt_number = None
-        if reagent_info.get("requires_miseq_kit_type"):
-            miseq_kit_type = (get_selected_miseq_kit_type() or "").strip()
-            if not miseq_kit_type:
-                ui.notification_show("Could not resolve MiSeq kit type from selected/scanned reagent ref", type="warning")
-                return
-        if reagent_info.get("requires_rgt_number"):
-            rgt_number = (input.rgt_number() or "").strip()
-            if not rgt_number:
-                ui.notification_show("Please scan RGT number for MiSeq kit", type="warning")
-                return
-            if not rgt_number.upper().startswith("RGT"):
-                ui.notification_show("RGT number must start with 'RGT'", type="warning")
-                return
-            rgt_number = rgt_number.upper()
+            miseq_kit_type = None
+            rgt_number = None
+            if reagent_info.get("requires_miseq_kit_type"):
+                miseq_kit_type = (get_selected_miseq_kit_type() or "").strip()
+                if not miseq_kit_type:
+                    validation_errors.append("Could not resolve MiSeq kit type from selected/scanned reagent ref.")
+            if reagent_info.get("requires_rgt_number"):
+                rgt_number = (input.rgt_number() or "").strip()
+                if not rgt_number:
+                    validation_errors.append("Please scan RGT number for MiSeq kit.")
+                elif not rgt_number.upper().startswith("RGT"):
+                    validation_errors.append("RGT number must start with 'RGT'.")
+                else:
+                    rgt_number = rgt_number.upper()
+
+        if validation_errors:
+            show_form_error(validation_errors)
+            return
         
         internal_name = generate_internal_name_for_current_session(
             reagent_type,
@@ -892,7 +924,7 @@ def reagents_server(input, output, session):
         current_df = pending_lots.get().copy()
         new_row = pd.DataFrame([{
             "Reagent Type": reagent_type,
-            "Lot Number": input.lot_number(),
+            "Lot Number": lot_number,
             "Received Date": str(input.received_date()),
             "Expiry Date": str(input.expiry_date()),
             "Internal Name": internal_name,
@@ -906,6 +938,7 @@ def reagents_server(input, output, session):
         
         ui.update_text("lot_number", value="")
         ui.update_text("rgt_number", value="")
+        ui.update_selectize("reagent_selector", selected="")
         ui.notification_show(f"Added: {internal_name}", type="message", duration=2)
     
     # Clear queue
