@@ -26,6 +26,11 @@ dependencies = [
 
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8,<9",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/shinylims"]
 

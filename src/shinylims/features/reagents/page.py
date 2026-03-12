@@ -7,6 +7,7 @@ from shiny import ui, reactive, render
 import pandas as pd
 from datetime import date, datetime, UTC
 from urllib.parse import urlparse
+from collections.abc import Mapping
 
 # Import the LIMS API module
 from shinylims.integrations.lims_api import (
@@ -24,10 +25,12 @@ from shinylims.features.reagents.domain import (
     can_generate_internal_names,
     empty_pending_lots_df,
     generate_internal_name,
+    get_pending_edit_internal_name_error,
     get_prep_queue_mismatch_details,
     get_queue_removal_error,
     increment_pending_offsets,
     lot_number_validation_error,
+    parse_queue_date,
     recalculate_sequence_offsets,
     render_pending_lots_html,
     resolve_selected_miseq_kit_type,
@@ -46,6 +49,67 @@ from shinylims.security import (
 # UI REAGENTS
 ##############################
 
+def reagent_selector_control():
+    return ui.TagList(
+        ui.input_selectize(
+            "reagent_selector",
+            "Reagent Type / Scan Ref Barcode",
+            choices=REAGENT_SELECTOR_CHOICES,
+            selected=None,
+            width="100%",
+            options={
+                "create": True,
+                "persist": False,
+                "allowEmptyOption": True,
+                "openOnFocus": False,
+                "placeholder": "Select reagent or scan ref barcode"
+            }
+        ),
+        ui.tags.script(
+            """
+            (function() {
+              const focusScannerInput = (sel) => {
+                setTimeout(() => {
+                  sel.focus();
+                }, 0);
+              };
+
+              const bindClearOnOpen = () => {
+                const el = document.getElementById('reagent_selector');
+                if (!el || !el.selectize) return false;
+                const sel = el.selectize;
+                if (sel._clearOnOpenBound) return true;
+
+                sel._clearOnOpenBound = true;
+                // Mitigate password-manager/autofill heuristics on this scanner field.
+                sel.$control_input.attr('autocomplete', 'off');
+                sel.$control_input.attr('autocorrect', 'off');
+                sel.$control_input.attr('autocapitalize', 'none');
+                sel.$control_input.attr('spellcheck', 'false');
+                sel.$control_input.attr('name', 'reagent_scan_input');
+                sel.$control_input.attr('data-lpignore', 'true');
+                sel.$control_input.attr('data-1p-ignore', 'true');
+                sel.on('dropdown_open', function() {
+                  if (sel.getValue()) {
+                    sel.clear(true);
+                  }
+                });
+                focusScannerInput(sel);
+                return true;
+              };
+
+              if (!bindClearOnOpen()) {
+                const iv = setInterval(() => {
+                  if (bindClearOnOpen()) clearInterval(iv);
+                }, 200);
+                setTimeout(() => clearInterval(iv), 5000);
+              }
+            })();
+            """
+        ),
+    )
+
+
 def reagents_ui():
     return ui.div(
         ui.h4("📦 Reagent Lot Registration", class_="mb-3"),
@@ -59,54 +123,7 @@ def reagents_ui():
             ui.card(
                 ui.card_header("Add New Lot"),
                 ui.card_body(
-                    ui.input_selectize(
-                        "reagent_selector",
-                        "Reagent Type / Scan Ref Barcode",
-                        choices=REAGENT_SELECTOR_CHOICES,
-                        selected="",
-                        width="100%",
-                        options={
-                            "create": True,
-                            "persist": False,
-                            "allowEmptyOption": True,
-                            "placeholder": "Select reagent or scan ref barcode"
-                        }
-                    ),
-                    ui.tags.script(
-                        """
-                        (function() {
-                          const bindClearOnOpen = () => {
-                            const el = document.getElementById('reagent_selector');
-                            if (!el || !el.selectize) return false;
-                            const sel = el.selectize;
-                            if (sel._clearOnOpenBound) return true;
-
-                            sel._clearOnOpenBound = true;
-                            // Mitigate password-manager/autofill heuristics on this scanner field.
-                            sel.$control_input.attr('autocomplete', 'off');
-                            sel.$control_input.attr('autocorrect', 'off');
-                            sel.$control_input.attr('autocapitalize', 'none');
-                            sel.$control_input.attr('spellcheck', 'false');
-                            sel.$control_input.attr('name', 'reagent_scan_input');
-                            sel.$control_input.attr('data-lpignore', 'true');
-                            sel.$control_input.attr('data-1p-ignore', 'true');
-                            sel.on('dropdown_open', function() {
-                              if (sel.getValue()) {
-                                sel.clear(true);
-                              }
-                            });
-                            return true;
-                          };
-
-                          if (!bindClearOnOpen()) {
-                            const iv = setInterval(() => {
-                              if (bindClearOnOpen()) clearInterval(iv);
-                            }, 200);
-                            setTimeout(() => clearInterval(iv), 5000);
-                          }
-                        })();
-                        """
-                    ),
+                    ui.output_ui("reagent_selector_ui"),
                     ui.input_text(
                         "lot_number",
                         "Lot Number",
@@ -132,19 +149,12 @@ def reagents_ui():
                         """
                     ),
                     ui.output_ui("rgt_number_ui"),
-                    
-                    ui.layout_columns(
-                        ui.input_date(
-                            "received_date",
-                            "Received Date",
-                            value=date.today()
-                        ),
-                        ui.input_date(
-                            "expiry_date",
-                            "Expiry Date",
-                            value=None
-                        ),
-                        col_widths=[6, 6]
+
+                    ui.input_date(
+                        "expiry_date",
+                        "Expiry Date",
+                        value=None,
+                        width="100%",
                     ),
                     ui.tags.script(
                         """
@@ -178,7 +188,7 @@ def reagents_ui():
                           }
 
                           const bind = () => {
-                            const inputs = ["received_date", "expiry_date"]
+                            const inputs = ["expiry_date"]
                               .map((id) => resolveDateInput(id))
                               .filter(Boolean);
                             if (!inputs.length) return false;
@@ -357,6 +367,8 @@ def reagents_server(input, output, session):
     
     # Reactive values
     pending_lots = reactive.Value(empty_pending_lots_df())
+    editing_lot_idx = reactive.Value(None)
+    selector_reset_token = reactive.Value(0)
     
     last_reagent_type = reactive.Value(None)
 
@@ -408,7 +420,13 @@ def reagents_server(input, output, session):
             duration=8
         )
 
-    def show_form_error(messages: str | list[str], title: str = "Input Error") -> None:
+    def show_form_error(
+        messages: str | list[str],
+        *,
+        title: str = "Input Error",
+        lead: str = "Please fix the following before adding the lot:",
+        easy_close: bool = False,
+    ) -> None:
         error_messages = [messages] if isinstance(messages, str) else [msg for msg in messages if msg]
         if not error_messages:
             return
@@ -424,15 +442,173 @@ def reagents_server(input, output, session):
         ui.modal_show(
             ui.modal(
                 ui.div(
-                    ui.div("Please fix the following before adding the lot:", class_="reagent-form-error-lead"),
+                    ui.div(lead, class_="reagent-form-error-lead"),
                     body,
                     class_="reagent-form-error-body",
                 ),
                 title=title,
                 size="l",
-                easy_close=False,
+                easy_close=easy_close,
                 footer=ui.modal_button("Close", class_="btn-primary"),
                 class_="reagent-form-error-modal",
+            )
+        )
+
+    def parse_queue_idx(raw_idx) -> int | None:
+        if isinstance(raw_idx, Mapping):
+            raw_idx = raw_idx.get("idx")
+        try:
+            idx = int(raw_idx)
+        except (TypeError, ValueError):
+            return None
+        return idx if idx >= 0 else None
+
+    def queue_field_text(value: object) -> str:
+        if value is None or pd.isna(value):
+            return ""
+        return str(value).strip()
+
+    def readonly_modal_field(label: str, value: object):
+        return ui.div(
+            ui.tags.label(label, class_="form-label"),
+            ui.tags.input(
+                type="text",
+                value=queue_field_text(value),
+                readonly="readonly",
+                class_="form-control reagent-edit-readonly-input",
+            ),
+            class_="mb-3 reagent-edit-readonly-field",
+        )
+
+    def validate_queue_row_inputs(
+        *,
+        lot_number: str | None,
+        expiry_date_value: object,
+    ) -> list[str]:
+        validation_errors: list[str] = []
+
+        lot_number = (lot_number or "").strip()
+        if not lot_number:
+            validation_errors.append("Please enter a lot number.")
+        else:
+            lot_error = lot_number_validation_error(lot_number)
+            if lot_error:
+                validation_errors.append(lot_error)
+
+        if not expiry_date_value:
+            validation_errors.append("Please enter an expiry date.")
+        elif str(expiry_date_value) == str(date.today()):
+            validation_errors.append(
+                "Expiry Date cannot be today's date. Please choose the actual reagent expiry date."
+            )
+
+        return validation_errors
+
+    def show_edit_lot_modal(row: pd.Series) -> None:
+        reagent_type = str(row["Reagent Type"])
+        reagent_info = REAGENT_TYPES.get(reagent_type, {})
+        read_only_details = [
+            readonly_modal_field("Internal Name", row["Internal Name"]),
+            readonly_modal_field("Reagent Type", reagent_type),
+        ]
+
+        set_letter = str(row.get("Set Letter") or "").strip()
+        if set_letter:
+            read_only_details.append(readonly_modal_field("Set Letter", set_letter))
+
+        miseq_kit_type = str(row.get("MiSeq Kit Type") or "").strip()
+        if miseq_kit_type:
+            read_only_details.append(readonly_modal_field("MiSeq Kit Type", miseq_kit_type))
+
+        if reagent_info.get("requires_rgt_number"):
+            read_only_details.append(readonly_modal_field("RGT Number", row.get("RGT Number", "")))
+
+        ui.modal_show(
+            ui.modal(
+                ui.div(
+                    ui.tags.style(
+                        """
+                        .reagent-edit-readonly-panel {
+                          background: #f3f5f7;
+                          border: 1px solid #d0d7de;
+                          border-radius: 12px;
+                          padding: 14px 16px 6px;
+                          margin-bottom: 16px;
+                        }
+                        .reagent-edit-readonly-panel-title {
+                          font-size: 0.95rem;
+                          font-weight: 700;
+                          color: #475467;
+                          margin-bottom: 12px;
+                          text-transform: uppercase;
+                          letter-spacing: 0.04em;
+                        }
+                        .reagent-edit-readonly-panel-title-note {
+                          color: #667085;
+                          font-size: 0.9rem;
+                          font-weight: 500;
+                          text-transform: none;
+                          letter-spacing: normal;
+                        }
+                        .reagent-edit-readonly-input {
+                          background-color: #e8edf2 !important;
+                          color: #475467 !important;
+                          border-color: #c2c8cf !important;
+                        }
+                        .reagent-edit-readonly-input:focus {
+                          box-shadow: none !important;
+                        }
+                        .reagent-edit-editable-panel {
+                          padding-top: 2px;
+                        }
+                        """
+                    ),
+                    ui.p(
+                        "Metadata can be corrected here. Name-driving fields stay locked after queueing.",
+                        class_="text-muted mb-3",
+                    ),
+                    ui.div(
+                        ui.div(
+                            "Read-Only Fields ",
+                            ui.tags.span("(Locked after queueing)", class_="reagent-edit-readonly-panel-title-note"),
+                            class_="reagent-edit-readonly-panel-title",
+                        ),
+                        *read_only_details,
+                        class_="reagent-edit-readonly-panel",
+                    ),
+                    ui.hr(class_="my-3"),
+                    ui.div(
+                        ui.div("Editable Fields", class_="reagent-edit-readonly-panel-title"),
+                        ui.input_text(
+                            "edit_lot_number",
+                            "Lot Number",
+                            value=queue_field_text(row["Lot Number"]),
+                            width="100%",
+                        ),
+                        ui.input_date(
+                            "edit_expiry_date",
+                            "Expiry Date",
+                            value=parse_queue_date(row.get("Expiry Date")),
+                            width="100%",
+                        ),
+                        class_="reagent-edit-editable-panel",
+                    ),
+                ),
+                title="Edit Queued Lot",
+                easy_close=True,
+                size="l",
+                footer=ui.div(
+                    ui.input_action_button(
+                        "cancel_edit_lot",
+                        "Cancel",
+                        class_="btn-secondary",
+                    ),
+                    ui.input_action_button(
+                        "save_edit_lot",
+                        "Save Changes",
+                        class_="btn-primary ms-2",
+                    ),
+                ),
             )
         )
 
@@ -695,6 +871,12 @@ def reagents_server(input, output, session):
 
     @output
     @render.ui
+    def reagent_selector_ui():
+        selector_reset_token.get()
+        return reagent_selector_control()
+
+    @output
+    @render.ui
     def rgt_number_ui():
         reagent_type, _ = get_selected_reagent()
         if not reagent_type:
@@ -859,20 +1041,10 @@ def reagents_server(input, output, session):
             return
 
         lot_number = (input.lot_number() or "").strip()
-        validation_errors: list[str] = []
-        if not lot_number:
-            validation_errors.append("Please enter a lot number.")
-        else:
-            lot_error = lot_number_validation_error(lot_number)
-            if lot_error:
-                validation_errors.append(lot_error)
-        
-        if not input.expiry_date():
-            validation_errors.append("Please enter an expiry date.")
-        elif str(input.expiry_date()) == str(date.today()):
-            validation_errors.append(
-                "Expiry Date cannot be today's date. Please choose the actual reagent expiry date."
-            )
+        validation_errors = validate_queue_row_inputs(
+            lot_number=lot_number,
+            expiry_date_value=input.expiry_date(),
+        )
         
         reagent_type, set_letter = get_selected_reagent()
         if not reagent_type:
@@ -925,7 +1097,6 @@ def reagents_server(input, output, session):
         new_row = pd.DataFrame([{
             "Reagent Type": reagent_type,
             "Lot Number": lot_number,
-            "Received Date": str(input.received_date()),
             "Expiry Date": str(input.expiry_date()),
             "Internal Name": internal_name,
             "Set Letter": set_letter,
@@ -938,7 +1109,7 @@ def reagents_server(input, output, session):
         
         ui.update_text("lot_number", value="")
         ui.update_text("rgt_number", value="")
-        ui.update_selectize("reagent_selector", selected="")
+        selector_reset_token.set(selector_reset_token.get() + 1)
         ui.notification_show(f"Added: {internal_name}", type="message", duration=2)
     
     # Clear queue
@@ -946,6 +1117,8 @@ def reagents_server(input, output, session):
     @reactive.event(input.clear_queue)
     def clear_queue():
         pending_lots.set(empty_pending_lots_df())
+        editing_lot_idx.set(None)
+        selector_reset_token.set(selector_reset_token.get() + 1)
         pending_sequence_offsets.set(recalculate_sequence_offsets(empty_pending_lots_df()))
     
     @output
@@ -980,17 +1153,96 @@ def reagents_server(input, output, session):
         )
 
     @reactive.Effect
-    @reactive.event(input.remove_lot_idx)
-    def remove_lot_from_queue():
-        idx = input.remove_lot_idx()
-        df = pending_lots.get().copy()
-
-        if df.empty:
+    @reactive.event(input.edit_lot_idx)
+    def open_edit_lot_modal():
+        if not ensure_authorized("edit queued lots"):
+            return
+        if submit_in_progress.get():
+            ui.notification_show("Submission in progress; wait before editing the queue.", type="warning")
             return
 
-        try:
-            idx = int(idx)
-        except (TypeError, ValueError):
+        idx = parse_queue_idx(input.edit_lot_idx())
+        df = pending_lots.get()
+        if idx is None or df.empty or idx >= len(df):
+            return
+
+        editing_lot_idx.set(idx)
+        show_edit_lot_modal(df.iloc[idx])
+
+    @reactive.Effect
+    @reactive.event(input.cancel_edit_lot)
+    def cancel_edit_lot():
+        editing_lot_idx.set(None)
+        ui.modal_remove()
+
+    @reactive.Effect
+    @reactive.event(input.save_edit_lot)
+    def save_edited_lot():
+        if not ensure_authorized("edit queued lots"):
+            return
+        if submit_in_progress.get():
+            ui.notification_show("Submission in progress; wait before editing the queue.", type="warning")
+            return
+
+        idx = parse_queue_idx(editing_lot_idx.get())
+        df = pending_lots.get().copy()
+        if idx is None or df.empty or idx >= len(df):
+            editing_lot_idx.set(None)
+            ui.modal_remove()
+            ui.notification_show("Queued lot no longer exists.", type="warning", duration=4)
+            return
+
+        original_row = df.iloc[idx].copy()
+        lot_number = (input.edit_lot_number() or "").strip()
+        expiry_date_value = input.edit_expiry_date()
+
+        validation_errors = validate_queue_row_inputs(
+            lot_number=lot_number,
+            expiry_date_value=expiry_date_value,
+        )
+
+        proposed_fields = {
+            "Lot Number": lot_number,
+            "Expiry Date": str(expiry_date_value or ""),
+            "Internal Name": original_row["Internal Name"],
+            "Reagent Type": original_row["Reagent Type"],
+            "Set Letter": original_row.get("Set Letter", ""),
+            "MiSeq Kit Type": original_row.get("MiSeq Kit Type", ""),
+            "RGT Number": original_row.get("RGT Number", ""),
+        }
+        name_error = get_pending_edit_internal_name_error(
+            original_row.to_dict(),
+            proposed_fields,
+        )
+        if name_error:
+            validation_errors.append(name_error)
+
+        if validation_errors:
+            show_form_error(
+                validation_errors,
+                title="Edit Error",
+                lead="Please fix the following before updating the lot:",
+            )
+            return
+
+        df.loc[df.index[idx], "Lot Number"] = lot_number
+        df.loc[df.index[idx], "Expiry Date"] = str(expiry_date_value)
+        pending_lots.set(df)
+        editing_lot_idx.set(None)
+        ui.modal_remove()
+        ui.notification_show(
+            f"Updated: {original_row['Internal Name']}",
+            type="message",
+            duration=2,
+        )
+
+    @reactive.Effect
+    @reactive.event(input.remove_lot_idx)
+    def remove_lot_from_queue():
+        idx = parse_queue_idx(input.remove_lot_idx())
+        df = pending_lots.get().copy()
+
+        if df.empty or idx is None:
             return
 
         if idx < 0 or idx >= len(df):
@@ -1038,15 +1290,15 @@ def reagents_server(input, output, session):
 
                 details = get_prep_queue_mismatch_details(df)
                 if details is not None:
-                    ui.modal_show(
-                        ui.modal(
-                            ui.p("Pending prep reagents must be submitted as full sets."),
-                            ui.p(f"Current queue counts: {details}"),
-                            ui.p("Add missing prep reagent types or remove extras before submitting."),
-                            title="⚠️ Incomplete Prep Set In Queue",
-                            easy_close=True,
-                            footer=ui.modal_button("OK")
-                        )
+                    show_form_error(
+                        details,
+                        title="⚠️ Incomplete Prep Set In Queue",
+                        lead=(
+                            "Pending prep reagents must be submitted as full sets. "
+                            "Add missing prep reagent types or remove extras before submitting. "
+                            "Current queue counts:"
+                        ),
+                        easy_close=True,
                     )
                     return
 
@@ -1197,6 +1449,8 @@ def reagents_server(input, output, session):
                 )
                 # Clear the queue on full success
                 pending_lots.set(empty_pending_lots_df())
+                editing_lot_idx.set(None)
+                selector_reset_token.set(selector_reset_token.get() + 1)
                 pending_sequence_offsets.set(recalculate_sequence_offsets(empty_pending_lots_df()))
             else:
                 ui.notification_show(
@@ -1312,6 +1566,13 @@ def reagents_server(input, output, session):
                             win.print();
                             win.close();
                             """
+                        ),
+                        ui.tags.a(
+                            "Open Clarity LIMS",
+                            href="https://nvi-prod.claritylims.com/clarity/",
+                            target="_blank",
+                            rel="noopener noreferrer",
+                            class_="btn btn-outline-primary ms-2"
                         ),
                         ui.modal_button("Close", class_="btn-secondary ms-2")
                     )

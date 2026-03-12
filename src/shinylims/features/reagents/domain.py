@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import Mapping
+from datetime import date
 from typing import Any
 
 import pandas as pd
@@ -19,7 +21,6 @@ from shinylims.config.reagents import (
 QUEUE_COLUMNS = [
     "Reagent Type",
     "Lot Number",
-    "Received Date",
     "Expiry Date",
     "Internal Name",
     "Set Letter",
@@ -31,6 +32,24 @@ QUEUE_COLUMNS = [
 def empty_pending_lots_df() -> pd.DataFrame:
     """Return an empty pending-lots DataFrame with the expected columns."""
     return pd.DataFrame(columns=QUEUE_COLUMNS)
+
+
+def _queue_value_as_str(value: object) -> str:
+    """Normalize a queued scalar value for safe comparisons."""
+    if value is None or pd.isna(value):
+        return ""
+    return str(value).strip()
+
+
+def parse_queue_date(value: object) -> date | None:
+    """Parse a queued date value stored in ISO format."""
+    raw = _queue_value_as_str(value)
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
 
 
 def resolve_selected_reagent(selector_value: str | None) -> tuple[str | None, str | None]:
@@ -258,7 +277,35 @@ def get_queue_removal_error(pending_lots: pd.DataFrame, idx: int) -> str | None:
     return f"For {label} lots, remove the latest number first (#{latest_group_num})."
 
 
-def get_prep_queue_mismatch_details(pending_lots: pd.DataFrame) -> str | None:
+def get_pending_edit_internal_name_error(
+    original_row: Mapping[str, Any],
+    updated_fields: Mapping[str, Any],
+) -> str | None:
+    """Return an error when an edit would change queued naming inputs."""
+    original = {column: _queue_value_as_str(original_row.get(column)) for column in QUEUE_COLUMNS}
+    updated = original.copy()
+    for key, value in updated_fields.items():
+        updated[key] = _queue_value_as_str(value)
+
+    if updated["Internal Name"] != original["Internal Name"]:
+        return "Internal Name cannot be edited once the lot is queued."
+
+    if updated["Reagent Type"] != original["Reagent Type"]:
+        return "Changing Reagent Type would alter the Internal Name. Remove and re-add the lot instead."
+
+    reagent_info = REAGENT_TYPES.get(original["Reagent Type"], {})
+    name_driving_fields = ["Set Letter", "MiSeq Kit Type"]
+    if reagent_info.get("requires_rgt_number"):
+        name_driving_fields.append("RGT Number")
+
+    for field_name in name_driving_fields:
+        if updated.get(field_name, "") != original.get(field_name, ""):
+            return f"Changing {field_name} would alter the Internal Name. Remove and re-add the lot instead."
+
+    return None
+
+
+def get_prep_queue_mismatch_details(pending_lots: pd.DataFrame) -> list[str] | None:
     """Return prep queue count details when the pending set is unbalanced."""
     prep_counts = {
         reagent_type: int((pending_lots["Reagent Type"] == reagent_type).sum())
@@ -266,7 +313,7 @@ def get_prep_queue_mismatch_details(pending_lots: pd.DataFrame) -> str | None:
     }
     if len(set(prep_counts.values())) <= 1:
         return None
-    return ", ".join(f"{reagent_type}: {count}" for reagent_type, count in prep_counts.items())
+    return [f"{reagent_type}: {count}" for reagent_type, count in prep_counts.items()]
 
 
 def submission_status_for_reagent(reagent_type: str) -> str:
@@ -320,7 +367,7 @@ def render_pending_lots_html(pending_lots: pd.DataFrame) -> str:
                 <th style="width: 16%;">Lot Number</th>
                 <th style="width: 14%;">Expiry</th>
                 <th style="width: 14%;">Status</th>
-                <th style="width: 12%;">Action</th>
+                <th style="width: 16%;">Action</th>
             </tr>
         </thead>
         <tbody>
@@ -339,6 +386,12 @@ def render_pending_lots_html(pending_lots: pd.DataFrame) -> str:
                 <td>{expiry_date}</td>
                 <td>{submission_status}</td>
                 <td>
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline-secondary me-1"
+                        onclick="Shiny.setInputValue('edit_lot_idx', {{idx: {idx}, nonce: Date.now()}}, {{priority: 'event'}})">
+                        Edit
+                    </button>
                     <button
                         type="button"
                         class="btn btn-sm btn-outline-danger"
