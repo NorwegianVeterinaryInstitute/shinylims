@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main  # Trigger when pushing to main
-      - feature/reagent-tracking # Trigger when pushing to feature branch (temp for testing)
+      - feature/indexplate-map-tool # Trigger when pushing to feature branch (temp for testing)
 
 jobs:
   update-branches:

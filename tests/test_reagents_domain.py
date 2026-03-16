@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from shinylims.config.reagents import PREP_REAGENT_TYPES
 from shinylims.features.reagents.domain import (
     QUEUE_COLUMNS,
     get_pending_edit_internal_name_error,
@@ -26,6 +27,13 @@ def make_row(**overrides):
 
 def make_df(*rows):
     return pd.DataFrame(rows, columns=QUEUE_COLUMNS)
+
+
+PREP_PCR_REAGENT_TYPE = next(
+    reagent_type
+    for reagent_type in PREP_REAGENT_TYPES
+    if "PCR + Buffers" in reagent_type
+)
 
 
 def test_metadata_only_edit_keeps_internal_name_stable():
@@ -98,7 +106,7 @@ def test_non_latest_prep_queue_removal_still_blocked():
         ),
         make_row(
             **{
-                "Reagent Type": "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp",
+                "Reagent Type": PREP_PCR_REAGENT_TYPE,
                 "Internal Name": "#42 (192)",
             }
         ),
@@ -125,7 +133,7 @@ def test_prep_queue_mismatch_details_returns_bullet_ready_entries():
         ),
         make_row(
             **{
-                "Reagent Type": "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp",
+                "Reagent Type": PREP_PCR_REAGENT_TYPE,
                 "Internal Name": "#43 (192)",
             }
         ),
@@ -135,6 +143,6 @@ def test_prep_queue_mismatch_details_returns_bullet_ready_entries():
 
     assert details == [
         "Illumina DNA Prep - IPB + Buffers (SPB, TSB, TWB) 96sp: 2",
-        "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp: 1",
+        f"{PREP_PCR_REAGENT_TYPE}: 1",
         "Illumina DNA Prep – Tagmentation (M) Beads 96sp: 0",
     ]

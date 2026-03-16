@@ -10,10 +10,10 @@ import unicodedata
 
 # Connect authorization config (code-defined)
 CONNECT_ALLOWED_GROUP = "116-Molekylærbiologi"
-CONNECT_ALLOWED_USERS: set[str] = set() #example {"vi2172", "other_user_id"}
+CONNECT_ALLOWED_USERS: set[str] = {"vi1452"} #example {"vi2172", "other_user_id"}
 
 # Local authorization config (code-defined)
-LOCAL_DEV_ALLOW_ALL = True
+LOCAL_DEV_ALLOW_ALL = False
 
 def is_running_on_connect() -> bool:
     """Return True when running on Posit Connect."""

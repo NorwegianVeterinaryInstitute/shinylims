@@ -1,6 +1,7 @@
 # Ignore cache
 __pycache__/
 /src/shinylims/__pycache__
+.pytest_cache/
 *.pyc
 /.vscode
 

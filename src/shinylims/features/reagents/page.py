@@ -21,6 +21,7 @@ from shinylims.config.reagents import (
     REAGENT_SELECTOR_CHOICES,
     REAGENT_TYPES,
 )
+from shinylims.features.loading import build_tool_loading_modal
 from shinylims.features.reagents.domain import (
     can_generate_internal_names,
     empty_pending_lots_df,
@@ -110,9 +111,9 @@ def reagent_selector_control():
     )
 
 
-def reagents_ui():
+def reagents_ui(*, show_title: bool = True):
     return ui.div(
-        ui.h4("📦 Reagent Lot Registration", class_="mb-3"),
+        ui.h4("📦 Reagent Lot Registration", class_="mb-3") if show_title else None,
         
         # Compact system status
         ui.output_ui("system_status_panel"),
@@ -348,7 +349,7 @@ def reagents_ui():
             col_widths=[5, 7]
         ),
         
-        class_="p-3"
+        class_="p-3 tool-comfort-scale"
     )
 
 
@@ -707,15 +708,10 @@ def reagents_server(input, output, session):
             return
         _log_lims_ui_event("reagents_open_init_start")
         ui.modal_show(
-            ui.modal(
-                ui.div(
-                    ui.tags.div(class_="spinner-border text-primary me-2", role="status", aria_hidden="true"),
-                    ui.span("Please wait... logging into LIMS API and doing reagents status checks."),
-                    class_="d-flex align-items-center"
-                ),
+            build_tool_loading_modal(
                 title="Loading Reagents",
-                easy_close=False,
-                footer=None
+                message="Logging into the LIMS API and checking reagent status.",
+                detail="Please wait while the latest prep and index sequence numbers are loaded.",
             )
         )
         try:
@@ -860,7 +856,7 @@ def reagents_server(input, output, session):
                 details_body
             ),
             ui.tags.span(current_runtime_username() or "unknown", id="lims_user_meta", style="display:none;"),
-            class_="mb-3 p-2 border rounded bg-light-subtle"
+            class_="tool-status-card"
         )
 
     def get_selected_reagent():

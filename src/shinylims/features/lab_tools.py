@@ -3,6 +3,7 @@ import pandas as pd
 import re
 
 from shinylims.integrations.db_utils import query_to_dataframe
+from shinylims.features.index_plate_maps import index_plate_maps_server, index_plate_maps_ui
 from shinylims.features.reagents import reagents_ui, reagents_server
 from shinylims.security import is_allowed_reagents_user, reagents_access_policy_summary
 
@@ -40,6 +41,11 @@ def lab_tools_server(input, output, session):
         current_tool.set("storage")
 
     @reactive.Effect
+    @reactive.event(input.open_tool_index_plate_maps)
+    def open_tool_index_plate_maps():
+        current_tool.set("index_plate_maps")
+
+    @reactive.Effect
     @reactive.event(input.back_to_tools)
     def back_to_tools():
         current_tool.set("landing")
@@ -64,13 +70,21 @@ def lab_tools_server(input, output, session):
                     ),
                     ui.card(
                         ui.card_body(
+                            ui.h5("🧬 Reagent Overview"),
+                            ui.p("Review prep sets, sequencing stock, and index plates.", class_="text-muted mb-3"),
+                            ui.input_action_button("open_tool_index_plate_maps", "Open Tool", class_="btn-primary")
+                        ),
+                        class_="h-100"
+                    ),
+                    ui.card(
+                        ui.card_body(
                             ui.h5("🧰 Storage Box Status"),
-                            ui.p("View populated/discarded storage containers.", class_="text-muted mb-3"),
+                            ui.p("View populated/discarded DNA for NGS storage containers.", class_="text-muted mb-3"),
                             ui.input_action_button("open_tool_storage", "Open Tool", class_="btn-primary")
                         ),
                         class_="h-100"
                     ),
-                    col_widths=[6, 6]
+                    col_widths=[4, 4, 4]
                 )
             )
 
@@ -95,16 +109,47 @@ def lab_tools_server(input, output, session):
                 )
             return ui.div(
                 ui.div(
-                    ui.input_action_button("back_to_tools", "← Back to Tools", class_="btn btn-outline-secondary btn-sm mb-3")
+                    ui.input_action_button("back_to_tools", "← Back to Tools", class_="btn btn-outline-secondary btn-sm"),
+                    ui.h4("📦 Reagent Lot Registration", class_="mb-0"),
+                    class_="d-flex align-items-center gap-3 flex-wrap mb-3",
                 ),
-                reagents_ui()
+                reagents_ui(show_title=False)
+            )
+
+        if page == "index_plate_maps":
+            if not is_allowed_reagents_user(session):
+                return ui.div(
+                    ui.div(
+                        ui.input_action_button("back_to_tools", "← Back to Tools", class_="btn btn-outline-secondary btn-sm mb-3")
+                    ),
+                    ui.card(
+                        ui.card_header("🧬 Reagent Overview"),
+                        ui.card_body(
+                            ui.h5("You do not have access"),
+                            ui.p(
+                                f"Allowed access is {reagents_access_policy_summary()}.",
+                                class_="text-muted mb-1"
+                            ),
+                            ui.p("Contact admin to be added as an individual user if needed.", class_="text-muted mb-0"),
+                        ),
+                        class_="border-danger"
+                    )
+                )
+            return ui.div(
+                ui.div(
+                    ui.input_action_button("back_to_tools", "← Back to Tools", class_="btn btn-outline-secondary btn-sm"),
+                    ui.h4("🧬 Reagent Overview", class_="mb-0"),
+                    class_="d-flex align-items-center gap-3 flex-wrap mb-3",
+                ),
+                index_plate_maps_ui(show_title=False)
             )
 
         return ui.div(
             ui.div(
-                ui.input_action_button("back_to_tools", "← Back to Tools", class_="btn btn-outline-secondary btn-sm mb-3")
+                ui.input_action_button("back_to_tools", "← Back to Tools", class_="btn btn-outline-secondary btn-sm"),
+                ui.h4("📦 Storage Box Status", class_="mb-0"),
+                class_="d-flex align-items-center gap-3 flex-wrap mb-3",
             ),
-            ui.h4("📦 Storage Box Status", class_="mb-3"),
             ui.output_ui("storage_status_tool")
         )
 
@@ -175,7 +220,7 @@ def lab_tools_server(input, output, session):
             <style>
                 .storage-status-table {{
                     width: 100%;
-                    max-height: 70vh;
+                    max-height: 90vh;
                     overflow-y: auto;
                     overflow-x: auto;
                 }}
@@ -210,3 +255,4 @@ def lab_tools_server(input, output, session):
             return ui.p(f"⚠️ Error loading storage container data: {str(e)}", style="color: red;")
 
     reagents_server(input, output, session)
+    index_plate_maps_server(input, output, session)
