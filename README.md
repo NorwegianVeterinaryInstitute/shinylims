@@ -41,9 +41,19 @@ For doing code development locally, the api-key and Posit Connect URL must be pr
 
 The deployment is handled by the GitHub Actions workflow stored in `.github/workflows/deploy.yml`. That workflow generates the manifest and `requirements.txt` file used for Posit deployment.
 
-## Reagents security and secrets
+Automated dependency updates are configured with Dependabot in `.github/dependabot.yml` for both `uv` dependencies and GitHub Actions workflows.
 
-The Reagents tool reads LIMS credentials only from environment variables:
+## Lab Tools
+
+The **Lab Tools** tab currently contains:
+
+- `Reagent Lot Registration`: create and submit reagent lots to Clarity LIMS.
+- `Reagent Overview`: review prep sets, sequencing stock, and index plate usage together.
+- `Storage Box Status`: view populated/discarded DNA for NGS storage containers.
+
+## LIMS-backed tool security and secrets
+
+The LIMS-backed lab tools read Clarity credentials only from environment variables:
 
 - `LIMS_BASE_URL`
 - `LIMS_API_USER`
@@ -54,7 +64,7 @@ See .env.example file.
 
 On Posit Connect, configure these values in **Vars / Secrets** for the content item instead of using `.env`.
 
-Reagents authorization:
+Authorization for `Reagent Lot Registration` and `Reagent Overview`:
 - Authorization is configured in `src/shinylims/security.py`:
   - `CONNECT_ALLOWED_GROUP` (required Connect group)
   - `CONNECT_ALLOWED_USERS` (optional individual usernames)

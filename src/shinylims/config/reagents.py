@@ -82,7 +82,7 @@ REAGENT_DEFINITIONS = [
         ],
     },
     {
-        "type_name": "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp",
+        "type_name": "Illumina DNA Prep –  PCR + Buffers (EPM,TB1,RSB) 96sp",
         "kit_id": "5", #nvi-test: 202
         "naming_group": "prep",
         "requires_rgt_number": False,
@@ -91,7 +91,7 @@ REAGENT_DEFINITIONS = [
         "variants": [
             {
                 "ref": "20015829",
-                "label": "Illumina DNA Prep – PCR + Buffers (EPM, TB1, RSB) 96sp (Ref: 20015829)",
+                "label": "Illumina DNA Prep –  PCR + Buffers (EPM,TB1,RSB) 96sp (Ref: 20015829)",
             },
         ],
     },

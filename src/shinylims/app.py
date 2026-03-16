@@ -36,6 +36,7 @@ from shinylims.integrations.data_utils import (
 from pathlib import Path
 from datetime import datetime
 import pytz
+import pandas as pd
 css_path = Path(__file__).parent / "assets" / "styles.css"
 
 
@@ -171,6 +172,46 @@ app_ui = ui.page_navbar(
 # SERVER FUNCTION #
 ###################
 
+
+def _load_sqlite_datasets_with_fallback() -> tuple[dict[str, object], str | None]:
+    """Load SQLite-backed datasets, returning empty fallbacks if the pin is unavailable."""
+    try:
+        projects_df, project_date_created = fetch_projects_data()
+        samples_df, samples_date_created = fetch_all_samples_data()
+        samples_historical_df = fetch_historical_samples_data()
+        seq_df, seq_date_created = fetch_sequencing_data()
+        return (
+            {
+                "projects_df": projects_df,
+                "project_date_created": project_date_created,
+                "samples_df": samples_df,
+                "samples_date_created": samples_date_created,
+                "samples_historical_df": samples_historical_df,
+                "seq_df": seq_df,
+                "seq_date_created": seq_date_created,
+            },
+            None,
+        )
+    except Exception as e:
+        warning = (
+            "SQLite metadata is temporarily unavailable. Metadata tables will load empty until the "
+            "Connect pin recovers."
+        )
+        print(f"[app-startup] {warning} Root cause: {str(e)}")
+        return (
+            {
+                "projects_df": pd.DataFrame(),
+                "project_date_created": None,
+                "samples_df": pd.DataFrame(),
+                "samples_date_created": None,
+                "samples_historical_df": pd.DataFrame(),
+                "seq_df": pd.DataFrame(),
+                "seq_date_created": None,
+            },
+            warning,
+        )
+
+
 def server(input, output, session):
     """
     Fetching data from SQLite database and all ui reactive rendering is done from this function.
@@ -179,33 +220,27 @@ def server(input, output, session):
     # Initialize lab tools once; it should not be reset by SQL refresh events.
     lab_tools_server(input, output, session)
 
+    db_warning_state = reactive.Value(None)
+    shown_db_warning_state = reactive.Value(None)
+
     # Fetch initial data
     with ui.Progress(min=1, max=15) as p:  # Increased max for additional data
         p.set(message="Loading datasets from SQLite database...")
-        
-        projects_df, project_date_created = fetch_projects_data()
-        p.set(3, message="Projects data fetched")
-        
-        samples_df, samples_date_created = fetch_all_samples_data()
-        p.set(6, message="Samples data fetched")
-        
-        # Fetch historical samples data
-        samples_historical_df = fetch_historical_samples_data()
-        p.set(8, message="Historical samples data fetched")
-        
-        seq_df, seq_date_created = fetch_sequencing_data()
-        p.set(11, message="Seq data fetched")
+
+        datasets, load_warning = _load_sqlite_datasets_with_fallback()
+        db_warning_state.set(load_warning)
+        p.set(11, message="SQLite load attempt completed")
         
         # Initialize reactive values with the initial data
-        projects_df_reactive = reactive.Value(projects_df)
-        samples_df_reactive = reactive.Value(samples_df)
-        samples_historical_df_reactive = reactive.Value(samples_historical_df)
-        seq_df_reactive = reactive.Value(seq_df)
+        projects_df_reactive = reactive.Value(datasets["projects_df"])
+        samples_df_reactive = reactive.Value(datasets["samples_df"])
+        samples_historical_df_reactive = reactive.Value(datasets["samples_historical_df"])
+        seq_df_reactive = reactive.Value(datasets["seq_df"])
         p.set(13, message="Reactive dataframe values established")
 
-        projects_date_created_reactive = reactive.Value(project_date_created)
-        samples_date_created_reactive = reactive.Value(samples_date_created)
-        seq_date_created_reactive = reactive.Value(seq_date_created)
+        projects_date_created_reactive = reactive.Value(datasets["project_date_created"])
+        samples_date_created_reactive = reactive.Value(datasets["samples_date_created"])
+        seq_date_created_reactive = reactive.Value(datasets["seq_date_created"])
         p.set(15, message="Datasets loaded successfully")
     
     # Define a function to update the reactive values
@@ -217,31 +252,21 @@ def server(input, output, session):
             
             # Force database refresh
             refresh_db_connection()
-            
-            # Fetch updated data
-            updated_projects_df, updated_project_date_created = fetch_projects_data()
-            p.set(3, message="Projects data fetched")
-            
-            updated_samples_df, updated_samples_date_created = fetch_all_samples_data()
-            p.set(5, message="Samples data fetched")
-            
-            # Fetch updated historical samples data
-            updated_samples_historical_df = fetch_historical_samples_data()
-            p.set(7, message="Historical samples data fetched")
-            
-            updated_seq_df, updated_seq_date_created = fetch_sequencing_data()
-            p.set(9, message="Seq data fetched")
+
+            datasets, load_warning = _load_sqlite_datasets_with_fallback()
+            db_warning_state.set(load_warning)
+            p.set(9, message="SQLite load attempt completed")
 
             # Update reactive values
-            projects_df_reactive.set(updated_projects_df)
-            samples_df_reactive.set(updated_samples_df)
-            samples_historical_df_reactive.set(updated_samples_historical_df)
-            seq_df_reactive.set(updated_seq_df)
+            projects_df_reactive.set(datasets["projects_df"])
+            samples_df_reactive.set(datasets["samples_df"])
+            samples_historical_df_reactive.set(datasets["samples_historical_df"])
+            seq_df_reactive.set(datasets["seq_df"])
             p.set(10, message="Reactive dataframe values updated")
 
-            projects_date_created_reactive.set(updated_project_date_created)
-            samples_date_created_reactive.set(updated_samples_date_created)
-            seq_date_created_reactive.set(updated_seq_date_created)
+            projects_date_created_reactive.set(datasets["project_date_created"])
+            samples_date_created_reactive.set(datasets["samples_date_created"])
+            seq_date_created_reactive.set(datasets["seq_date_created"])
 
             p.set(12, message="Datasets updated successfully")
 
@@ -283,6 +308,19 @@ def server(input, output, session):
     def on_update_button_click():
         '''Handle the update button click event'''
         update_database_data()
+
+    @reactive.Effect
+    def show_db_warning_notification():
+        warning = db_warning_state.get()
+        if not warning or shown_db_warning_state.get() == warning:
+            return
+
+        shown_db_warning_state.set(warning)
+        ui.notification_show(
+            warning,
+            duration=10,
+            type="warning",
+        )
     
 
     @render.ui
@@ -302,6 +340,11 @@ def server(input, output, session):
             ui.tags.strong("App last refreshed:"),
             ui.tags.br(),
             formatted_info["app_refresh"],
+            ui.tags.br() if db_warning_state.get() else None,
+            ui.tags.br() if db_warning_state.get() else None,
+            ui.tags.strong("Current warning:") if db_warning_state.get() else None,
+            ui.tags.br() if db_warning_state.get() else None,
+            db_warning_state.get() if db_warning_state.get() else None,
         )
     
     # Define an effect to handle the info button click event
@@ -373,7 +416,7 @@ def server(input, output, session):
             input
         )
         seq_server(seq_df_reactive.get())
-    
+
         return ui.TagList()  # Return an empty UI element
     
 
