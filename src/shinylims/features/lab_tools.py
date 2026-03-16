@@ -3,7 +3,7 @@ import pandas as pd
 import re
 
 from shinylims.integrations.db_utils import query_to_dataframe
-from shinylims.features.index_plate_maps import index_plate_maps_server, index_plate_maps_ui
+from shinylims.features.reagent_overview import reagent_overview_server, reagent_overview_ui
 from shinylims.features.reagents import reagents_ui, reagents_server
 from shinylims.security import is_allowed_reagents_user, reagents_access_policy_summary
 
@@ -141,7 +141,7 @@ def lab_tools_server(input, output, session):
                     ui.h4("🧬 Reagent Overview", class_="mb-0"),
                     class_="d-flex align-items-center gap-3 flex-wrap mb-3",
                 ),
-                index_plate_maps_ui(show_title=False)
+                reagent_overview_ui(show_title=False)
             )
 
         return ui.div(
@@ -255,4 +255,4 @@ def lab_tools_server(input, output, session):
             return ui.p(f"⚠️ Error loading storage container data: {str(e)}", style="color: red;")
 
     reagents_server(input, output, session)
-    index_plate_maps_server(input, output, session)
+    reagent_overview_server(input, output, session)

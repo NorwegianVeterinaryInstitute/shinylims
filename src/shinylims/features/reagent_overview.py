@@ -9,7 +9,7 @@ from shiny import reactive, render, ui
 
 from shinylims.config.index_plate_maps import PLATE_COLUMNS, PLATE_ROWS, normalize_well
 from shinylims.config.reagents import PREP_REAGENT_TYPES, REAGENT_TYPES
-from shinylims.features.loading import build_tool_loading_modal
+from shinylims.ui_helpers.loading import build_tool_loading_modal
 from shinylims.integrations.lims_api import (
     ActiveIndexLot,
     ActivePrepSetsResult,
@@ -1101,7 +1101,7 @@ def _render_index_lot_overview_header(result: IndexPlateMapsResult) -> ui.Tag:
     )
 
 
-def index_plate_maps_ui(*, show_title: bool = True) -> ui.Tag:
+def reagent_overview_ui(*, show_title: bool = True) -> ui.Tag:
     return ui.div(
         ui.h4("🧬 Reagent Overview", class_="mb-0") if show_title else None,
         ui.output_ui("index_plate_maps_toolbar"),
@@ -1141,7 +1141,7 @@ def index_plate_maps_ui(*, show_title: bool = True) -> ui.Tag:
     )
 
 
-def index_plate_maps_server(input, output, session):
+def reagent_overview_server(input, output, session):
     prep_sets_state = reactive.Value(None)
     sequencing_stock_state = reactive.Value(None)
     plate_maps_state = reactive.Value(None)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, UTC
 import xml.etree.ElementTree as ET
 
-from shinylims.features.index_plate_maps import (
+from shinylims.features.reagent_overview import (
     _assess_expiry_date,
     _build_planner_expiry_modal,
     _merge_action_clicks,

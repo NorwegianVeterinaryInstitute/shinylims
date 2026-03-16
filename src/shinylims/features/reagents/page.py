@@ -21,7 +21,7 @@ from shinylims.config.reagents import (
     REAGENT_SELECTOR_CHOICES,
     REAGENT_TYPES,
 )
-from shinylims.features.loading import build_tool_loading_modal
+from shinylims.ui_helpers.loading import build_tool_loading_modal
 from shinylims.features.reagents.domain import (
     can_generate_internal_names,
     empty_pending_lots_df,
