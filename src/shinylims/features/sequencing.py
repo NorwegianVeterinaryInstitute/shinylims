@@ -8,6 +8,14 @@ from itables.widget import ITable
 from itables.javascript import JavascriptFunction
 import pandas as pd
 
+from shinylims.ui_helpers.table_controls import (
+    DATE_VALUE_RENDERER,
+    clear_all_filters_button,
+    deselect_all_columns_button,
+    select_all_columns_button,
+    visibility_preset_button,
+)
+
 
 ##############################
 # UI ILMN SEQ TABLE
@@ -68,13 +76,13 @@ def seq_server(seq_df):
 
         return ITable(
                 dat, 
-                layout={"topEnd": "search", "top1": "searchBuilder"},
+                layout={"topStart": "buttons", "topEnd": "search"},
                 lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],
                 select=True,  
                 column_filters="footer", 
                 search={"smart": True},
                 classes="nowrap compact hover order-column cell-border",
-                scrollY="80vh",
+                scrollY="84vh",
                 scrollX=True,
                 paging=True,
                 maxBytes=0, 
@@ -84,57 +92,29 @@ def seq_server(seq_df):
                 buttons=[
                         {'extend': "spacer",
                          'style': 'bar',
-                         'text': 'Column Settings'},
+                         'text': 'Columns'},
                         # Column visibility toggle
                         {
                             "extend": "colvis",
-                            "text": "Selection"
+                            "text": "Selection",
+                            "collectionLayout": "two-column",
                         },
                         # Button to select specific columns presets
                         {
                         "extend": "collection",
                         "text": "Presets",
                         "buttons": [
-                            {
-                                "text": "Select All",
-                                "action": JavascriptFunction("""
-                                    function(e, dt, node, config) {
-                                        dt.columns().visible(true);
-                                    }
-                                """)
-                            },
-                            {
-                                "text": "Deselect All",
-                                "action": JavascriptFunction("""
-                                    function(e, dt, node, config) {
-                                        dt.columns().visible(false);
-                                    }
-                                """)
-                            },
+                            select_all_columns_button(),
+                            deselect_all_columns_button(),
                             {
                                
                             },
-                            {
-                                "text": "Minimal View",
-                                "action": JavascriptFunction("""
-                                    function(e, dt, node, config) {
-                                        // Example: Show only specific columns by index
-                                        dt.columns().visible(false);  // Hide all first
-                                        dt.column(2).visible(true);
-                                        dt.column(3).visible(true);
-                                        dt.column(4).visible(true);
-                                        dt.column(5).visible(true);
-                                        dt.column(9).visible(true);
-                                        dt.column(10).visible(true);
-                                        dt.column(21).visible(true);
-                                    }
-                                """)
-                            }
+                            visibility_preset_button([2, 3, 4, 5, 9, 10, 21])
                         ]
                     },
                         {'extend': "spacer",
                          'style': 'bar',
-                         'text': 'Row Settings'},
+                         'text': 'Rows'},
                          "pageLength",
                         {'extend': "spacer",
                          'style': 'bar',
@@ -167,6 +147,11 @@ def seq_server(seq_df):
                             ]
                         },
                         {'extend': "spacer",
+                         'style': 'bar',
+                         'text': 'Filter'},
+                        {"extend": "searchBuilder"},
+                        clear_all_filters_button(),
+                        {'extend': "spacer",
                          'style': 'bar'},
                       ],
                       order=[[column_index, "desc"]],
@@ -179,18 +164,6 @@ def seq_server(seq_df):
                           {
                               "targets": date_column_index,
                               "type": "date",
-                              "render": JavascriptFunction("""
-                              function(data, type, row) {
-                                  // For sorting and filtering
-                                  if (type === 'sort' || type === 'type' || type === 'filter') {
-                                      if (!data || data === '') {
-                                          return null;
-                                      }
-                                      return data;
-                                  }
-                                  // For display
-                                  return data;
-                              }
-                              """)
+                              "render": DATE_VALUE_RENDERER
                           }
                       ])

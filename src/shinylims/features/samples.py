@@ -8,6 +8,13 @@ from itables.widget import ITable
 from itables.javascript import JavascriptFunction
 import pandas as pd
 import io
+from shinylims.ui_helpers.table_controls import (
+    DATE_VALUE_RENDERER,
+    clear_all_filters_button,
+    deselect_all_columns_button,
+    select_all_columns_button,
+    visibility_preset_button,
+)
 from shinylims.integrations.upload_atlas_file_to_saga import _upload_csv_to_saga
 from datetime import datetime
 
@@ -58,7 +65,7 @@ def samples_server(samples_df, samples_historical_df, input):
         return ui.div(
             "Historical data: ON",
             class_="badge text-bg-warning",
-            style="position: absolute; top: 8px; right: 10px; z-index: 20;"
+            style="position: absolute; top: -6px; right: 10px; z-index: 20;"
         )
 
     @reactive.Effect
@@ -71,13 +78,28 @@ def samples_server(samples_df, samples_historical_df, input):
             ui.modal(
                 ui.div(
                     ui.p("⚠️ You are now including historical samples. The historical data was recorded before Clarity LIMS was implemented. It may not be complete or accurate. It will also make searching more difficult since data isnt formatted consistently."),
-                    ui.p("Please review the data carefully. Data can be filtered through the 'Custom Search Builder' by 'Clarity LIMS' or 'Historical' using the 'Data Source' column.")
+                    ui.p("Please review the data carefully. Data can be filtered through the 'Search Builder' by 'Clarity LIMS' or 'Historical' using the 'Data Source' column.")
                 ),
                 title="Historical Data Warning",
-                easy_close=True,
-                footer=ui.modal_button("OK")
+                easy_close=False,
+                footer=ui.div(
+                    ui.input_action_button(
+                        "cancel_hist_warning",
+                        "Cancel",
+                        class_="btn btn-secondary",
+                    ),
+                    ui.modal_button("Continue", class_="btn-primary"),
+                    class_="d-flex justify-content-end gap-2",
+                ),
             )
         )
+
+    @reactive.Effect
+    @reactive.event(input.cancel_hist_warning)
+    def cancel_hist_warning():
+        has_shown_hist_warning.set(False)
+        ui.update_switch("include_hist", value=False)
+        ui.modal_remove()
         
     # Create a reactive expression for the combined dataframe
     @reactive.Calc
@@ -258,12 +280,12 @@ def samples_server(samples_df, samples_historical_df, input):
         return ITable(
                 dat,
                 select=True,
-                layout={"topEnd": "search", "top1": "searchBuilder"},
+                layout={"topStart": "buttons", "topEnd": "search"},
                 lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],
                 column_filters="footer",
                 search={"smart": True},
                 classes="nowrap compact hover order-column cell-border",
-                scrollY="75vh",
+                scrollY="84vh",
                 scrollX=True,
                 paging=True,
                 autoWidth=True,
@@ -274,53 +296,26 @@ def samples_server(samples_df, samples_historical_df, input):
                     # ── Column visibility ─────────────────────────────────────
                     {'extend': "spacer",
                      'style': 'bar',
-                     'text': 'Column Settings'},
+                     'text': 'Columns'},
                     {
                         "extend": "colvis",
-                        "text": "Selection"
+                        "text": "Selection",
+                        "collectionLayout": "two-column",
                     },
                     {
                         "extend": "collection",
                         "text": "Presets",
                         "buttons": [
-                            {
-                                "text": "Select All",
-                                "action": JavascriptFunction("""
-                                    function(e, dt, node, config) {
-                                        dt.columns().visible(true);
-                                    }
-                                """)
-                            },
-                            {
-                                "text": "Deselect All",
-                                "action": JavascriptFunction("""
-                                    function(e, dt, node, config) {
-                                        dt.columns().visible(false);
-                                    }
-                                """)
-                            },
+                            select_all_columns_button(),
+                            deselect_all_columns_button(),
                             {},
-                            {
-                                "text": "Minimal View",
-                                "action": JavascriptFunction("""
-                                    function(e, dt, node, config) {
-                                        dt.columns().visible(false);
-                                        dt.column(2).visible(true);
-                                        dt.column(3).visible(true);
-                                        dt.column(4).visible(true);
-                                        dt.column(5).visible(true);
-                                        dt.column(9).visible(true);
-                                        dt.column(10).visible(true);
-                                        dt.column(21).visible(true);
-                                    }
-                                """)
-                            }
+                            visibility_preset_button([2, 3, 4, 5, 9, 10, 21]),
                         ]
                     },
                     # ── Row settings ──────────────────────────────────────────
                     {'extend': "spacer",
                      'style': 'bar',
-                     'text': 'Row Settings'},
+                     'text': 'Rows'},
                     "pageLength",
                     {
                         "text": "☑️ Select All Filtered Rows",
@@ -381,6 +376,11 @@ def samples_server(samples_df, samples_historical_df, input):
                         ]
                     },
                     {'extend': "spacer",
+                     'style': 'bar',
+                     'text': 'Filter'},
+                    {"extend": "searchBuilder"},
+                    clear_all_filters_button(),
+                    {'extend': "spacer",
                      'style': 'bar'},
                 ],
                 order=[[column_index, "desc"]],
@@ -390,17 +390,7 @@ def samples_server(samples_df, samples_historical_df, input):
                     {
                         "targets": date_column_index,
                         "type": "date",
-                        "render": JavascriptFunction("""
-                        function(data, type, row) {
-                            if (type === 'sort' || type === 'type' || type === 'filter') {
-                                if (!data || data === '') {
-                                    return null;
-                                }
-                                return data;
-                            }
-                            return data;
-                        }
-                        """)
+                        "render": DATE_VALUE_RENDERER
                     }
                 ]
             )
