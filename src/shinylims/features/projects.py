@@ -8,6 +8,13 @@ from itables.widget import ITable
 from itables.javascript import JavascriptFunction
 import pandas as pd
 
+from shinylims.ui_helpers.table_controls import (
+    DATE_VALUE_RENDERER,
+    clear_all_filters_button,
+    deselect_all_columns_button,
+    select_all_columns_button,
+)
+
 
 ##############################
 # UI: PROJECT TABLE          #
@@ -50,12 +57,12 @@ def projects_server(projects_df):
         return ITable(
             dat,
             select=True,
-            layout={"topEnd": "search", "top1": "searchBuilder"},
+            layout={"topStart": "buttons", "topEnd": "search"},
             column_filters="footer",
             search={"smart": True, "regex": True, "caseInsensitive": True},
             lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],
             classes="compact hover order-column cell-border",
-            scrollY="80vh",
+            scrollY="84vh",
             scrollX=True,
             paging=True,
             maxBytes=0,
@@ -63,31 +70,21 @@ def projects_server(projects_df):
             autoWidth=True,
             keys=True,
             buttons=[
-                {"extend": "spacer", "style": "bar", "text": "Column Settings"},
-                {"extend": "colvis", "text": "Selection"},
+                {"extend": "spacer", "style": "bar", "text": "Columns"},
+                {
+                    "extend": "colvis",
+                    "text": "Selection",
+                    "collectionLayout": "two-column",
+                },
                 {
                     "extend": "collection",
                     "text": "Presets",
                     "buttons": [
-                        {
-                            "text": "Select All",
-                            "action": JavascriptFunction("""
-                                function(e, dt, node, config) {
-                                    dt.columns().visible(true);
-                                }
-                            """)
-                        },
-                        {
-                            "text": "Deselect All",
-                            "action": JavascriptFunction("""
-                                function(e, dt, node, config) {
-                                    dt.columns().visible(false);
-                                }
-                            """)
-                        },
+                        select_all_columns_button(),
+                        deselect_all_columns_button(),
                     ],
                 },
-                {"extend": "spacer", "style": "bar", "text": "Row Settings"},
+                {"extend": "spacer", "style": "bar", "text": "Rows"},
                 "pageLength",
                 {"extend": "spacer", "style": "bar", "text": "Export"},
                 {
@@ -113,6 +110,9 @@ def projects_server(projects_df):
                         },
                     ],
                 },
+                {"extend": "spacer", "style": "bar", "text": "Filter"},
+                {"extend": "searchBuilder"},
+                clear_all_filters_button(),
                 {"extend": "spacer", "style": "bar"},
             ],
             order=[[order_column_index, "desc"]],
@@ -165,17 +165,7 @@ def projects_server(projects_df):
                 {
                     "targets": date_column_index,
                     "type": "date",
-                    "render": JavascriptFunction("""
-                        function(data, type, row) {
-                            if (type === 'sort' || type === 'type' || type === 'filter') {
-                                if (!data || data === '') {
-                                    return null;
-                                }
-                                return data;
-                            }
-                            return data;
-                        }
-                    """),
+                    "render": DATE_VALUE_RENDERER,
                 } if date_column_index != -1 else {},
             ],
         )

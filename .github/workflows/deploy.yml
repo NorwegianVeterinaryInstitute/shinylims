@@ -6,7 +6,7 @@ on:
     branches:
       - main  # Trigger when pushing to main
       - feature/indexplate-map-tool # Trigger when pushing to feature branch (temp for testing)
-
+      - feature/ui-refresh # Trigger when pushing to feature branch (temp for testing)
 jobs:
   update-branches:
     env:
