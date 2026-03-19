@@ -15,7 +15,7 @@ dependencies = [
     "pins==0.8.5",
     "python-dotenv>=1.0.1",
     "seaborn==0.13.2",
-    "shiny[theme]==1.4.0",
+    "shiny[theme]==1.5.1",
     "brand-yml==0.1.1",
     "shinyswatch==0.6.1",
     "plotly==6.0.1",
