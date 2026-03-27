@@ -15,6 +15,7 @@ Also includes functions to transform LIMS IDs and comments into HTML
 
 import datetime
 import html
+import os
 from pathlib import Path
 from urllib.parse import quote
 
@@ -22,6 +23,12 @@ import numpy as np
 import pandas as pd
 import tomli
 
+from shinylims.integrations.clarity_pg import create_session
+from shinylims.integrations.clarity_queries import (
+    build_project_rows,
+    build_sample_rows,
+    build_sequencing_run_rows,
+)
 from shinylims.integrations.db_utils import query_to_dataframe, get_db_update_info
 
 ####################
@@ -108,104 +115,106 @@ def sanitize_dataframe_strings(df: pd.DataFrame, skip_columns: set[str] | None =
     return df
 
 
+def _get_clarity_pg_sequencing_type_ids() -> list[int]:
+    """Return sequencing process type ids for the direct Postgres prototype."""
+    raw_value = (os.getenv("CLARITY_PG_SEQUENCING_TYPE_IDS") or "").strip()
+    if not raw_value:
+        return []
+
+    type_ids: list[int] = []
+    for part in raw_value.split(","):
+        value = part.strip()
+        if not value:
+            continue
+        type_ids.append(int(value))
+    return type_ids
 
 
-####################
-# DATA FETCHING    #
-####################
+def _env_flag_is_true(name: str) -> bool:
+    value = (os.getenv(name) or "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
-def fetch_projects_data():
-    """Fetch projects data from SQLite and rename columns to match the app."""
-
-    # Query the projects table
-    df = query_to_dataframe("SELECT * FROM projects")
-    
-    # Rename columns to match what the app expects
+def _format_sequencing_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize sequencing rows to the app-facing dataframe shape."""
     df = df.rename(columns={
-        'open_date': 'Open Date',
-        'project_name': 'Project Name',
-        'sample_count': 'Samples',
-        'submitting_lab': 'Submitting Lab',
-        'comment': 'Comment',
-        'status': 'Status',
-        'submitter': 'Submitter',
+        'seq_limsid': 'seq_limsid',
+        'run_id': 'Run ID',
+        'instrument': 'Instrument',
+        'run_number': 'Run Number',
+        'seq_date': 'Seq Date',
+        'operator': 'Operator',
         'species': 'Species',
-        'status': 'Status',
-        'project_limsid': 'Project LIMS ID',
+        'experiment_name': 'Experiment Name',
+        'casette_type': 'Casette Type',
+        'read_length': 'Read Length',
+        'index_cycles': 'Index Cycles',
+        'sample_count': 'Sample Count',
+        'loading_pm': 'Loading pM',
+        'diluted_denatured_ul': 'Diluted Denatured (uL)',
+        'avg_fragment_size': 'Avg Fragment Size',
+        'combined_pool': 'Combined Pool',
+        'phix_loaded_percent': 'Phix Loaded (%)',
+        'phix_aligned_percent': 'Phix Aligned (%)',
+        'cluster_density': 'Cluster Density',
+        'yield_total' : 'Yield Total',
+        'qv30_r1': 'QV30 R1',
+        'qv30_r2':  'QV30 R2',
+        'pf_reads': 'PF Reads',
+        'comment' : 'Comment'
     })
-    
-    # Apply transformations
-    if 'Open Date' in df.columns:
-        df['Open Date'] = pd.to_datetime(df['Open Date'], errors='coerce')
-    
-    # Replace NaN values
+
+    if 'Seq Date' in df.columns:
+        df['Seq Date'] = pd.to_datetime(df['Seq Date'], errors='coerce')
+
     df = df.replace(np.nan, '', regex=True)
-    
-    # Get the actual update timestamp for this table instead of current time
-    meta_created = get_table_update_timestamp('projects')
 
-    # Transform comments
-    comment_columns = [col for col in df.columns if 'comment' in col.lower()]
-    for col in comment_columns:
-        df[col] = df[col].apply(transform_comments_to_html)
+    for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid']:
+        if col in df.columns:
+            df[col] = df[col].apply(transform_to_html)
 
-    df = sanitize_dataframe_strings(df, skip_columns=set(comment_columns))
-    
-    return df, meta_created
+    html_columns = {
+        col for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid']
+        if col in df.columns
+    }
+    return sanitize_dataframe_strings(df, skip_columns=html_columns)
 
 
-def fetch_all_samples_data():
-    """Fetch all samples data from SQLite with storage container state and rename columns to match the app."""
+def _format_samples_dataframe(df: pd.DataFrame, *, meta_created: str) -> tuple[pd.DataFrame, str]:
+    """Normalize sample rows to the app-facing dataframe shape."""
+    if "storage_box_formatted" not in df.columns:
+        containers_query = "SELECT container_name, state FROM storage_containers"
+        containers_df = query_to_dataframe(containers_query)
+        container_states = dict(zip(containers_df['container_name'], containers_df['state']))
 
-    # First, get all samples
-    df = query_to_dataframe("SELECT * FROM samples")
-    
-    # Get all container states as a dictionary for efficient lookup
-    containers_query = "SELECT container_name, state FROM storage_containers"
-    containers_df = query_to_dataframe(containers_query)
-    container_states = dict(zip(containers_df['container_name'], containers_df['state']))
-    
-    # Create formatted storage box column BEFORE renaming
-    # This handles multiple boxes separated by commas
-    def format_storage_box(row):
-        box_name = row.get('storage_box', '')
-        
-        if pd.isna(box_name) or box_name == '':
-            return ''
-        
-        # Split by comma and strip whitespace
-        boxes = [box.strip() for box in str(box_name).split(',')]
-        
-        # Format each box with its state
-        formatted_boxes = []
-        
-        for box in boxes:
-            if not box:  # Skip empty strings
-                continue
-                
-            # Look up the state for this box
-            box_state = container_states.get(box, None)
-            
-            if box_state == 'Discarded':
-                # Red and bold for discarded boxes
-                formatted_boxes.append(
-                    f'<span style="color: red; font-weight: bold;">{html.escape(box)} (discarded)</span>'
-                )
-            else:
-                # Normal formatting for active or unknown boxes
-                formatted_boxes.append(html.escape(box))
-        
-        # Join all formatted boxes back together
-        return ', '.join(formatted_boxes)
-    
-    # Create the formatted column
-    df['storage_box_formatted'] = df.apply(format_storage_box, axis=1)
-    
-    # Drop the original raw column
-    df = df.drop('storage_box', axis=1)
-    
-    # Rename columns to match what the app expects
+        def format_storage_box(row):
+            box_name = row.get('storage_box', '')
+
+            if pd.isna(box_name) or box_name == '':
+                return ''
+
+            boxes = [box.strip() for box in str(box_name).split(',')]
+            formatted_boxes = []
+
+            for box in boxes:
+                if not box:
+                    continue
+
+                box_state = container_states.get(box, None)
+                if box_state == 'Discarded':
+                    formatted_boxes.append(
+                        f'<span style="color: red; font-weight: bold;">{html.escape(box)} (discarded)</span>'
+                    )
+                else:
+                    formatted_boxes.append(html.escape(box))
+
+            return ', '.join(formatted_boxes)
+
+        df['storage_box_formatted'] = df.apply(format_storage_box, axis=1)
+
+    if 'storage_box' in df.columns:
+        df = df.drop('storage_box', axis=1)
+
     df = df.rename(columns={
         'limsid': 'LIMS ID',
         'project_limsid': 'Project LIMS ID',
@@ -228,20 +237,16 @@ def fetch_all_samples_data():
         'increased_pooling': 'Increased Pooling (%)',
         'nird_filename': 'NIRD Filename',
     })
-    
-    # Apply transformations
+
     if 'Received Date' in df.columns:
         df['Received Date'] = pd.to_datetime(df['Received Date'], errors='coerce')
-    
-    # Replace NaN values
+
     df = df.replace(np.nan, '', regex=True)
-    
-    # Transform LIMS IDs to HTML links
+
     for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid']:
         if col in df.columns:
             df[col] = df[col].apply(transform_to_html)
-    
-    # Transform comments
+
     comment_columns = [col for col in df.columns if 'comment' in col.lower()]
     for col in comment_columns:
         df[col] = df[col].apply(transform_comments_to_html)
@@ -250,25 +255,180 @@ def fetch_all_samples_data():
         col for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid'] if col in df.columns
     } | ({'Storage Box'} if 'Storage Box' in df.columns else set())
     df = sanitize_dataframe_strings(df, skip_columns=html_columns)
-    
-    # Reorder columns to place "Storage Box" right before "Storage Well"
+
     cols = df.columns.tolist()
-    
-    # Remove "Storage Box" from its current position
     if 'Storage Box' in cols:
         cols.remove('Storage Box')
-    
-    # Find the index of "Storage Well" and insert "Storage Box" before it
     if 'Storage Well' in cols:
         storage_well_idx = cols.index('Storage Well')
         cols.insert(storage_well_idx, 'Storage Box')
-    
-    # Reorder the dataframe
     df = df[cols]
+
+    return df, meta_created
+
+
+def _fetch_projects_data_from_postgres() -> tuple[pd.DataFrame, str]:
+    """Fetch project rows directly from Clarity Postgres using the prototype query layer."""
+    with create_session() as session:
+        rows = build_project_rows(session)
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(columns=[
+            "project_limsid",
+            "open_date",
+            "status",
+            "project_name",
+            "sample_count",
+            "species",
+            "submitter",
+            "submitting_lab",
+            "comment",
+        ])
+    return df, datetime.datetime.now().isoformat()
+
+
+def _fetch_sequencing_data_from_postgres() -> tuple[pd.DataFrame, str]:
+    """Fetch sequencing rows directly from Clarity Postgres using the prototype query layer."""
+    sequencing_type_ids = _get_clarity_pg_sequencing_type_ids()
+    if not sequencing_type_ids:
+        raise RuntimeError(
+            "CLARITY_PG_SEQUENCING_TYPE_IDS is not configured for direct Postgres sequencing reads."
+        )
+
+    with create_session() as session:
+        rows = build_sequencing_run_rows(session, sequencing_type_ids)
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(columns=[
+            "seq_limsid",
+            "run_id",
+            "instrument",
+            "run_number",
+            "seq_date",
+            "operator",
+            "species",
+            "experiment_name",
+            "casette_type",
+            "read_length",
+            "index_cycles",
+            "sample_count",
+            "loading_pm",
+            "diluted_denatured_ul",
+            "avg_fragment_size",
+            "combined_pool",
+            "phix_loaded_percent",
+            "phix_aligned_percent",
+            "cluster_density",
+            "yield_total",
+            "qv30_r1",
+            "qv30_r2",
+            "pf_reads",
+            "comment",
+        ])
+    return df, datetime.datetime.now().isoformat()
+
+
+def _fetch_samples_data_from_postgres() -> tuple[pd.DataFrame, str]:
+    """Fetch sample rows directly from Clarity Postgres using the prototype query layer."""
+    with create_session() as session:
+        rows = build_sample_rows(session, open_projects_only=False)
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(columns=[
+            "limsid",
+            "project_limsid",
+            "received_date",
+            "progress",
+            "species_name",
+            "name",
+            "project_name",
+            "submitter",
+            "submitting_lab",
+            "project_account",
+            "experiment_name",
+            "extraction_number",
+            "concentration_absorbance",
+            "a260_280_ratio",
+            "a260_230_ratio",
+            "concentration_fluorescence",
+            "storage_box",
+            "storage_box_formatted",
+            "storage_well",
+            "invoice_id",
+            "sample_type",
+            "gram_stain",
+            "nird_filename",
+            "billing_description",
+            "price",
+            "nd_limsid",
+            "qubit_limsid",
+            "prep_limsid",
+            "seq_limsid",
+            "billed_limsid",
+            "increased_pooling",
+            "reagent_label",
+        ])
+    return df, datetime.datetime.now().isoformat()
+
+
+
+
+####################
+# DATA FETCHING    #
+####################
+
+
+def fetch_projects_data():
+    """Fetch projects data from Postgres when configured, otherwise from SQLite."""
+    if _env_flag_is_true("CLARITY_PG_PROJECTS_ENABLED"):
+        df, meta_created = _fetch_projects_data_from_postgres()
+    else:
+        df = query_to_dataframe("SELECT * FROM projects")
+        meta_created = get_table_update_timestamp('projects')
     
-    meta_created = get_table_update_timestamp('samples')
+    # Rename columns to match what the app expects
+    df = df.rename(columns={
+        'open_date': 'Open Date',
+        'project_name': 'Project Name',
+        'sample_count': 'Samples',
+        'submitting_lab': 'Submitting Lab',
+        'comment': 'Comment',
+        'status': 'Status',
+        'submitter': 'Submitter',
+        'species': 'Species',
+        'status': 'Status',
+        'project_limsid': 'Project LIMS ID',
+    })
+    
+    # Apply transformations
+    if 'Open Date' in df.columns:
+        df['Open Date'] = pd.to_datetime(df['Open Date'], errors='coerce')
+    
+    # Replace NaN values
+    df = df.replace(np.nan, '', regex=True)
+
+    # Transform comments
+    comment_columns = [col for col in df.columns if 'comment' in col.lower()]
+    for col in comment_columns:
+        df[col] = df[col].apply(transform_comments_to_html)
+
+    df = sanitize_dataframe_strings(df, skip_columns=set(comment_columns))
     
     return df, meta_created
+
+
+def fetch_all_samples_data():
+    """Fetch all samples data from Postgres when configured, otherwise from SQLite."""
+    if _env_flag_is_true("CLARITY_PG_SAMPLES_ENABLED"):
+        df, meta_created = _fetch_samples_data_from_postgres()
+    else:
+        df = query_to_dataframe("SELECT * FROM samples")
+        meta_created = get_table_update_timestamp('samples')
+
+    return _format_samples_dataframe(df, meta_created=meta_created)
 
 
 
@@ -331,57 +491,15 @@ def fetch_historical_samples_data():
     return df
 
 def fetch_sequencing_data():
-    """Fetch sequencing run data from SQLite and rename columns to match the app."""
+    """Fetch sequencing run data from Postgres when configured, otherwise from SQLite."""
+    sequencing_type_ids = _get_clarity_pg_sequencing_type_ids()
+    if sequencing_type_ids:
+        df, meta_created = _fetch_sequencing_data_from_postgres()
+    else:
+        df = query_to_dataframe("SELECT * FROM ilmn_sequencing")
+        meta_created = get_table_update_timestamp('ilmn_sequencing')
 
-    df = query_to_dataframe("SELECT * FROM ilmn_sequencing")
-    
-    # Rename columns to match what the app expects
-    df = df.rename(columns={
-        'seq_limsid': 'seq_limsid',
-        'run_id': 'Run ID',
-        'instrument': 'Instrument',
-        'run_number': 'Run Number',
-        'seq_date': 'Seq Date',
-        'operator': 'Operator',
-        'species': 'Species',
-        'experiment_name': 'Experiment Name',
-        'casette_type': 'Casette Type',
-        'read_length': 'Read Length',
-        'index_cycles': 'Index Cycles',
-        'sample_count': 'Sample Count',
-        'loading_pm': 'Loading pM',
-        'diluted_denatured_ul': 'Diluted Denatured (uL)',
-        'avg_fragment_size': 'Avg Fragment Size',
-        'combined_pool': 'Combined Pool',
-        'phix_loaded_percent': 'Phix Loaded (%)',
-        'phix_aligned_percent': 'Phix Aligned (%)',
-        'cluster_density': 'Cluster Density',
-        'yield_total' : 'Yield Total',
-        'qv30_r1': 'QV30 R1',
-        'qv30_r2':  'QV30 R2',
-        'pf_reads': 'PF Reads',
-        'comment' : 'Comment'
-    })
-
-    # Apply transformations
-    if 'Date' in df.columns:
-        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    
-    # Replace NaN values
-    df = df.replace(np.nan, '', regex=True)
-
-    # Transform LIMS IDs to HTML links
-    for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid']:
-        if col in df.columns:
-            df[col] = df[col].apply(transform_to_html)
-
-    html_columns = {col for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid'] if col in df.columns}
-    df = sanitize_dataframe_strings(df, skip_columns=html_columns)
-
-    
-    meta_created = get_table_update_timestamp('ilmn_sequencing')
-    
-    return df, meta_created
+    return _format_sequencing_dataframe(df), meta_created
 
 
 # Get app version from pyproject.toml
