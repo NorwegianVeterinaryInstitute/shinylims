@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from shinylims.integrations.clarity_pg import create_session
-from shinylims.integrations.clarity_queries import (
+from shinylims.integrations.queries.sequencing import (
     SequencingLineage,
     build_sequencing_lineages,
     build_sequencing_run_rows,
@@ -60,8 +60,8 @@ def _lineage_to_payload(lineage: SequencingLineage, row: dict[str, Any] | None) 
         payload["step5_process"]["daterun"] = _format_timestamp(lineage.step5_process.daterun)
     if row is not None:
         row_payload = dict(row)
-        if isinstance(row_payload.get("seq_date"), datetime):
-            row_payload["seq_date"] = _format_timestamp(row_payload["seq_date"])
+        if isinstance(row_payload.get("Seq Date"), datetime):
+            row_payload["Seq Date"] = _format_timestamp(row_payload["Seq Date"])
         payload["row"] = row_payload
     return payload
 
@@ -93,39 +93,39 @@ def _print_human_readable(payload: dict[str, Any]) -> None:
     if row:
         print(
             "  row:"
-            f" run_id={row.get('run_id')}"
-            f" instrument={row.get('instrument')}"
-            f" sample_count={row.get('sample_count')}"
-            f" read_length={row.get('read_length')}"
-            f" operator={row.get('operator')}"
-            f" experiment_name={row.get('experiment_name')}"
+            f" run_id={row.get('Run ID')}"
+            f" instrument={row.get('Instrument')}"
+            f" sample_count={row.get('Sample Count')}"
+            f" read_length={row.get('Read Length')}"
+            f" operator={row.get('Operator')}"
+            f" experiment_name={row.get('Experiment Name')}"
         )
         print(
             "       "
-            f"cassette={row.get('casette_type')}"
-            f" index_cycles={row.get('index_cycles')}"
-            f" loading_pm={row.get('loading_pm')}"
-            f" diluted_denatured_ul={row.get('diluted_denatured_ul')}"
+            f"cassette={row.get('Casette Type')}"
+            f" index_cycles={row.get('Index Cycles')}"
+            f" loading_pm={row.get('Loading pM')}"
+            f" diluted_denatured_ul={row.get('Diluted Denatured (uL)')}"
         )
         print(
             "       "
-            f"avg_fragment_size={row.get('avg_fragment_size')}"
-            f" combined_pool={row.get('combined_pool')}"
-            f" phix_loaded_percent={row.get('phix_loaded_percent')}"
-            f" phix_aligned_percent={row.get('phix_aligned_percent')}"
+            f"avg_fragment_size={row.get('Avg Fragment Size')}"
+            f" combined_pool={row.get('Combined Pool')}"
+            f" phix_loaded_percent={row.get('Phix Loaded (%)')}"
+            f" phix_aligned_percent={row.get('Phix Aligned (%)')}"
         )
         print(
             "       "
-            f"cluster_density={row.get('cluster_density')}"
-            f" yield_total={row.get('yield_total')}"
-            f" qv30_r1={row.get('qv30_r1')}"
-            f" qv30_r2={row.get('qv30_r2')}"
-            f" pf_reads={row.get('pf_reads')}"
+            f"cluster_density={row.get('Cluster Density')}"
+            f" yield_total={row.get('Yield Total')}"
+            f" qv30_r1={row.get('QV30 R1')}"
+            f" qv30_r2={row.get('QV30 R2')}"
+            f" pf_reads={row.get('PF Reads')}"
         )
         print(
             "       "
-            f"species={row.get('species')}"
-            f" comment={row.get('comment')}"
+            f"species={row.get('Species')}"
+            f" comment={row.get('Comment')}"
         )
     print()
 

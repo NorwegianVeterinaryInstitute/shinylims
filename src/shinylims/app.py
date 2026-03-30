@@ -22,12 +22,12 @@ from shinylims.features.reagent_overview import (
 from shinylims.features.reagents import reagents_server, reagents_ui
 from shinylims.features.samples import samples_server, samples_ui
 from shinylims.features.sequencing import seq_server, seq_ui
+from shinylims.features.storage import storage_server, storage_ui
 from shinylims.integrations.data_utils import (
     fetch_all_samples_data,
     fetch_historical_samples_data,
     fetch_projects_data,
     fetch_sequencing_data,
-    fetch_storage_containers_data,
     get_app_version,
 )
 from shinylims.security import (
@@ -43,14 +43,10 @@ css_path = Path(__file__).parent / "assets" / "styles.css"
 # APP CONFIGURATION #
 ####################
 
-# Get the absolute path to the www directory
 # Shouldnt be needed, but something in the project layout is confusing Shiny's default static path discovery
 www_dir = Path(__file__).parent / "www"
 
-# Logo file to use
 logo_path = "images/favicon/favicon-96x96.png"
-
-# Get the app version from the config file
 app_version = get_app_version()
 access_request_email = "hts@vetinst.no"
 
@@ -322,6 +318,110 @@ app_ui = ui.page_fluid(
 )
 
 
+####################
+# DATASET CACHE    #
+####################
+
+class DatasetCache:
+    """Per-session cache for the four live datasets loaded from Clarity Postgres."""
+
+    def __init__(self):
+        self._projects = reactive.Value(pd.DataFrame())
+        self._samples = reactive.Value(pd.DataFrame())
+        self._historical = reactive.Value(pd.DataFrame())
+        self._seq = reactive.Value(pd.DataFrame())
+
+        self._projects_meta = reactive.Value(None)
+        self._samples_meta = reactive.Value(None)
+        self._seq_meta = reactive.Value(None)
+
+        self._projects_loaded = reactive.Value(False)
+        self._samples_loaded = reactive.Value(False)
+        self._historical_loaded = reactive.Value(False)
+        self._seq_loaded = reactive.Value(False)
+
+    # --- Accessors (callable, can be passed directly to feature server functions) ---
+
+    def projects(self) -> pd.DataFrame:
+        return self._projects.get()
+
+    def samples(self) -> pd.DataFrame:
+        return self._samples.get()
+
+    def historical(self) -> pd.DataFrame:
+        return self._historical.get()
+
+    def seq(self) -> pd.DataFrame:
+        return self._seq.get()
+
+    # --- Loaders ---
+
+    def load_projects(self, force: bool = False) -> None:
+        if self._projects_loaded.get() and not force:
+            return
+        df, meta = fetch_projects_data()
+        self._projects.set(df)
+        self._projects_meta.set(meta)
+        self._projects_loaded.set(True)
+
+    def load_samples(self, force: bool = False) -> None:
+        if self._samples_loaded.get() and not force:
+            return
+        df, meta = fetch_all_samples_data()
+        self._samples.set(df)
+        self._samples_meta.set(meta)
+        self._samples_loaded.set(True)
+
+    def load_historical(self, force: bool = False) -> None:
+        if self._historical_loaded.get() and not force:
+            return
+        df = fetch_historical_samples_data()
+        self._historical.set(df)
+        self._historical_loaded.set(True)
+
+    def load_sequencing(self, force: bool = False) -> None:
+        if self._seq_loaded.get() and not force:
+            return
+        df, meta = fetch_sequencing_data()
+        self._seq.set(df)
+        self._seq_meta.set(meta)
+        self._seq_loaded.set(True)
+
+    # --- State queries ---
+
+    def is_projects_loaded(self) -> bool:
+        return self._projects_loaded.get()
+
+    def is_samples_loaded(self) -> bool:
+        return self._samples_loaded.get()
+
+    def is_historical_loaded(self) -> bool:
+        return self._historical_loaded.get()
+
+    def is_seq_loaded(self) -> bool:
+        return self._seq_loaded.get()
+
+    def refresh_loaded(self) -> list[tuple[str, object]]:
+        """Return (label, loader) pairs for all currently-loaded datasets."""
+        loaders = []
+        if self._projects_loaded.get():
+            loaders.append(("projects", lambda: self.load_projects(force=True)))
+        if self._samples_loaded.get():
+            loaders.append(("samples", lambda: self.load_samples(force=True)))
+        if self._historical_loaded.get():
+            loaders.append(("historical samples", lambda: self.load_historical(force=True)))
+        if self._seq_loaded.get():
+            loaders.append(("sequencing", lambda: self.load_sequencing(force=True)))
+        return loaders
+
+    def timestamps(self) -> dict[str, str | None]:
+        return {
+            "projects": self._projects_meta.get(),
+            "samples": self._samples_meta.get(),
+            "ilmn_sequencing": self._seq_meta.get(),
+        }
+
+
 ###################
 # SERVER FUNCTION #
 ###################
@@ -348,56 +448,18 @@ def server(input, output, session):
     Fetch data and wire the single-page dashboard/detail views.
     """
     current_view = reactive.Value("dashboard")
+    cache = DatasetCache()
 
     reagents_server(input, output, session)
     reagent_overview_server(input, output, session)
+    storage_server()
+
+    projects_server(cache.projects)
+    samples_server(cache.samples, cache.historical, input)
+    seq_server(cache.seq)
 
     db_warning_state = reactive.Value(None)
     shown_db_warning_state = reactive.Value(None)
-    projects_df_reactive = reactive.Value(pd.DataFrame())
-    samples_df_reactive = reactive.Value(pd.DataFrame())
-    samples_historical_df_reactive = reactive.Value(pd.DataFrame())
-    seq_df_reactive = reactive.Value(pd.DataFrame())
-
-    projects_date_created_reactive = reactive.Value(None)
-    samples_date_created_reactive = reactive.Value(None)
-    seq_date_created_reactive = reactive.Value(None)
-
-    projects_loaded_reactive = reactive.Value(False)
-    samples_loaded_reactive = reactive.Value(False)
-    samples_historical_loaded_reactive = reactive.Value(False)
-    seq_loaded_reactive = reactive.Value(False)
-
-    def _load_projects_dataset(force: bool = False) -> None:
-        if projects_loaded_reactive.get() and not force:
-            return
-        projects_df, project_date_created = fetch_projects_data()
-        projects_df_reactive.set(projects_df)
-        projects_date_created_reactive.set(project_date_created)
-        projects_loaded_reactive.set(True)
-
-    def _load_samples_dataset(force: bool = False) -> None:
-        if samples_loaded_reactive.get() and not force:
-            return
-        samples_df, samples_date_created = fetch_all_samples_data()
-        samples_df_reactive.set(samples_df)
-        samples_date_created_reactive.set(samples_date_created)
-        samples_loaded_reactive.set(True)
-
-    def _load_historical_samples_dataset(force: bool = False) -> None:
-        if samples_historical_loaded_reactive.get() and not force:
-            return
-        samples_historical_df = fetch_historical_samples_data()
-        samples_historical_df_reactive.set(samples_historical_df)
-        samples_historical_loaded_reactive.set(True)
-
-    def _load_sequencing_dataset(force: bool = False) -> None:
-        if seq_loaded_reactive.get() and not force:
-            return
-        seq_df, seq_date_created = fetch_sequencing_data()
-        seq_df_reactive.set(seq_df)
-        seq_date_created_reactive.set(seq_date_created)
-        seq_loaded_reactive.set(True)
 
     def _run_load_step(step_label: str, loader) -> None:
         try:
@@ -414,21 +476,12 @@ def server(input, output, session):
         with ui.Progress(min=1, max=5) as p:
             p.set(message="Refreshing loaded datasets...")
 
-            active_loaders = []
-            if projects_loaded_reactive.get():
-                active_loaders.append(("projects", lambda: _load_projects_dataset(force=True)))
-            if samples_loaded_reactive.get():
-                active_loaders.append(("samples", lambda: _load_samples_dataset(force=True)))
-            if samples_historical_loaded_reactive.get():
-                active_loaders.append(("historical samples", lambda: _load_historical_samples_dataset(force=True)))
-            if seq_loaded_reactive.get():
-                active_loaders.append(("sequencing", lambda: _load_sequencing_dataset(force=True)))
-
+            active_loaders = cache.refresh_loaded()
             if not active_loaders:
                 active_loaders = [
-                    ("projects", _load_projects_dataset),
-                    ("samples", _load_samples_dataset),
-                    ("sequencing", _load_sequencing_dataset),
+                    ("projects", cache.load_projects),
+                    ("samples", cache.load_samples),
+                    ("sequencing", cache.load_sequencing),
                 ]
 
             for idx, (label, loader) in enumerate(active_loaders, start=1):
@@ -447,59 +500,40 @@ def server(input, output, session):
 
     def get_update_display_info():
         """Return simple display strings for tooltip/info modal."""
+        ts = cache.timestamps()
         display_info = {
-            "projects": "Not loaded yet",
-            "samples": "Not loaded yet",
-            "ilmn_sequencing": "Not loaded yet",
-            "app_refresh": datetime.now(pytz.timezone("Europe/Oslo")).strftime("%Y-%m-%d %H:%M"),
+            key: _format_display_timestamp(ts[key]) if ts[key] else "Not loaded yet"
+            for key in ("projects", "samples", "ilmn_sequencing")
         }
-
-        if projects_loaded_reactive.get():
-            display_info["projects"] = _format_display_timestamp(
-                projects_date_created_reactive.get()
-            )
-        if samples_loaded_reactive.get():
-            display_info["samples"] = _format_display_timestamp(
-                samples_date_created_reactive.get()
-            )
-        if seq_loaded_reactive.get():
-            display_info["ilmn_sequencing"] = _format_display_timestamp(
-                seq_date_created_reactive.get()
-            )
-
+        display_info["app_refresh"] = datetime.now(pytz.timezone("Europe/Oslo")).strftime("%Y-%m-%d %H:%M")
         return display_info
-
-    projects_server(lambda: projects_df_reactive.get())
-    samples_server(
-        lambda: samples_df_reactive.get(),
-        lambda: samples_historical_df_reactive.get(),
-        input,
-    )
-    seq_server(lambda: seq_df_reactive.get())
 
     @reactive.Effect
     @reactive.event(input.open_table_projects)
     def _open_projects():
         current_view.set("projects")
-        with ui.Progress(min=1, max=1) as p:
-            p.set(message="Loading projects...")
-            _run_load_step("projects", lambda: _load_projects_dataset(force=True))
+        if not cache.is_projects_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading projects...")
+                _run_load_step("projects", cache.load_projects)
 
     @reactive.Effect
     @reactive.event(input.open_table_samples)
     def _open_samples():
         current_view.set("samples")
-        with ui.Progress(min=1, max=1) as p:
-            p.set(message="Loading samples...")
-            _run_load_step("samples", lambda: _load_samples_dataset(force=True))
+        if not cache.is_samples_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading samples...")
+                _run_load_step("samples", cache.load_samples)
 
     @reactive.Effect
     @reactive.event(input.open_table_sequencing)
     def _open_sequencing():
         current_view.set("sequencing")
-        with ui.Progress(min=1, max=1) as p:
-            p.set(message="Loading sequencing...")
-            _run_load_step("sequencing", lambda: _load_sequencing_dataset(force=True))
+        if not cache.is_seq_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading sequencing...")
+                _run_load_step("sequencing", cache.load_sequencing)
 
     @reactive.Effect
     @reactive.event(input.open_tool_reagents)
@@ -527,7 +561,7 @@ def server(input, output, session):
             return
         with ui.Progress(min=1, max=1) as p:
             p.set(message="Loading historical samples...")
-            _run_load_step("historical samples", _load_historical_samples_dataset)
+            _run_load_step("historical samples", cache.load_historical)
 
     @reactive.Effect
     @reactive.event(input.update_button)
@@ -575,16 +609,6 @@ def server(input, output, session):
                         "info_button",
                         icon_svg("info"),
                         class_="btn btn-outline-primary app-icon-button",
-                    ),
-                    ui.tooltip(
-                        ui.input_action_button(
-                            "update_button",
-                            "Refresh data",
-                            class_="btn btn-primary app-refresh-button",
-                        ),
-                        ui.output_ui("update_tooltip_output"),
-                        placement="left",
-                        id="update_tooltip",
                     ),
                     class_="app-toolbar",
                 ),
@@ -820,112 +844,7 @@ def server(input, output, session):
                 reagent_overview_ui(show_title=False),
             )
 
-        return _detail_shell("storage", ui.output_ui("storage_status_tool"))
-
-    @output
-    @render.ui
-    def storage_status_tool():
-        try:
-            containers_df = fetch_storage_containers_data()
-
-            if containers_df.empty:
-                return ui.p("No storage container data available.")
-
-            def extract_number(name):
-                if pd.isna(name):
-                    return 0
-                match = re.search(r"(\d+)", str(name))
-                return int(match.group(1)) if match else 0
-
-            containers_df["sort_num"] = containers_df["container_name"].apply(
-                extract_number
-            )
-            containers_df = containers_df.sort_values(by="sort_num", ascending=False)
-
-            containers_df = containers_df.rename(
-                columns={
-                    "container_name": "Box Name",
-                    "status": "Status",
-                    "created_date": "Created Date",
-                    "last_checked": "Last Checked",
-                    "last_modified_date": "Last Modified",
-                    "last_updated": "Last Updated",
-                }
-            )
-
-            for col in ["Created Date", "Last Modified", "Last Checked", "Last Updated"]:
-                if col in containers_df.columns:
-                    containers_df[col] = pd.to_datetime(
-                        containers_df[col], errors="coerce"
-                    ).dt.strftime("%Y-%m-%d")
-
-            def format_status(status):
-                if status == "Discarded":
-                    return f"🗑️ {status}"
-                if status in {"Populated", "Active"}:
-                    return f"✅ {status}"
-                return status
-
-            containers_df["Status"] = containers_df["Status"].apply(format_status)
-
-            active_count = containers_df["Status"].str.contains(
-                "Active|Populated", case=False, regex=True
-            ).sum()
-            discarded_count = containers_df["Status"].str.contains(
-                "Discarded", case=False
-            ).sum()
-            total_count = len(containers_df)
-
-            summary = ui.p(
-                f"📦 Total: {total_count} | ✅ Active: {active_count} | 🗑️ Discarded: {discarded_count}",
-                style="font-weight: bold; margin-bottom: 15px;",
-            )
-
-            display_df = containers_df.drop("sort_num", axis=1)
-            table_html = display_df.to_html(
-                index=False,
-                escape=True,
-                classes="table table-striped table-bordered table-sm",
-                border=0,
-            )
-
-            styled_table = f"""
-            <style>
-                .storage-status-table {{
-                    width: 100%;
-                    max-height: 90vh;
-                    overflow-y: auto;
-                    overflow-x: auto;
-                }}
-                .storage-status-table table {{
-                    width: 100%;
-                    table-layout: fixed;
-                    margin: 0;
-                }}
-                .storage-status-table th,
-                .storage-status-table td {{
-                    text-align: left;
-                    vertical-align: middle;
-                    white-space: nowrap;
-                }}
-                .storage-status-table th {{
-                    position: sticky;
-                    top: 0;
-                    z-index: 2;
-                    background: #f8f9fa;
-                }}
-            </style>
-            <div class="storage-status-table">
-                {table_html}
-            </div>
-            """
-
-            return ui.div(summary, ui.HTML(styled_table))
-        except Exception as e:
-            return ui.p(
-                f"⚠️ Error loading storage container data: {str(e)}",
-                style="color: red;",
-            )
+        return _detail_shell("storage", storage_ui())
 
     @output
     @render.ui

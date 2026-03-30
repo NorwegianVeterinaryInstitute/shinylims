@@ -47,7 +47,7 @@ def seq_server(seq_df):
         # Determine indices for special column handling
         comment_index = dat.columns.get_loc('Comment') if 'Comment' in dat.columns else -1
         run_number_index = dat.columns.get_loc('Run Number') if 'Run Number' in dat.columns else -1
-        cluster_density_index = dat.columns.get_loc('Cluster density (K/mm2)') if 'Cluster density (K/mm2)' in dat.columns else -1
+        cluster_density_index = dat.columns.get_loc('Cluster Density') if 'Cluster Density' in dat.columns else -1
         
         # Find index for order column
         column_to_sort = "Seq Date"
