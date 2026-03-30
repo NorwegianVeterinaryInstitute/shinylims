@@ -4,7 +4,9 @@ Prototype SQLAlchemy queries for traversing Clarity sequencing lineage directly 
 
 from __future__ import annotations
 
+import os
 import re
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,6 +21,7 @@ from shinylims.integrations.clarity_models import (
     ArtifactLabelMap,
     ArtifactUdfView,
     Container,
+    ContainerType,
     ContainerPlacement,
     EntityUdfView,
     Lab,
@@ -57,6 +60,11 @@ ALLOWED_SAMPLE_TYPES = (
     "Prepared Pool",
     "Prepared Libraries",
 )
+CONTAINER_STATE_LABELS = {
+    2: "Active",
+    4: "Discarded",
+}
+DNA_STORAGE_CONTAINER_TYPE_NAME = "DNA for NGS"
 
 SEQUENCING_ARTIFACT_UDFS = {
     "% Aligned R1",
@@ -108,6 +116,21 @@ class SequencingLineage:
     step7_input_artifactid: int | None
     step6_input_artifactid: int | None
     step5_input_artifactids: tuple[int, ...]
+
+
+def _pg_timing_enabled() -> bool:
+    value = (os.getenv("CLARITY_PG_TIMING_ENABLED") or "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _log_pg_timing(scope: str, started_at: float, **metrics: Any) -> None:
+    if not _pg_timing_enabled():
+        return
+
+    elapsed_seconds = time.perf_counter() - started_at
+    metric_parts = [f"elapsed_s={elapsed_seconds:.3f}"]
+    metric_parts.extend(f"{key}={value}" for key, value in metrics.items())
+    print(f"[clarity-pg-timing] scope={scope} " + " ".join(metric_parts))
 
 
 def _parse_run_id(run_id: str | None) -> tuple[str | None, str | None]:
@@ -233,6 +256,10 @@ def _format_storage_box_html(container_name: str | None, container_state: str | 
     if container_state == "Discarded":
         return f'<span style="color: red; font-weight: bold;">{container_name} (discarded)</span>'
     return container_name
+
+
+def _container_state_label(stateid: int | None) -> str | None:
+    return CONTAINER_STATE_LABELS.get(stateid)
 
 
 def _kit_type_from_application(application: str | None) -> str | None:
@@ -749,6 +776,7 @@ def _load_artifact_locations(
         select(
             ContainerPlacement.processartifactid,
             Container.name,
+            Container.stateid,
             ContainerPlacement.wellxposition,
             ContainerPlacement.wellyposition,
         )
@@ -757,13 +785,40 @@ def _load_artifact_locations(
     ).all()
 
     result: dict[int, dict[str, str | None]] = {}
-    for artifactid, container_name, x_position, y_position in rows:
+    for artifactid, container_name, stateid, x_position, y_position in rows:
         result[artifactid] = {
             "container_name": container_name,
-            "container_state": None,
+            "container_state": _container_state_label(stateid),
             "well_label": _format_well_label(x_position, y_position),
         }
     return result
+
+
+def build_storage_container_rows(session: Session) -> list[dict[str, Any]]:
+    """Return DNA storage containers with status and timestamps for the storage overview."""
+    rows = session.execute(
+        select(
+            Container.name,
+            Container.stateid,
+            Container.createddate,
+            Container.lastmodifieddate,
+        )
+        .join(ContainerType, ContainerType.typeid == Container.typeid)
+        .where(ContainerType.name == DNA_STORAGE_CONTAINER_TYPE_NAME)
+        .order_by(Container.name.desc())
+    ).all()
+
+    results: list[dict[str, Any]] = []
+    for container_name, stateid, createddate, lastmodifieddate in rows:
+        results.append(
+            {
+                "container_name": container_name,
+                "status": _container_state_label(stateid) or f"State {stateid}",
+                "created_date": createddate,
+                "last_modified_date": lastmodifieddate,
+            }
+        )
+    return results
 
 
 def _load_artifact_reagent_labels(
@@ -796,10 +851,21 @@ def build_sample_rows(
     open_projects_only: bool = True,
 ) -> list[dict[str, Any]]:
     """Build sample rows shaped like the current `samples` dataset."""
+    total_started_at = time.perf_counter()
+
+    stage_started_at = time.perf_counter()
     sample_rows = _load_sample_udf_rows(session, open_projects_only=open_projects_only)
+    _log_pg_timing(
+        "build_sample_rows.load_sample_udf_rows",
+        stage_started_at,
+        row_count=len(sample_rows),
+        open_projects_only=open_projects_only,
+    )
     if not sample_rows:
+        _log_pg_timing("build_sample_rows.total", total_started_at, result_count=0)
         return []
 
+    stage_started_at = time.perf_counter()
     sample_process_ids = [row.sample_processid for row in sample_rows]
 
     referenced_process_luids: set[str] = set()
@@ -812,10 +878,24 @@ def build_sample_rows(
             row.extractions_limsid,
         ):
             referenced_process_luids.update(_split_luid_list(value))
+    _log_pg_timing(
+        "build_sample_rows.collect_referenced_processes",
+        stage_started_at,
+        sample_process_count=len(sample_process_ids),
+        referenced_luid_count=len(referenced_process_luids),
+    )
 
+    stage_started_at = time.perf_counter()
     processes_by_luid = _load_processes_by_luid(session, sorted(referenced_process_luids))
     referenced_process_ids = sorted({process.processid for process in processes_by_luid.values()})
+    _log_pg_timing(
+        "build_sample_rows.load_processes_by_luid",
+        stage_started_at,
+        process_count=len(processes_by_luid),
+        referenced_process_id_count=len(referenced_process_ids),
+    )
 
+    stage_started_at = time.perf_counter()
     process_udfs = _load_process_udfs(
         session,
         referenced_process_ids,
@@ -824,16 +904,32 @@ def build_sample_rows(
     process_output_artifacts = _load_process_sample_output_analytes(session, referenced_process_ids)
     process_input_artifacts = _load_process_sample_input_artifacts(session, referenced_process_ids)
     original_artifacts_by_sample = _load_original_artifacts_by_sample(session, sample_process_ids)
+    _log_pg_timing(
+        "build_sample_rows.load_process_and_artifact_maps",
+        stage_started_at,
+        process_udf_count=len(process_udfs),
+        output_artifact_keys=len(process_output_artifacts),
+        input_artifact_keys=len(process_input_artifacts),
+        original_artifact_count=len(original_artifacts_by_sample),
+    )
 
+    stage_started_at = time.perf_counter()
     artifact_ids: set[int] = set(original_artifacts_by_sample.values())
     for artifact_list in process_output_artifacts.values():
         artifact_ids.update(artifact_list)
     for artifact_list in process_input_artifacts.values():
         artifact_ids.update(artifact_list)
+    artifact_id_list = sorted(artifact_ids)
+    _log_pg_timing(
+        "build_sample_rows.collect_artifact_ids",
+        stage_started_at,
+        artifact_count=len(artifact_id_list),
+    )
 
+    stage_started_at = time.perf_counter()
     artifact_udfs = _load_artifact_udfs(
         session,
-        sorted(artifact_ids),
+        artifact_id_list,
         {
             "Concentration Absorbance (ng/µl)",
             "A260/280 ratio",
@@ -845,9 +941,17 @@ def build_sample_rows(
             "Analysis Description",
         },
     )
-    artifact_locations = _load_artifact_locations(session, sorted(artifact_ids))
-    artifact_reagent_labels = _load_artifact_reagent_labels(session, sorted(artifact_ids))
+    artifact_locations = _load_artifact_locations(session, artifact_id_list)
+    artifact_reagent_labels = _load_artifact_reagent_labels(session, artifact_id_list)
+    _log_pg_timing(
+        "build_sample_rows.load_artifact_metadata",
+        stage_started_at,
+        artifact_udf_count=len(artifact_udfs),
+        artifact_location_count=len(artifact_locations),
+        artifact_reagent_label_count=len(artifact_reagent_labels),
+    )
 
+    stage_started_at = time.perf_counter()
     results: list[dict[str, Any]] = []
     for row in sample_rows:
         if row.project_limsid in PROJECT_IDS_EXCLUDED_FROM_APP:
@@ -1024,6 +1128,17 @@ def build_sample_rows(
             }
         )
 
+    _log_pg_timing(
+        "build_sample_rows.assemble_results",
+        stage_started_at,
+        result_count=len(results),
+    )
+    _log_pg_timing(
+        "build_sample_rows.total",
+        total_started_at,
+        sample_row_count=len(sample_rows),
+        result_count=len(results),
+    )
     return results
 
 

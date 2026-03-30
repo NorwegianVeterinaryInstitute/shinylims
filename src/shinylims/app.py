@@ -27,12 +27,8 @@ from shinylims.integrations.data_utils import (
     fetch_historical_samples_data,
     fetch_projects_data,
     fetch_sequencing_data,
+    fetch_storage_containers_data,
     get_app_version,
-)
-from shinylims.integrations.db_utils import (
-    get_db_update_info,
-    query_to_dataframe,
-    refresh_db_connection,
 )
 from shinylims.security import (
     is_allowed_reagents_user,
@@ -331,48 +327,25 @@ app_ui = ui.page_fluid(
 ###################
 
 
-def _load_sqlite_datasets_with_fallback() -> tuple[dict[str, object], str | None]:
-    """Load SQLite-backed datasets, returning empty fallbacks if the pin is unavailable."""
-    try:
-        projects_df, project_date_created = fetch_projects_data()
-        samples_df, samples_date_created = fetch_all_samples_data()
-        samples_historical_df = fetch_historical_samples_data()
-        seq_df, seq_date_created = fetch_sequencing_data()
-        return (
-            {
-                "projects_df": projects_df,
-                "project_date_created": project_date_created,
-                "samples_df": samples_df,
-                "samples_date_created": samples_date_created,
-                "samples_historical_df": samples_historical_df,
-                "seq_df": seq_df,
-                "seq_date_created": seq_date_created,
-            },
-            None,
-        )
-    except Exception as e:
-        warning = (
-            "SQLite metadata is temporarily unavailable. Metadata tables will load empty until the "
-            "Connect pin recovers."
-        )
-        print(f"[app-startup] {warning} Root cause: {str(e)}")
-        return (
-            {
-                "projects_df": pd.DataFrame(),
-                "project_date_created": None,
-                "samples_df": pd.DataFrame(),
-                "samples_date_created": None,
-                "samples_historical_df": pd.DataFrame(),
-                "seq_df": pd.DataFrame(),
-                "seq_date_created": None,
-            },
-            warning,
-        )
+def _metadata_backend_label() -> str:
+    """Return a short user-facing label for the live metadata backend."""
+    return "Clarity Postgres"
+
+
+def _format_dataset_load_error(error: Exception) -> str:
+    """Return a concise user-facing error for metadata load failures."""
+    details = f"{type(error).__name__}: {error}"
+    return (
+        "Clarity Postgres is unavailable, so metadata could not be loaded. "
+        "This usually means the database is unreachable from your current network, "
+        "for example because your IP is not whitelisted. "
+        f"Details: {details}"
+    )
 
 
 def server(input, output, session):
     """
-    Fetch data from SQLite and wire the single-page dashboard/detail views.
+    Fetch data and wire the single-page dashboard/detail views.
     """
     current_view = reactive.Value("dashboard")
 
@@ -381,47 +354,88 @@ def server(input, output, session):
 
     db_warning_state = reactive.Value(None)
     shown_db_warning_state = reactive.Value(None)
+    projects_df_reactive = reactive.Value(pd.DataFrame())
+    samples_df_reactive = reactive.Value(pd.DataFrame())
+    samples_historical_df_reactive = reactive.Value(pd.DataFrame())
+    seq_df_reactive = reactive.Value(pd.DataFrame())
 
-    with ui.Progress(min=1, max=15) as p:
-        p.set(message="Loading datasets from SQLite database...")
+    projects_date_created_reactive = reactive.Value(None)
+    samples_date_created_reactive = reactive.Value(None)
+    seq_date_created_reactive = reactive.Value(None)
 
-        datasets, load_warning = _load_sqlite_datasets_with_fallback()
-        db_warning_state.set(load_warning)
-        p.set(11, message="SQLite load attempt completed")
+    projects_loaded_reactive = reactive.Value(False)
+    samples_loaded_reactive = reactive.Value(False)
+    samples_historical_loaded_reactive = reactive.Value(False)
+    seq_loaded_reactive = reactive.Value(False)
 
-        projects_df_reactive = reactive.Value(datasets["projects_df"])
-        samples_df_reactive = reactive.Value(datasets["samples_df"])
-        samples_historical_df_reactive = reactive.Value(datasets["samples_historical_df"])
-        seq_df_reactive = reactive.Value(datasets["seq_df"])
-        p.set(13, message="Reactive dataframe values established")
+    def _load_projects_dataset(force: bool = False) -> None:
+        if projects_loaded_reactive.get() and not force:
+            return
+        projects_df, project_date_created = fetch_projects_data()
+        projects_df_reactive.set(projects_df)
+        projects_date_created_reactive.set(project_date_created)
+        projects_loaded_reactive.set(True)
 
-        projects_date_created_reactive = reactive.Value(datasets["project_date_created"])
-        samples_date_created_reactive = reactive.Value(datasets["samples_date_created"])
-        seq_date_created_reactive = reactive.Value(datasets["seq_date_created"])
-        p.set(15, message="Datasets loaded successfully")
+    def _load_samples_dataset(force: bool = False) -> None:
+        if samples_loaded_reactive.get() and not force:
+            return
+        samples_df, samples_date_created = fetch_all_samples_data()
+        samples_df_reactive.set(samples_df)
+        samples_date_created_reactive.set(samples_date_created)
+        samples_loaded_reactive.set(True)
+
+    def _load_historical_samples_dataset(force: bool = False) -> None:
+        if samples_historical_loaded_reactive.get() and not force:
+            return
+        samples_historical_df = fetch_historical_samples_data()
+        samples_historical_df_reactive.set(samples_historical_df)
+        samples_historical_loaded_reactive.set(True)
+
+    def _load_sequencing_dataset(force: bool = False) -> None:
+        if seq_loaded_reactive.get() and not force:
+            return
+        seq_df, seq_date_created = fetch_sequencing_data()
+        seq_df_reactive.set(seq_df)
+        seq_date_created_reactive.set(seq_date_created)
+        seq_loaded_reactive.set(True)
+
+    def _run_load_step(step_label: str, loader) -> None:
+        try:
+            loader()
+            db_warning_state.set(None)
+        except Exception as e:
+            warning = _format_dataset_load_error(e)
+            print(f"[app-load] step={step_label} backend={_metadata_backend_label()} error={warning}")
+            db_warning_state.set(warning)
+            raise
 
     def update_database_data():
-        """Update the reactive values with the latest data from the database."""
-        with ui.Progress(min=1, max=12) as p:
-            p.set(message="Refreshing database connection...")
+        """Refresh only the datasets that have already been loaded in this session."""
+        with ui.Progress(min=1, max=5) as p:
+            p.set(message="Refreshing loaded datasets...")
 
-            refresh_db_connection()
+            active_loaders = []
+            if projects_loaded_reactive.get():
+                active_loaders.append(("projects", lambda: _load_projects_dataset(force=True)))
+            if samples_loaded_reactive.get():
+                active_loaders.append(("samples", lambda: _load_samples_dataset(force=True)))
+            if samples_historical_loaded_reactive.get():
+                active_loaders.append(("historical samples", lambda: _load_historical_samples_dataset(force=True)))
+            if seq_loaded_reactive.get():
+                active_loaders.append(("sequencing", lambda: _load_sequencing_dataset(force=True)))
 
-            datasets, load_warning = _load_sqlite_datasets_with_fallback()
-            db_warning_state.set(load_warning)
-            p.set(9, message="SQLite load attempt completed")
+            if not active_loaders:
+                active_loaders = [
+                    ("projects", _load_projects_dataset),
+                    ("samples", _load_samples_dataset),
+                    ("sequencing", _load_sequencing_dataset),
+                ]
 
-            projects_df_reactive.set(datasets["projects_df"])
-            samples_df_reactive.set(datasets["samples_df"])
-            samples_historical_df_reactive.set(datasets["samples_historical_df"])
-            seq_df_reactive.set(datasets["seq_df"])
-            p.set(10, message="Reactive dataframe values updated")
+            for idx, (label, loader) in enumerate(active_loaders, start=1):
+                p.set(idx, message=f"Refreshing {label}...")
+                _run_load_step(label, loader)
 
-            projects_date_created_reactive.set(datasets["project_date_created"])
-            samples_date_created_reactive.set(datasets["samples_date_created"])
-            seq_date_created_reactive.set(datasets["seq_date_created"])
-
-            p.set(12, message="Datasets updated successfully")
+            p.set(5, message="Loaded datasets refreshed")
 
     def _format_display_timestamp(raw_timestamp: str | None) -> str:
         if not raw_timestamp:
@@ -433,46 +447,59 @@ def server(input, output, session):
 
     def get_update_display_info():
         """Return simple display strings for tooltip/info modal."""
-        update_info = get_db_update_info()
         display_info = {
-            "projects": "Not available",
-            "samples": "Not available",
-            "ilmn_sequencing": "Not available",
+            "projects": "Not loaded yet",
+            "samples": "Not loaded yet",
+            "ilmn_sequencing": "Not loaded yet",
             "app_refresh": datetime.now(pytz.timezone("Europe/Oslo")).strftime("%Y-%m-%d %H:%M"),
         }
 
-        table_updates = update_info.get("table_updates") or {}
-        for table_name in ("projects", "samples", "ilmn_sequencing"):
-            exact_match = table_updates.get(table_name)
-            if exact_match:
-                display_info[table_name] = _format_display_timestamp(
-                    exact_match.get("timestamp")
-                )
-                continue
-
-            for db_table, update in table_updates.items():
-                if table_name in db_table:
-                    display_info[table_name] = _format_display_timestamp(
-                        update.get("timestamp")
-                    )
-                    break
+        if projects_loaded_reactive.get():
+            display_info["projects"] = _format_display_timestamp(
+                projects_date_created_reactive.get()
+            )
+        if samples_loaded_reactive.get():
+            display_info["samples"] = _format_display_timestamp(
+                samples_date_created_reactive.get()
+            )
+        if seq_loaded_reactive.get():
+            display_info["ilmn_sequencing"] = _format_display_timestamp(
+                seq_date_created_reactive.get()
+            )
 
         return display_info
+
+    projects_server(lambda: projects_df_reactive.get())
+    samples_server(
+        lambda: samples_df_reactive.get(),
+        lambda: samples_historical_df_reactive.get(),
+        input,
+    )
+    seq_server(lambda: seq_df_reactive.get())
 
     @reactive.Effect
     @reactive.event(input.open_table_projects)
     def _open_projects():
         current_view.set("projects")
+        with ui.Progress(min=1, max=1) as p:
+            p.set(message="Loading projects...")
+            _run_load_step("projects", lambda: _load_projects_dataset(force=True))
 
     @reactive.Effect
     @reactive.event(input.open_table_samples)
     def _open_samples():
         current_view.set("samples")
+        with ui.Progress(min=1, max=1) as p:
+            p.set(message="Loading samples...")
+            _run_load_step("samples", lambda: _load_samples_dataset(force=True))
 
     @reactive.Effect
     @reactive.event(input.open_table_sequencing)
     def _open_sequencing():
         current_view.set("sequencing")
+        with ui.Progress(min=1, max=1) as p:
+            p.set(message="Loading sequencing...")
+            _run_load_step("sequencing", lambda: _load_sequencing_dataset(force=True))
 
     @reactive.Effect
     @reactive.event(input.open_tool_reagents)
@@ -495,6 +522,14 @@ def server(input, output, session):
         current_view.set("dashboard")
 
     @reactive.Effect
+    def _load_historical_samples_when_enabled():
+        if current_view.get() != "samples" or not input.include_hist():
+            return
+        with ui.Progress(min=1, max=1) as p:
+            p.set(message="Loading historical samples...")
+            _run_load_step("historical samples", _load_historical_samples_dataset)
+
+    @reactive.Effect
     @reactive.event(input.update_button)
     def on_update_button_click():
         """Handle the update button click event."""
@@ -509,8 +544,8 @@ def server(input, output, session):
         shown_db_warning_state.set(warning)
         ui.notification_show(
             warning,
-            duration=10,
-            type="warning",
+            duration=None,
+            type="error",
         )
 
     @output
@@ -568,7 +603,7 @@ def server(input, output, session):
         toolbar_children = []
         if db_warning_state.get():
             toolbar_children.append(
-                ui.span("SQLite warning", class_="badge text-bg-warning detail-toolbar-warning")
+                ui.span("Database error", class_="badge text-bg-danger detail-toolbar-warning")
             )
 
         if current_view.get() == "samples":
@@ -608,10 +643,10 @@ def server(input, output, session):
     @output
     @render.ui
     def update_tooltip_output():
-        """Render tooltip content about SQL update information."""
+        """Render tooltip content about metadata freshness and current load status."""
         formatted_info = get_update_display_info()
         return ui.div(
-            ui.tags.strong("SQL db last updated:"),
+            ui.tags.strong("Loaded from live Clarity Postgres:"),
             ui.tags.br(),
             f"Projects: {formatted_info['projects']}",
             ui.tags.br(),
@@ -625,7 +660,7 @@ def server(input, output, session):
             formatted_info["app_refresh"],
             ui.tags.br() if db_warning_state.get() else None,
             ui.tags.br() if db_warning_state.get() else None,
-            ui.tags.strong("Current warning:") if db_warning_state.get() else None,
+            ui.tags.strong("Current database error:") if db_warning_state.get() else None,
             ui.tags.br() if db_warning_state.get() else None,
             db_warning_state.get() if db_warning_state.get() else None,
         )
@@ -647,9 +682,12 @@ def server(input, output, session):
                     ),
                     ui.h3("Database Information"),
                     ui.p(
-                        "The database is updated hourly on the LIMS server and synced to the app every 30 minutes past the hour."
+                        "Projects, samples, sequencing runs, and storage boxes are read directly from the live Clarity Postgres database when those views are opened."
                     ),
-                    ui.h4("Last Database Updates:"),
+                    ui.p(
+                        "Historical samples are still served from the legacy SQLite pin when the historical switch is enabled."
+                    ),
+                    ui.h4("Last Loaded Timestamps:"),
                     ui.tags.dl(
                         ui.tags.dt("Projects"),
                         ui.tags.dd(formatted_info["projects"]),
@@ -661,24 +699,10 @@ def server(input, output, session):
                         ui.tags.dd(formatted_info["app_refresh"]),
                         class_="row",
                     ),
-                    ui.h3("SQL Database Update Scripts"),
-                    ui.p(
-                        ui.tags.a(
-                            "update_sqlite.py",
-                            href="https://github.com/NorwegianVeterinaryInstitute/nvi_lims_epps/blob/main/shiny_app/update_sqlite.py",
-                            target="_blank",
-                        ),
-                        " and ",
-                        ui.tags.a(
-                            "update_sqlite_ilmn_seq.py",
-                            href="https://github.com/NorwegianVeterinaryInstitute/nvi_lims_epps/blob/main/shiny_app/update_sqlite_ilmn_seq.py",
-                            target="_blank",
-                        ),
-                    ),
                     ui.h3("Data Fields Collection"),
                     ui.h4("Projects"),
                     ui.p(
-                        "All fields in this table are collected from submitted sample UDFs directly except for the project sample number which is retrieved using a genologics API-batch function."
+                        "Project rows are built directly from the Clarity Postgres schema and related UDF views."
                     ),
                     ui.h4("Samples"),
                     ui.p(ui.tags.strong("Extraction step"), ": Extraction Number"),
@@ -802,15 +826,7 @@ def server(input, output, session):
     @render.ui
     def storage_status_tool():
         try:
-            query = """
-            SELECT
-                container_name,
-                state,
-                last_checked,
-                last_updated
-            FROM storage_containers
-            """
-            containers_df = query_to_dataframe(query)
+            containers_df = fetch_storage_containers_data()
 
             if containers_df.empty:
                 return ui.p("No storage container data available.")
@@ -829,29 +845,31 @@ def server(input, output, session):
             containers_df = containers_df.rename(
                 columns={
                     "container_name": "Box Name",
-                    "state": "Status",
+                    "status": "Status",
+                    "created_date": "Created Date",
                     "last_checked": "Last Checked",
+                    "last_modified_date": "Last Modified",
                     "last_updated": "Last Updated",
                 }
             )
 
-            for col in ["Last Checked", "Last Updated"]:
+            for col in ["Created Date", "Last Modified", "Last Checked", "Last Updated"]:
                 if col in containers_df.columns:
                     containers_df[col] = pd.to_datetime(
                         containers_df[col], errors="coerce"
-                    ).dt.strftime("%Y-%m-%d %H:%M")
+                    ).dt.strftime("%Y-%m-%d")
 
             def format_status(status):
                 if status == "Discarded":
                     return f"🗑️ {status}"
-                if status == "Populated":
+                if status in {"Populated", "Active"}:
                     return f"✅ {status}"
                 return status
 
             containers_df["Status"] = containers_df["Status"].apply(format_status)
 
-            populated_count = containers_df["Status"].str.contains(
-                "Populated", case=False
+            active_count = containers_df["Status"].str.contains(
+                "Active|Populated", case=False, regex=True
             ).sum()
             discarded_count = containers_df["Status"].str.contains(
                 "Discarded", case=False
@@ -859,7 +877,7 @@ def server(input, output, session):
             total_count = len(containers_df)
 
             summary = ui.p(
-                f"📦 Total: {total_count} | ✅ Populated: {populated_count} | 🗑️ Discarded: {discarded_count}",
+                f"📦 Total: {total_count} | ✅ Active: {active_count} | 🗑️ Discarded: {discarded_count}",
                 style="font-weight: bold; margin-bottom: 15px;",
             )
 
@@ -912,15 +930,7 @@ def server(input, output, session):
     @output
     @render.ui
     def render_updated_data():
-        """Initialize table modules with the latest reactive datasets."""
-        projects_server(projects_df_reactive.get())
-        samples_server(
-            samples_df_reactive.get(),
-            samples_historical_df_reactive.get(),
-            input,
-        )
-        seq_server(seq_df_reactive.get())
-
+        """Provide a placeholder output so table modules are initialized once above."""
         return ui.TagList()
 
 

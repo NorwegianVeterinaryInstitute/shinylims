@@ -104,14 +104,15 @@ def samples_server(samples_df, samples_historical_df, input):
     # Create a reactive expression for the combined dataframe
     @reactive.Calc
     def combined_samples():
-        # Start with the regular samples
-        dat = samples_df.copy()
-        
+        dat = samples_df()
+
         # If checkbox is checked and historical data exists, combine them
-        if input.include_hist() and samples_historical_df is not None and not samples_historical_df.empty:
+        hist_source = samples_historical_df()
+        if input.include_hist() and hist_source is not None and not hist_source.empty:
+            dat = dat.copy()
             # Add a column to distinguish data sources if needed
             dat['Data_Source'] = 'Clarity LIMS'
-            hist_dat = samples_historical_df.copy()
+            hist_dat = hist_source.copy()
             hist_dat['Data_Source'] = 'Historical'
             
             # Remove the 'data_source' column if it exists
@@ -260,10 +261,9 @@ def samples_server(samples_df, samples_historical_df, input):
     @render_widget
     def data_samples():
         dat = combined_samples()
-        
-        # Properly format date columns for DataTables
+
+        # Format date column for DataTables display
         if "Received Date" in dat.columns:
-            dat["Received Date"] = pd.to_datetime(dat["Received Date"], errors='coerce')
             dat["Received Date"] = dat["Received Date"].apply(
                 lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else ''
             )
@@ -308,7 +308,6 @@ def samples_server(samples_df, samples_historical_df, input):
                         "buttons": [
                             select_all_columns_button(),
                             deselect_all_columns_button(),
-                            {},
                             visibility_preset_button([2, 3, 4, 5, 9, 10, 21]),
                         ]
                     },

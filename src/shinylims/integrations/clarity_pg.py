@@ -26,6 +26,7 @@ class ClarityPostgresConfig:
     host: str = "localhost"
     port: int = 5432
     url: str | None = None
+    connect_timeout_seconds: int = 5
 
     @classmethod
     def from_env(cls) -> "ClarityPostgresConfig":
@@ -36,6 +37,7 @@ class ClarityPostgresConfig:
             host=os.getenv("CLARITY_PG_HOST", "localhost"),
             port=int(os.getenv("CLARITY_PG_PORT", "5432")),
             url=os.getenv("CLARITY_PG_URL"),
+            connect_timeout_seconds=int(os.getenv("CLARITY_PG_CONNECT_TIMEOUT_SECONDS", "5")),
         )
 
     def sqlalchemy_url(self) -> str | URL:
@@ -59,6 +61,7 @@ def get_engine() -> Engine:
         config.sqlalchemy_url(),
         pool_pre_ping=True,
         pool_recycle=1800,
+        connect_args={"connect_timeout": config.connect_timeout_seconds},
     )
 
 

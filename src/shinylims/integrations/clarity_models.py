@@ -131,6 +131,17 @@ class Container(Base):
     __tablename__ = "container"
 
     containerid: Mapped[int] = mapped_column(Integer, primary_key=True)
+    createddate: Mapped[datetime | None] = mapped_column(DateTime)
+    lastmodifieddate: Mapped[datetime | None] = mapped_column(DateTime)
+    name: Mapped[str | None] = mapped_column(String)
+    stateid: Mapped[int | None] = mapped_column(Integer)
+    typeid: Mapped[int | None] = mapped_column(ForeignKey("containertype.typeid"))
+
+
+class ContainerType(Base):
+    __tablename__ = "containertype"
+
+    typeid: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str | None] = mapped_column(String)
 
 

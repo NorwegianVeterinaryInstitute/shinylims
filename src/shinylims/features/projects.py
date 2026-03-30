@@ -33,14 +33,13 @@ def projects_ui():
 
 def projects_server(projects_df):
     """Render the Projects table as an interactive ITable widget."""
-    
+
     @render_widget
     def projects_table():
-        dat = projects_df.copy().reset_index(drop=True)
+        dat = projects_df().copy().reset_index(drop=True)
 
-        # Format the 'Open Date' column for display
+        # Format date column for DataTables display
         if "Open Date" in dat.columns:
-            dat["Open Date"] = pd.to_datetime(dat["Open Date"], errors="coerce")
             dat["Open Date"] = dat["Open Date"].apply(
                 lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else ""
             )

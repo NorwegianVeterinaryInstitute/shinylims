@@ -2,9 +2,9 @@
 data_utils.py module.
 Utility functions for data fetching and transformation.
 
-This module provides functions to fetch and transform data from the
-SQLite database stored as Posit Connect pin. It handles data for projects,
-samples, and sequencing runs with standardized column naming and formatting.
+This module provides functions to fetch and transform live Clarity Postgres
+data for projects, samples, sequencing runs, and storage containers.
+Historical samples are still read from a SQLite pin.
 
 Also includes functions to transform LIMS IDs and comments into HTML
 '''
@@ -16,6 +16,7 @@ Also includes functions to transform LIMS IDs and comments into HTML
 import datetime
 import html
 import os
+import time
 from pathlib import Path
 from urllib.parse import quote
 
@@ -28,41 +29,13 @@ from shinylims.integrations.clarity_queries import (
     build_project_rows,
     build_sample_rows,
     build_sequencing_run_rows,
+    build_storage_container_rows,
 )
-from shinylims.integrations.db_utils import query_to_dataframe, get_db_update_info
+from shinylims.integrations.db_utils import query_to_dataframe
 
 ####################
 # HELPER FUNCTIONS #
 ####################
-
-def get_table_update_timestamp(table_name):
-    """
-    Get the last update timestamp for a specific table from the update_log.
-    
-    Args:
-        table_name (str): Name of the table to get the timestamp for
-        
-    Returns:
-        str: ISO formatted timestamp of the last update for this table
-    """
-    update_info = get_db_update_info()
-    
-    # Check if we have table-specific update info
-    if update_info.get('update_method') == 'update_log' and update_info.get('table_updates'):
-        # Handle case where tables_affected might contain our table name
-        # We need to check if the table_name is in the tables_affected field
-        for db_table, update in update_info['table_updates'].items():
-            # The tables_affected field might contain multiple tables or a pattern
-            # Check if our table is mentioned in this field
-            if table_name in db_table:
-                return update['timestamp']
-    
-    # Fall back to the overall last update time if available
-    if update_info.get('last_update'):
-        return update_info['last_update']
-    
-    # Last resort - use current time
-    return datetime.datetime.now().isoformat()
 
 
 
@@ -135,10 +108,23 @@ def _env_flag_is_true(name: str) -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
+def _pg_timing_enabled() -> bool:
+    return _env_flag_is_true("CLARITY_PG_TIMING_ENABLED")
+
+
+def _log_pg_fetch_timing(scope: str, started_at: float, **metrics: object) -> None:
+    if not _pg_timing_enabled():
+        return
+
+    elapsed_seconds = time.perf_counter() - started_at
+    metric_parts = [f"elapsed_s={elapsed_seconds:.3f}"]
+    metric_parts.extend(f"{key}={value}" for key, value in metrics.items())
+    print(f"[clarity-pg-timing] scope={scope} " + " ".join(metric_parts))
+
+
 def _format_sequencing_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize sequencing rows to the app-facing dataframe shape."""
     df = df.rename(columns={
-        'seq_limsid': 'seq_limsid',
         'run_id': 'Run ID',
         'instrument': 'Instrument',
         'run_number': 'Run Number',
@@ -183,34 +169,7 @@ def _format_sequencing_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 def _format_samples_dataframe(df: pd.DataFrame, *, meta_created: str) -> tuple[pd.DataFrame, str]:
     """Normalize sample rows to the app-facing dataframe shape."""
     if "storage_box_formatted" not in df.columns:
-        containers_query = "SELECT container_name, state FROM storage_containers"
-        containers_df = query_to_dataframe(containers_query)
-        container_states = dict(zip(containers_df['container_name'], containers_df['state']))
-
-        def format_storage_box(row):
-            box_name = row.get('storage_box', '')
-
-            if pd.isna(box_name) or box_name == '':
-                return ''
-
-            boxes = [box.strip() for box in str(box_name).split(',')]
-            formatted_boxes = []
-
-            for box in boxes:
-                if not box:
-                    continue
-
-                box_state = container_states.get(box, None)
-                if box_state == 'Discarded':
-                    formatted_boxes.append(
-                        f'<span style="color: red; font-weight: bold;">{html.escape(box)} (discarded)</span>'
-                    )
-                else:
-                    formatted_boxes.append(html.escape(box))
-
-            return ', '.join(formatted_boxes)
-
-        df['storage_box_formatted'] = df.apply(format_storage_box, axis=1)
+        df["storage_box_formatted"] = df.get("storage_box", "")
 
     if 'storage_box' in df.columns:
         df = df.drop('storage_box', axis=1)
@@ -269,6 +228,7 @@ def _format_samples_dataframe(df: pd.DataFrame, *, meta_created: str) -> tuple[p
 
 def _fetch_projects_data_from_postgres() -> tuple[pd.DataFrame, str]:
     """Fetch project rows directly from Clarity Postgres using the prototype query layer."""
+    started_at = time.perf_counter()
     with create_session() as session:
         rows = build_project_rows(session)
 
@@ -285,6 +245,7 @@ def _fetch_projects_data_from_postgres() -> tuple[pd.DataFrame, str]:
             "submitting_lab",
             "comment",
         ])
+    _log_pg_fetch_timing("fetch_projects_data_from_postgres", started_at, row_count=len(df))
     return df, datetime.datetime.now().isoformat()
 
 
@@ -296,6 +257,7 @@ def _fetch_sequencing_data_from_postgres() -> tuple[pd.DataFrame, str]:
             "CLARITY_PG_SEQUENCING_TYPE_IDS is not configured for direct Postgres sequencing reads."
         )
 
+    started_at = time.perf_counter()
     with create_session() as session:
         rows = build_sequencing_run_rows(session, sequencing_type_ids)
 
@@ -327,11 +289,18 @@ def _fetch_sequencing_data_from_postgres() -> tuple[pd.DataFrame, str]:
             "pf_reads",
             "comment",
         ])
+    _log_pg_fetch_timing(
+        "fetch_sequencing_data_from_postgres",
+        started_at,
+        row_count=len(df),
+        sequencing_type_count=len(sequencing_type_ids),
+    )
     return df, datetime.datetime.now().isoformat()
 
 
 def _fetch_samples_data_from_postgres() -> tuple[pd.DataFrame, str]:
     """Fetch sample rows directly from Clarity Postgres using the prototype query layer."""
+    started_at = time.perf_counter()
     with create_session() as session:
         rows = build_sample_rows(session, open_projects_only=False)
 
@@ -371,7 +340,27 @@ def _fetch_samples_data_from_postgres() -> tuple[pd.DataFrame, str]:
             "increased_pooling",
             "reagent_label",
         ])
+    _log_pg_fetch_timing("fetch_samples_data_from_postgres", started_at, row_count=len(df))
     return df, datetime.datetime.now().isoformat()
+
+
+def fetch_storage_containers_data() -> pd.DataFrame:
+    """Fetch storage container rows directly from Clarity Postgres."""
+    started_at = time.perf_counter()
+    with create_session() as session:
+        rows = build_storage_container_rows(session)
+    df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(
+            columns=[
+                "container_name",
+                "status",
+                "created_date",
+                "last_modified_date",
+            ]
+        )
+    _log_pg_fetch_timing("fetch_storage_containers_data_from_postgres", started_at, row_count=len(df))
+    return df
 
 
 
@@ -382,12 +371,8 @@ def _fetch_samples_data_from_postgres() -> tuple[pd.DataFrame, str]:
 
 
 def fetch_projects_data():
-    """Fetch projects data from Postgres when configured, otherwise from SQLite."""
-    if _env_flag_is_true("CLARITY_PG_PROJECTS_ENABLED"):
-        df, meta_created = _fetch_projects_data_from_postgres()
-    else:
-        df = query_to_dataframe("SELECT * FROM projects")
-        meta_created = get_table_update_timestamp('projects')
+    """Fetch project data directly from Clarity Postgres."""
+    df, meta_created = _fetch_projects_data_from_postgres()
     
     # Rename columns to match what the app expects
     df = df.rename(columns={
@@ -399,14 +384,13 @@ def fetch_projects_data():
         'status': 'Status',
         'submitter': 'Submitter',
         'species': 'Species',
-        'status': 'Status',
         'project_limsid': 'Project LIMS ID',
     })
-    
+
     # Apply transformations
     if 'Open Date' in df.columns:
         df['Open Date'] = pd.to_datetime(df['Open Date'], errors='coerce')
-    
+
     # Replace NaN values
     df = df.replace(np.nan, '', regex=True)
 
@@ -421,12 +405,8 @@ def fetch_projects_data():
 
 
 def fetch_all_samples_data():
-    """Fetch all samples data from Postgres when configured, otherwise from SQLite."""
-    if _env_flag_is_true("CLARITY_PG_SAMPLES_ENABLED"):
-        df, meta_created = _fetch_samples_data_from_postgres()
-    else:
-        df = query_to_dataframe("SELECT * FROM samples")
-        meta_created = get_table_update_timestamp('samples')
+    """Fetch all live samples directly from Clarity Postgres."""
+    df, meta_created = _fetch_samples_data_from_postgres()
 
     return _format_samples_dataframe(df, meta_created=meta_created)
 
@@ -458,7 +438,7 @@ def fetch_historical_samples_data():
         'a260_280_ratio': 'A260/280 ratio',
         'a260_230_ratio': 'A260/230 ratio',
         'concentration_fluorescence': 'Fluorescence',
-        'storage_box': 'Storage Box Name',
+        'storage_box': 'Storage Box',
         'storage_well': 'Storage Well',
         'billing_description': 'Billing Description',
         'reagent_label': 'Reagent Label',
@@ -491,13 +471,8 @@ def fetch_historical_samples_data():
     return df
 
 def fetch_sequencing_data():
-    """Fetch sequencing run data from Postgres when configured, otherwise from SQLite."""
-    sequencing_type_ids = _get_clarity_pg_sequencing_type_ids()
-    if sequencing_type_ids:
-        df, meta_created = _fetch_sequencing_data_from_postgres()
-    else:
-        df = query_to_dataframe("SELECT * FROM ilmn_sequencing")
-        meta_created = get_table_update_timestamp('ilmn_sequencing')
+    """Fetch sequencing run data directly from Clarity Postgres."""
+    df, meta_created = _fetch_sequencing_data_from_postgres()
 
     return _format_sequencing_dataframe(df), meta_created
 
