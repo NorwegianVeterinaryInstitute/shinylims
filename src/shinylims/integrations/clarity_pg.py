@@ -74,3 +74,27 @@ def get_session_factory() -> sessionmaker:
 def create_session() -> Session:
     """Create a new SQLAlchemy session for Clarity Postgres."""
     return get_session_factory()()
+
+
+def get_clarity_pg_env_diagnostics() -> dict[str, object]:
+    """Return safe startup diagnostics for required Clarity Postgres env vars."""
+    raw_url = (os.getenv("CLARITY_PG_URL") or "").strip()
+    raw_host = (os.getenv("CLARITY_PG_HOST") or "").strip()
+    raw_db = (os.getenv("CLARITY_PG_DB") or "").strip()
+    raw_user = (os.getenv("CLARITY_PG_USER") or "").strip()
+    raw_password = (os.getenv("CLARITY_PG_PASSWORD") or "").strip()
+    raw_port = (os.getenv("CLARITY_PG_PORT") or "").strip()
+    raw_timeout = (os.getenv("CLARITY_PG_CONNECT_TIMEOUT_SECONDS") or "").strip()
+    raw_seq_type_ids = (os.getenv("CLARITY_PG_SEQUENCING_TYPE_IDS") or "").strip()
+
+    return {
+        "using_url": bool(raw_url),
+        "host_present": bool(raw_host),
+        "db_present": bool(raw_db),
+        "user_present": bool(raw_user),
+        "password_present": bool(raw_password),
+        "port_present": bool(raw_port),
+        "connect_timeout_present": bool(raw_timeout),
+        "sequencing_type_ids_present": bool(raw_seq_type_ids),
+        "sequencing_type_ids_value": raw_seq_type_ids or "<missing>",
+    }

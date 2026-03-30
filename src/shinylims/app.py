@@ -23,6 +23,7 @@ from shinylims.features.reagents import reagents_server, reagents_ui
 from shinylims.features.samples import samples_server, samples_ui
 from shinylims.features.sequencing import seq_server, seq_ui
 from shinylims.features.storage import storage_server, storage_ui
+from shinylims.integrations.clarity_pg import get_clarity_pg_env_diagnostics
 from shinylims.integrations.data_utils import (
     fetch_all_samples_data,
     fetch_historical_samples_data,
@@ -449,6 +450,8 @@ def server(input, output, session):
     """
     current_view = reactive.Value("dashboard")
     cache = DatasetCache()
+
+    print(f"[clarity-pg-config] {get_clarity_pg_env_diagnostics()}")
 
     reagents_server(input, output, session)
     reagent_overview_server(input, output, session)
