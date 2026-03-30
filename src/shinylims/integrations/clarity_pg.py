@@ -5,12 +5,15 @@ Lightweight SQLAlchemy connection helpers for the Clarity Postgres prototype.
 from __future__ import annotations
 
 import os
+import socket
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 
 from dotenv import load_dotenv
 from sqlalchemy import URL, create_engine
 from sqlalchemy.engine import Engine
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 load_dotenv()
@@ -98,3 +101,62 @@ def get_clarity_pg_env_diagnostics() -> dict[str, object]:
         "sequencing_type_ids_present": bool(raw_seq_type_ids),
         "sequencing_type_ids_value": raw_seq_type_ids or "<missing>",
     }
+
+
+def get_clarity_pg_network_diagnostics() -> dict[str, object]:
+    """Return DNS and TCP connectivity diagnostics for the configured Postgres host."""
+    config = ClarityPostgresConfig.from_env()
+    host = config.host
+    port = config.port
+
+    if config.url:
+        try:
+            parsed_url = make_url(config.url)
+            host = parsed_url.host or host
+            port = parsed_url.port or port
+        except Exception as exc:
+            return {
+                "host": host,
+                "port": port,
+                "dns_ok": False,
+                "tcp_connect_ok": False,
+                "error_type": type(exc).__name__,
+                "error": f"Could not parse CLARITY_PG_URL: {exc}",
+            }
+
+    result: dict[str, object] = {
+        "host": host,
+        "port": port,
+        "dns_ok": False,
+        "tcp_connect_ok": False,
+        "resolved_addresses": [],
+    }
+
+    try:
+        addrinfo = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        addresses = []
+        for family, _, _, _, sockaddr in addrinfo:
+            family_name = "AF_INET6" if family == socket.AF_INET6 else "AF_INET"
+            address = sockaddr[0]
+            entry = f"{family_name}:{address}"
+            if entry not in addresses:
+                addresses.append(entry)
+        result["dns_ok"] = True
+        result["resolved_addresses"] = addresses
+    except Exception as exc:
+        result["error_type"] = type(exc).__name__
+        result["error"] = str(exc)
+        return result
+
+    started_at = time.perf_counter()
+    try:
+        with socket.create_connection((host, port), timeout=config.connect_timeout_seconds):
+            pass
+        result["tcp_connect_ok"] = True
+        result["tcp_elapsed_s"] = round(time.perf_counter() - started_at, 3)
+        return result
+    except Exception as exc:
+        result["error_type"] = type(exc).__name__
+        result["error"] = str(exc)
+        result["tcp_elapsed_s"] = round(time.perf_counter() - started_at, 3)
+        return result
