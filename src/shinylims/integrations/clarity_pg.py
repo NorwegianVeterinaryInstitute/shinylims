@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import socket
 import time
+from urllib import request
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -103,11 +104,33 @@ def get_clarity_pg_env_diagnostics() -> dict[str, object]:
     }
 
 
+def _detect_public_egress_ip(timeout_seconds: float = 3.0) -> tuple[str | None, str | None, str | None]:
+    """Return (ip, source, error) for the current public egress IP."""
+    services = (
+        ("https://api.ipify.org", "api.ipify.org"),
+        ("https://ifconfig.me/ip", "ifconfig.me"),
+    )
+    last_error = "No response from public IP lookup services"
+
+    for url, source in services:
+        try:
+            with request.urlopen(url, timeout=timeout_seconds) as response:
+                ip = response.read().decode("utf-8").strip()
+            if ip:
+                return ip, source, None
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+            continue
+
+    return None, None, last_error
+
+
 def get_clarity_pg_network_diagnostics() -> dict[str, object]:
     """Return DNS and TCP connectivity diagnostics for the configured Postgres host."""
     config = ClarityPostgresConfig.from_env()
     host = config.host
     port = config.port
+    public_ip, public_ip_source, public_ip_error = _detect_public_egress_ip()
 
     if config.url:
         try:
@@ -130,7 +153,11 @@ def get_clarity_pg_network_diagnostics() -> dict[str, object]:
         "dns_ok": False,
         "tcp_connect_ok": False,
         "resolved_addresses": [],
+        "public_egress_ip": public_ip or "<unavailable>",
+        "public_ip_source": public_ip_source or "<unavailable>",
     }
+    if public_ip_error:
+        result["public_ip_error"] = public_ip_error
 
     try:
         addrinfo = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
