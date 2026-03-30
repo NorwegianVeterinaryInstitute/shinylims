@@ -469,7 +469,6 @@ def server(input, output, session):
             warning = _format_dataset_load_error(e)
             print(f"[app-load] step={step_label} backend={_metadata_backend_label()} error={warning}")
             db_warning_state.set(warning)
-            raise
 
     def update_database_data():
         """Refresh only the datasets that have already been loaded in this session."""
