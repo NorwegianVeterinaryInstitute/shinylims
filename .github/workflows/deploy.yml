@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main  # Trigger when pushing to main
-      - feature/indexplate-map-tool # Trigger when pushing to feature branch (temp for testing)
       - feature/clarity_postgres # Trigger when pushing to feature branch (temp for testing)
 jobs:
   update-branches:

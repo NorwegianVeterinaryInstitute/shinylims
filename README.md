@@ -1,4 +1,4 @@
-# Shinylims
+# ShinyClarity
 
 A Python Shiny app for LIMS reporting hosted on Posit Connect.
 
