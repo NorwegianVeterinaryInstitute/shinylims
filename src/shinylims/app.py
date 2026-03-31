@@ -190,7 +190,7 @@ VIEW_DETAILS = {
 def _dashboard_card(card: dict[str, str], *, current_user_blocked: bool = False):
     badges = []
     restricted_group = card.get("restricted")
-    if restricted_group:
+    if restricted_group and current_user_blocked:
         badges.append(
             ui.span(
                 ui.span(icon_svg("lock"), class_="dashboard-card-badge-icon", aria_hidden="true"),
