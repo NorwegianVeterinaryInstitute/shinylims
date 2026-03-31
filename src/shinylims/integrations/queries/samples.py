@@ -525,28 +525,29 @@ def build_sample_rows(
                 artifact_list = process_input_artifacts.get((process_record.processid, row.sample_processid), [])
                 if not artifact_list:
                     continue
-                artifact_udf_map = artifact_udfs.get(artifact_list[0], {})
-                if artifact_udf_map.get("Concentration Absorbance (ng/µl)"):
-                    absorbance_values.append(artifact_udf_map["Concentration Absorbance (ng/µl)"])
-                if artifact_udf_map.get("A260/280 ratio"):
-                    a260_280_values.append(artifact_udf_map["A260/280 ratio"])
-                if artifact_udf_map.get("A260/230 ratio"):
-                    a260_230_values.append(artifact_udf_map["A260/230 ratio"])
-                if artifact_udf_map.get("Concentration Fluorescence (ng/µl)"):
-                    fluorescence_values.append(artifact_udf_map["Concentration Fluorescence (ng/µl)"])
+                for artifactid in artifact_list:
+                    artifact_udf_map = artifact_udfs.get(artifactid, {})
+                    if artifact_udf_map.get("Concentration Absorbance (ng/µl)"):
+                        absorbance_values.append(artifact_udf_map["Concentration Absorbance (ng/µl)"])
+                    if artifact_udf_map.get("A260/280 ratio"):
+                        a260_280_values.append(artifact_udf_map["A260/280 ratio"])
+                    if artifact_udf_map.get("A260/230 ratio"):
+                        a260_230_values.append(artifact_udf_map["A260/230 ratio"])
+                    if artifact_udf_map.get("Concentration Fluorescence (ng/µl)"):
+                        fluorescence_values.append(artifact_udf_map["Concentration Fluorescence (ng/µl)"])
 
-                location = artifact_locations.get(artifact_list[0], {})
-                container_name = location.get("container_name")
-                if container_name:
-                    storage_box_values.append(container_name)
-                    storage_box_formatted = _format_storage_box_html(
-                        container_name,
-                        location.get("container_state"),
-                    )
-                    if storage_box_formatted:
-                        storage_box_formatted_values.append(storage_box_formatted)
-                if location.get("well_label"):
-                    storage_well_values.append(location["well_label"])
+                    location = artifact_locations.get(artifactid, {})
+                    container_name = location.get("container_name")
+                    if container_name:
+                        storage_box_values.append(container_name)
+                        storage_box_formatted = _format_storage_box_html(
+                            container_name,
+                            location.get("container_state"),
+                        )
+                        if storage_box_formatted:
+                            storage_box_formatted_values.append(storage_box_formatted)
+                    if location.get("well_label"):
+                        storage_well_values.append(location["well_label"])
 
             for prep_luid in _split_luid_list(row.prep_limsid):
                 process_record = processes_by_luid.get(prep_luid)
@@ -555,26 +556,25 @@ def build_sample_rows(
                 artifact_list = process_output_artifacts.get((process_record.processid, row.sample_processid), [])
                 if not artifact_list:
                     continue
-                artifactid = artifact_list[0]
-                prep_udfs = artifact_udfs.get(artifactid, {})
+                prep_udfs = artifact_udfs.get(artifact_list[0], {})
                 if prep_udfs.get("Experiment Name"):
                     experiment_names.append(prep_udfs["Experiment Name"])
-                reagent_labels.extend(artifact_reagent_labels.get(artifactid, []))
+                for artifactid in artifact_list:
+                    reagent_labels.extend(artifact_reagent_labels.get(artifactid, []))
 
             for extraction_luid in _split_luid_list(row.extractions_limsid):
                 process_record = processes_by_luid.get(extraction_luid)
                 if process_record is None:
                     continue
                 artifact_list = process_output_artifacts.get((process_record.processid, row.sample_processid), [])
-                if not artifact_list:
-                    continue
-                extraction_value = artifact_udfs.get(artifact_list[0], {}).get("Extraction Number")
-                if extraction_value:
-                    extraction_numbers.append(extraction_value)
+                for artifactid in artifact_list:
+                    extraction_value = artifact_udfs.get(artifactid, {}).get("Extraction Number")
+                    if extraction_value:
+                        extraction_numbers.append(extraction_value)
 
             extraction_number = (
                 row.sample_extraction_number if row.sample_type == "WGS DNA"
-                else _join_unique_non_empty(extraction_numbers)
+                else ", ".join(extraction_numbers) if extraction_numbers else None
             )
         else:
             original_artifactid = original_artifacts_by_sample.get(row.sample_processid)
@@ -611,10 +611,10 @@ def build_sample_rows(
                 "Project Account": row.project_account,
                 "Experiment Name": _join_unique_non_empty(experiment_names),
                 "Extraction Number": extraction_number,
-                "Absorbance": _join_unique_non_empty(absorbance_values),
-                "A260/280 ratio": _join_unique_non_empty(a260_280_values),
-                "A260/230 ratio": _join_unique_non_empty(a260_230_values),
-                "Fluorescence": _join_unique_non_empty(fluorescence_values),
+                "Absorbance": ", ".join(absorbance_values) if absorbance_values else None,
+                "A260/280 ratio": ", ".join(a260_280_values) if a260_280_values else None,
+                "A260/230 ratio": ", ".join(a260_230_values) if a260_230_values else None,
+                "Fluorescence": ", ".join(fluorescence_values) if fluorescence_values else None,
                 "Storage Box": _join_unique_non_empty(storage_box_formatted_values),
                 "Storage Well": _join_unique_non_empty(storage_well_values),
                 "Invoice ID": _join_unique_non_empty(invoice_ids),
@@ -629,7 +629,7 @@ def build_sample_rows(
                 "seq_limsid": row.seq_limsid,
                 "billed_limsid": row.billed_limsid,
                 "Increased Pooling (%)": row.increased_pooling,
-                "Reagent Label": _join_unique_non_empty(reagent_labels),
+                "Reagent Label": ", ".join(reagent_labels) if reagent_labels else None,
             }
         )
 

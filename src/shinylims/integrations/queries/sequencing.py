@@ -11,7 +11,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from shinylims.integrations.clarity_models import (
@@ -316,10 +316,12 @@ def build_sequencing_lineages(
 
     step6_process_ids = [process.processid for process in step6_by_artifact.values()]
     step6_input_by_process = _first_input_artifact_by_process(session, step6_process_ids)
-    step6_all_inputs_by_process = _all_input_artifacts_by_process(session, step6_process_ids)
 
     step5_artifact_ids = sorted(set(step6_input_by_process.values()))
     step5_by_artifact = _producer_by_artifact(session, step5_artifact_ids)
+
+    step5_process_ids = sorted({process.processid for process in step5_by_artifact.values()})
+    step5_all_inputs_by_process = _all_input_artifacts_by_process(session, step5_process_ids)
 
     result: list[SequencingLineage] = []
     for sequencing_process in sequencing_processes:
@@ -341,7 +343,7 @@ def build_sequencing_lineages(
             step5_by_artifact.get(step6_input_artifactid) if step6_input_artifactid is not None else None
         )
         step5_input_artifactids = tuple(
-            step6_all_inputs_by_process.get(step6_process.processid, []) if step6_process else []
+            step5_all_inputs_by_process.get(step5_process.processid, []) if step5_process else []
         )
 
         result.append(
@@ -407,8 +409,10 @@ def build_sequencing_run_rows(
         run_id = seq_udfs.get("Run ID")
         instrument, run_number = _parse_run_id(run_id)
 
+        pool_count = len(lineage.step5_input_artifactids)
+        combined_pool = "Yes" if pool_count > 1 else "No" if pool_count == 1 else "NA"
+
         avg_fragment_size = step6_input_udfs.get("Average Size - bp")
-        combined_pool = "No" if avg_fragment_size else "NA"
         if not avg_fragment_size:
             upstream_sizes = []
             for artifactid in lineage.step5_input_artifactids:
@@ -417,7 +421,6 @@ def build_sequencing_run_rows(
                     upstream_sizes.append(value)
             if upstream_sizes:
                 avg_fragment_size = " + ".join(upstream_sizes)
-                combined_pool = "Yes"
 
         yield_r1 = _coerce_float(representative_udfs.get("Yield PF (Gb) R1"))
         yield_r2 = _coerce_float(representative_udfs.get("Yield PF (Gb) R2"))
@@ -475,19 +478,3 @@ def build_sequencing_run_rows(
     return rows
 
 
-def sequencing_lineage_debug_query(
-    sequencing_type_ids: list[int],
-) -> Select[Any]:
-    """Return the anchor query used to find sequencing processes for this prototype."""
-    return (
-        select(
-            Process.processid,
-            Process.luid,
-            Process.daterun,
-            Process.workstatus,
-            Process.techid,
-            Process.typeid,
-        )
-        .where(Process.typeid.in_(sequencing_type_ids))
-        .order_by(Process.processid)
-    )

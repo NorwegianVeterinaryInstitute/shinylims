@@ -4,7 +4,6 @@ Utility functions for data fetching and transformation.
 
 This module provides functions to fetch and transform live Clarity Postgres
 data for projects, samples, sequencing runs, and storage containers.
-Historical samples are still read from a SQLite pin.
 
 Also includes functions to transform LIMS IDs and comments into HTML.
 '''
