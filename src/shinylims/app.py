@@ -472,6 +472,126 @@ def _format_ssl_modal_info() -> dict[str, str]:
     return info
 
 
+def _info_table(rows: list[tuple[str, str]]) -> object:
+    """Build a compact two-column table for info-modal summaries."""
+    body_rows = [
+        ui.tags.tr(
+            ui.tags.th(label, scope="row", class_="text-nowrap"),
+            ui.tags.td(value),
+        )
+        for label, value in rows
+    ]
+    return ui.tags.table(
+        ui.tags.tbody(*body_rows),
+        class_="table table-sm table-borderless align-middle mb-0",
+    )
+
+
+def _build_data_field_sources_accordion() -> object:
+    """Describe the data-entry points and lineage/UDF sourcing used by the app."""
+    return ui.accordion(
+        ui.accordion_panel(
+            "Projects",
+            ui.p(
+                "Entry point: project records in the Clarity project table."
+            ),
+            ui.p(
+                "Fields such as project LIMS ID, dates, project name, submitter, and lab are read directly from the project, researcher, and lab tables."
+            ),
+            ui.p(
+                "Species is aggregated by joining project-linked samples and reading the sample-level Species UDF from the sample UDF view."
+            ),
+            ui.p(
+                "Project comments are read from the entity UDF view using the project-attached 'Message to the lab' field."
+            ),
+            value="projects",
+        ),
+        ui.accordion_panel(
+            "Samples",
+            ui.p(
+                "Entry point: sample entities in the Clarity sample table."
+            ),
+            ui.p(
+                "Fields such as sample LIMS ID, project, received date, sample name, submitter, and lab are built directly from sample, project, researcher, and lab records, together with sample-level UDFs."
+            ),
+            ui.p(
+                "Some downstream metadata is not discovered by a single direct join. Instead, sample UDFs store process LUID references such as nd_limsid, qubit_limsid, prep_limsid, seq_limsid, billed_limsid, and extractions_limsid."
+            ),
+            ui.p(
+                "Those UDF-recorded process IDs are resolved back to real process records, and the app then loads process UDFs and artifact UDFs from the linked extraction, quantification, prep, billing, and sequencing steps."
+            ),
+            ui.p(
+                "That is how fields such as Extraction Number, Experiment Name, concentrations, billing values, run-linked filenames, reagent labels, and storage locations are assembled."
+            ),
+            value="samples",
+        ),
+        ui.accordion_panel(
+            "Sequencing",
+            ui.p(
+                "Entry point: sequencing step records of the configured sequencing process types."
+            ),
+            ui.p(
+                "From each sequencing step, the app walks upstream through the actual artifact chain, starting from the representative sequencing input artifact and then moving back through the linked Step 7, Step 6, and Step 5 producer processes."
+            ),
+            ui.p(
+                "Process UDFs on the sequencing, Step 7, and Step 6 processes provide run setup and operator-facing fields such as Run ID, read cycles, loading concentration, PhiX percentage, and comment."
+            ),
+            ui.p(
+                "Artifact UDFs on representative and upstream artifacts provide experiment and performance fields such as Experiment Name, application/cassette type, average fragment size, yield, Q30, PF reads, and cluster density."
+            ),
+            ui.p(
+                "Sample context such as species and sample count is recovered by mapping the representative sequencing artifact back to the linked samples."
+            ),
+            value="sequencing",
+        ),
+        open=False,
+        multiple=True,
+    )
+
+
+def _build_info_modal(formatted_info: dict[str, str], ssl_info: dict[str, str]) -> object:
+    """Build the main information modal shown from metadata table views."""
+    timestamp_items = [
+        ("Projects", formatted_info["projects"]),
+        ("Samples", formatted_info["samples"]),
+        ("Sequencing", formatted_info["ilmn_sequencing"]),
+        ("App Last Refreshed", formatted_info["app_refresh"]),
+    ]
+
+    return ui.modal(
+        ui.h2("ShinyClarity Information", class_="mb-4"),
+        ui.div(
+            ui.h3("About"),
+            ui.p(
+                """This app provides a user-friendly interface to explore and filter LIMS metadata.
+                 It connects to the LIMS database and displays information about projects, samples,
+                 and sequencing runs."""
+            ),
+            ui.p(f"App version: {app_version}"),
+            ui.h3("Database Information"),
+            ui.p(
+                "Projects, samples, sequencing runs, and storage boxes are read directly from the live Clarity Postgres database when those views are opened."
+            ),
+            ui.p(f"Database connection: {ssl_info['connection_security']}"),
+            ui.p(
+                "Historical samples are still served from the legacy SQLite pin when the historical switch is enabled."
+            ),
+            ui.h4("Last Loaded Timestamps"),
+            _info_table(timestamp_items),
+            ui.h3("Data Fields Collection"),
+            ui.p(
+                "Source views used by the live metadata queries include sample_udf_view, process_udf_view, artifact_udf_view, and entity_udf_view. The accordion sections below explain which tables and views are used as entry points and where the displayed fields are collected from."
+            ),
+            _build_data_field_sources_accordion(),
+            class_="p-4",
+            style="max-height: 70vh; overflow-y: auto;",
+        ),
+        size="l",
+        easy_close=True,
+        id="info_modal",
+    )
+
+
 def server(input, output, session):
     """
     Fetch data and wire the single-page dashboard/detail views.
@@ -726,85 +846,7 @@ def server(input, output, session):
         """Handle the info button click event."""
         formatted_info = get_update_display_info()
         ssl_info = _format_ssl_modal_info()
-        ui.modal_show(
-            ui.modal(
-                ui.h2("ShinyClarity Information", class_="mb-4"),
-                ui.div(
-                    ui.h3("About"),
-                    ui.p(
-                        """This app provides a user-friendly interface to explore and filter LIMS metadata.
-                         It connects to the LIMS database and displays information about projects, samples,
-                         and sequencing runs."""
-                    ),
-                    ui.h3("Database Information"),
-                    ui.p(
-                        "Projects, samples, sequencing runs, and storage boxes are read directly from the live Clarity Postgres database when those views are opened."
-                    ),
-                    ui.p(
-                        "Historical samples are still served from the legacy SQLite pin when the historical switch is enabled."
-                    ),
-                    ui.h4("Last Loaded Timestamps:"),
-                    ui.tags.dl(
-                        ui.tags.dt("Projects"),
-                        ui.tags.dd(formatted_info["projects"]),
-                        ui.tags.dt("Samples"),
-                        ui.tags.dd(formatted_info["samples"]),
-                        ui.tags.dt("Sequencing"),
-                        ui.tags.dd(formatted_info["ilmn_sequencing"]),
-                        ui.tags.dt("App Last Refreshed"),
-                        ui.tags.dd(formatted_info["app_refresh"]),
-                        class_="row",
-                    ),
-                    ui.h4("Database Connection Security:"),
-                    ui.p(f"Database connection: {ssl_info['connection_security']}"),
-                    ui.h3("Data Fields Collection"),
-                    ui.h4("Projects"),
-                    ui.p(
-                        "Project rows are built directly from the Clarity Postgres schema and related UDF views."
-                    ),
-                    ui.h4("Samples"),
-                    ui.p(ui.tags.strong("Extraction step"), ": Extraction Number"),
-                    ui.p(
-                        ui.tags.strong("Fluorescence step"),
-                        ": Absorbance, A260/280 ratio, A260/230 ratio, Fluorescence, Storage Box Name, Storage Well",
-                    ),
-                    ui.p(
-                        ui.tags.strong("Prep Step"),
-                        ": Experiment Name, Reagent Labels",
-                    ),
-                    ui.p(
-                        ui.tags.strong("Billing Step"),
-                        ": Invoice ID, Price, Billing Description",
-                    ),
-                    ui.p(
-                        "Note that the step must be completed in LIMS before the data fields are updated in the Shiny App."
-                    ),
-                    ui.h4("Sequencing"),
-                    ui.p(
-                        ui.tags.strong("Step 8 (NS/MS Run)"),
-                        ": Technician Name, Species, Experiment Name, Comment, Run ID, Flow Cell ID, Reagent Cartridge ID, Date",
-                    ),
-                    ui.p(
-                        ui.tags.strong("Step 7 (Generate SampleSheet)"),
-                        ": Read 1 Cycles, Read 2 Cycles, Index Cycles",
-                    ),
-                    ui.p(
-                        ui.tags.strong("Step 6 (Make Final Loading Dilution)"),
-                        ": Final Library Loading (pM), Volume 20pM Denat Sample (µl), PhiX / library spike-in (%), Average Size - bp",
-                    ),
-                    ui.p(
-                        "Table will not be updated until the sequencing step has been completed."
-                    ),
-                    ui.h3("App Version"),
-                    ui.p(f"Version: {app_version}"),
-                    class_="p-4",
-                    style="max-height: 70vh; overflow-y: auto;",
-                ),
-                size="l",
-                easy_close=True,
-                id="info_modal",
-            )
-        )
+        ui.modal_show(_build_info_modal(formatted_info, ssl_info))
 
     def show_restricted_access_modal(tool_name: str) -> None:
         ui.modal_show(
