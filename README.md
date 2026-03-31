@@ -2,8 +2,7 @@
 
 A Python Shiny app for LIMS reporting hosted on Posit Connect.
 
-The app displays live metadata read from the Clarity Postgres database. Supporting data preparation and publishing workflows are maintained in scripts running on the Illumina LIMS Clarity server:
-https://github.com/NorwegianVeterinaryInstitute/nvi_lims_epps/tree/main/shiny_app 
+The app displays live metadata read from the Clarity Postgres database.
 
 This python package requires Python 3.12+ and is managed with [uv](https://docs.astral.sh/uv). To run it, clone the repository and install the package with:
 
