@@ -1637,6 +1637,11 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
   color: var(--border-strong);
 }
 
+.dashboard-card-badge.availability {
+  background: rgba(28, 79, 185, 0.08);
+  color: var(--text-muted);
+}
+
 .dashboard-card-title {
   margin: 0;
   font-size: 1.25rem;
@@ -1654,6 +1659,10 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
   line-height: 1.5;
   color: var(--text-muted);
   flex-grow: 1;
+}
+
+.dashboard-subrow {
+  margin-top: var(--space-2);
 }
 
 .dashboard-card-trigger:focus-visible,
@@ -1791,6 +1800,10 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
 
 .detail-toolbar-warning {
   margin-right: 0.15rem;
+}
+
+.tooltip-inner {
+  max-width: 280px;
 }
 
 /* ─────────────────────────────────────────────────────────────── */

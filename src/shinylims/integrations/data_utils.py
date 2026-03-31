@@ -31,8 +31,6 @@ from shinylims.integrations.queries import (
     build_sequencing_run_rows,
     build_storage_container_rows,
 )
-from shinylims.integrations.db_utils import query_to_dataframe
-
 ####################
 # HELPER FUNCTIONS #
 ####################
@@ -337,58 +335,6 @@ def fetch_all_samples_data():
 
     return _format_samples_dataframe(df, meta_created=meta_created)
 
-
-def fetch_historical_samples_data():
-    """
-    Fetch historical samples data from SQLite database.
-    Returns: DataFrame
-    """
-
-    df = query_to_dataframe("SELECT * FROM samples_historical")
-
-    # Rename columns to match what the app expects
-    df = df.rename(columns={
-        'limsid': 'LIMS ID',
-        'project_limsid': 'Project LIMS ID',
-        'received_date': 'Received Date',
-        'species_name': 'Species',
-        'name': 'Sample Name',
-        'project_name': 'Project Name',
-        'project_account': 'Project Account',
-        'experiment_name': 'Experiment Name',
-        'invoice_id': 'Invoice ID',
-        'extraction_number': 'Extraction Number',
-        'concentration_absorbance': 'Absorbance',
-        'a260_280_ratio': 'A260/280 ratio',
-        'a260_230_ratio': 'A260/230 ratio',
-        'concentration_fluorescence': 'Fluorescence',
-        'storage_box': 'Storage Box',
-        'storage_well': 'Storage Well',
-        'billing_description': 'Billing Description',
-        'reagent_label': 'Reagent Label',
-        'increased_pooling': 'Increased Pooling (%)',
-        'nird_filename': 'NIRD Filename',
-    })
-
-    if 'Received Date' in df.columns:
-        df['Received Date'] = pd.to_datetime(df['Received Date'], errors='coerce')
-
-    df = df.replace(np.nan, '', regex=True)
-
-    for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid']:
-        if col in df.columns:
-            df[col] = df[col].apply(transform_to_html)
-
-    comment_columns = [col for col in df.columns if 'comment' in col.lower()]
-    for col in comment_columns:
-        df[col] = df[col].apply(transform_comments_to_html)
-
-    html_columns = set(comment_columns) | {
-        col for col in ['seq_limsid', 'nd_limsid', 'qubit_limsid', 'prep_limsid'] if col in df.columns
-    }
-    df = sanitize_dataframe_strings(df, skip_columns=html_columns)
-
-    return df
 
 def fetch_sequencing_data():
     """Fetch sequencing run data directly from Clarity Postgres."""

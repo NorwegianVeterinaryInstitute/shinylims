@@ -6,6 +6,7 @@ front page into the individual table and tool views.
 """
 
 from datetime import datetime
+import os
 from pathlib import Path
 import re
 
@@ -30,7 +31,6 @@ from shinylims.integrations.clarity_pg import (
 )
 from shinylims.integrations.data_utils import (
     fetch_all_samples_data,
-    fetch_historical_samples_data,
     fetch_projects_data,
     fetch_sequencing_data,
     get_app_version,
@@ -54,6 +54,20 @@ www_dir = Path(__file__).parent / "www"
 logo_path = "images/favicon/favicon-96x96.png"
 app_version = get_app_version()
 access_request_email = "hts@vetinst.no"
+LEGACY_METADATA_DOWNLOADS = [
+    {
+        "id": "legacy_sample_prep",
+        "label": "Sample Prep Log",
+        "description": "Archived sample preparation log from before November 2023.",
+        "pin_name": "vi2172/legacy_metadata_sample_prep",
+    },
+    {
+        "id": "legacy_sequencing_log",
+        "label": "Sequencing Log",
+        "description": "Archived sequencing log from before November 2023.",
+        "pin_name": "vi2172/legacy_metadata_sequencing_log",
+    },
+]
 
 DASHBOARD_SECTIONS = [
     {
@@ -68,6 +82,7 @@ DASHBOARD_SECTIONS = [
                 "eyebrow": "Metadata Table",
                 "title": "Projects",
                 "description": "Browse project-level metadata from Clarity LIMS.",
+                "availability_note": "Nov 2023+",
             },
             {
                 "view": "samples",
@@ -76,6 +91,7 @@ DASHBOARD_SECTIONS = [
                 "eyebrow": "Metadata Table",
                 "title": "Samples",
                 "description": "Explore sample metadata. Integration to SAGA (ATLAS tool).",
+                "availability_note": "Nov 2023+",
             },
             {
                 "view": "sequencing",
@@ -84,6 +100,16 @@ DASHBOARD_SECTIONS = [
                 "eyebrow": "Metadata Table",
                 "title": "Illumina Sequencing",
                 "description": "Inspect sequencing run metadata and performance metrics.",
+                "availability_note": "Nov 2023+",
+            },
+            {
+                "view": "metadata_archive",
+                "button_id": "open_metadata_archive",
+                "icon": "box-archive",
+                "eyebrow": "Metadata Archive",
+                "title": "Before November 2023",
+                "description": "Access archived metadata files from before LIMS.",
+                "availability_note": "Archive",
             },
         ],
     },
@@ -138,6 +164,11 @@ VIEW_DETAILS = {
         "title": "Illumina Sequencing",
         "description": "Inspect sequencing run metadata and metrics from completed runs.",
     },
+    "metadata_archive": {
+        "eyebrow": "Metadata Archive",
+        "title": "Metadata Before November 2023",
+        "description": "Download archived metadata files from before the live Clarity Postgres coverage begins.",
+    },
     "reagents": {
         "eyebrow": "Lab Tool",
         "title": "Reagent Lot Registration",
@@ -167,6 +198,13 @@ def _dashboard_card(card: dict[str, str], *, current_user_blocked: bool = False)
                 class_="dashboard-card-badge restricted",
             )
         )
+    if card.get("availability_note"):
+        badges.append(
+            ui.span(
+                ui.span(card["availability_note"]),
+                class_="dashboard-card-badge availability",
+            )
+        )
 
     action_id = f"blocked_{card['view']}" if current_user_blocked else card["button_id"]
 
@@ -186,7 +224,7 @@ def _dashboard_card(card: dict[str, str], *, current_user_blocked: bool = False)
                 ui.div(
                     (
                         ui.div(*badges, class_="dashboard-card-badges")
-                        if current_user_blocked and badges
+                        if badges
                         else None
                     ),
                     (
@@ -211,17 +249,42 @@ def _dashboard_card(card: dict[str, str], *, current_user_blocked: bool = False)
 
 def _dashboard_section(section: dict[str, object], *, blocked_views: set[str] | None = None):
     blocked_views = blocked_views or set()
-    cards = [
-        _dashboard_card(card, current_user_blocked=card["view"] in blocked_views)
-        for card in section["cards"]
-    ]
+    cards = section["cards"]
+    if section["id"] == "metadata":
+        live_cards = [
+            _dashboard_card(card, current_user_blocked=card["view"] in blocked_views)
+            for card in cards
+            if card["view"] != "metadata_archive"
+        ]
+        archive_cards = [
+            _dashboard_card(card, current_user_blocked=card["view"] in blocked_views)
+            for card in cards
+            if card["view"] == "metadata_archive"
+        ]
+        content = [
+            ui.layout_columns(*live_cards, col_widths=[4] * len(live_cards)),
+        ]
+        if archive_cards:
+            content.append(
+                ui.div(
+                    ui.layout_columns(*archive_cards, col_widths=[4] * len(archive_cards)),
+                    class_="dashboard-subrow",
+                )
+            )
+    else:
+        rendered_cards = [
+            _dashboard_card(card, current_user_blocked=card["view"] in blocked_views)
+            for card in cards
+        ]
+        content = [ui.layout_columns(*rendered_cards, col_widths=[4] * len(rendered_cards))]
+
     return ui.div(
         ui.div(
             ui.h2(section["title"], class_="dashboard-section-title"),
             ui.p(section["description"], class_="dashboard-section-description"),
             class_="dashboard-section-header",
         ),
-        ui.layout_columns(*cards, col_widths=[4] * len(cards)),
+        *content,
         class_="dashboard-section",
     )
 
@@ -283,6 +346,33 @@ def _restricted_tool_card(title: str):
     )
 
 
+def _legacy_metadata_download_card(item: dict) -> object:
+    """Render a single archive metadata download card."""
+    return ui.card(
+        ui.card_header(item["label"]),
+        ui.card_body(
+            ui.p(item["description"]),
+            ui.download_button(item["id"], "Download file", class_="btn-outline-primary btn-sm"),
+        ),
+        class_="h-100",
+    )
+
+
+def _metadata_archive_ui() -> object:
+    """Render the archive download view for metadata before November 2023."""
+    download_cards = [
+        _legacy_metadata_download_card(item)
+        for item in LEGACY_METADATA_DOWNLOADS
+    ]
+    return ui.div(
+        ui.p(
+            "These archive downloads are intended for metadata recorded before November 2023, before the current live Clarity Postgres-backed tables begin."
+        ),
+        ui.layout_columns(*download_cards, col_widths=[4] * len(download_cards)),
+        class_="d-flex flex-column gap-3",
+    )
+
+
 ####################
 # CONSTRUCT THE UI #
 ####################
@@ -333,7 +423,6 @@ class DatasetCache:
     def __init__(self):
         self._projects = reactive.Value(pd.DataFrame())
         self._samples = reactive.Value(pd.DataFrame())
-        self._historical = reactive.Value(pd.DataFrame())
         self._seq = reactive.Value(pd.DataFrame())
 
         self._projects_meta = reactive.Value(None)
@@ -342,7 +431,6 @@ class DatasetCache:
 
         self._projects_loaded = reactive.Value(False)
         self._samples_loaded = reactive.Value(False)
-        self._historical_loaded = reactive.Value(False)
         self._seq_loaded = reactive.Value(False)
 
     # --- Accessors (callable, can be passed directly to feature server functions) ---
@@ -352,9 +440,6 @@ class DatasetCache:
 
     def samples(self) -> pd.DataFrame:
         return self._samples.get()
-
-    def historical(self) -> pd.DataFrame:
-        return self._historical.get()
 
     def seq(self) -> pd.DataFrame:
         return self._seq.get()
@@ -377,13 +462,6 @@ class DatasetCache:
         self._samples_meta.set(meta)
         self._samples_loaded.set(True)
 
-    def load_historical(self, force: bool = False) -> None:
-        if self._historical_loaded.get() and not force:
-            return
-        df = fetch_historical_samples_data()
-        self._historical.set(df)
-        self._historical_loaded.set(True)
-
     def load_sequencing(self, force: bool = False) -> None:
         if self._seq_loaded.get() and not force:
             return
@@ -400,9 +478,6 @@ class DatasetCache:
     def is_samples_loaded(self) -> bool:
         return self._samples_loaded.get()
 
-    def is_historical_loaded(self) -> bool:
-        return self._historical_loaded.get()
-
     def is_seq_loaded(self) -> bool:
         return self._seq_loaded.get()
 
@@ -413,8 +488,6 @@ class DatasetCache:
             loaders.append(("projects", lambda: self.load_projects(force=True)))
         if self._samples_loaded.get():
             loaders.append(("samples", lambda: self.load_samples(force=True)))
-        if self._historical_loaded.get():
-            loaders.append(("historical samples", lambda: self.load_historical(force=True)))
         if self._seq_loaded.get():
             loaders.append(("sequencing", lambda: self.load_sequencing(force=True)))
         return loaders
@@ -573,9 +646,6 @@ def _build_info_modal(formatted_info: dict[str, str], ssl_info: dict[str, str]) 
                 "Projects, samples, sequencing runs, and storage boxes are read directly from the live Clarity Postgres database when those views are opened."
             ),
             ui.p(f"Database connection: {ssl_info['connection_security']}"),
-            ui.p(
-                "Historical samples are still served from the legacy SQLite pin when the historical switch is enabled."
-            ),
             ui.h4("Last Loaded Timestamps"),
             _info_table(timestamp_items),
             ui.h3("Data Fields Collection"),
@@ -607,7 +677,7 @@ def server(input, output, session):
     storage_server()
 
     projects_server(cache.projects)
-    samples_server(cache.samples, cache.historical, input)
+    samples_server(cache.samples, input)
     seq_server(cache.seq)
 
     db_warning_state = reactive.Value(None)
@@ -687,6 +757,29 @@ def server(input, output, session):
                 _run_load_step("sequencing", cache.load_sequencing)
 
     @reactive.Effect
+    @reactive.event(input.open_metadata_archive)
+    def _open_metadata_archive():
+        current_view.set("metadata_archive")
+
+    # Legacy metadata archive downloads (served from Posit Connect pins)
+    def _download_legacy_pin(pin_name: str) -> str:
+        from pins import board_connect
+
+        board = board_connect(
+            api_key=os.getenv("POSIT_API_KEY"),
+            server_url=os.getenv("POSIT_SERVER_URL"),
+        )
+        return board.pin_download(pin_name)[0]
+
+    @render.download
+    def legacy_sample_prep():
+        return _download_legacy_pin("vi2172/legacy_metadata_sample_prep")
+
+    @render.download
+    def legacy_sequencing_log():
+        return _download_legacy_pin("vi2172/legacy_metadata_sequencing_log")
+
+    @reactive.Effect
     @reactive.event(input.open_tool_reagents)
     def _open_reagents():
         current_view.set("reagents")
@@ -705,14 +798,6 @@ def server(input, output, session):
     @reactive.event(input.back_to_dashboard)
     def _back_to_dashboard():
         current_view.set("dashboard")
-
-    @reactive.Effect
-    def _load_historical_samples_when_enabled():
-        if current_view.get() != "samples" or not input.include_hist():
-            return
-        with ui.Progress(min=1, max=1) as p:
-            p.set(message="Loading historical samples...")
-            _run_load_step("historical samples", cache.load_historical)
 
     @reactive.Effect
     @reactive.event(input.update_button)
@@ -779,14 +864,6 @@ def server(input, output, session):
         if db_warning_state.get():
             toolbar_children.append(
                 ui.span("Database error", class_="badge text-bg-danger detail-toolbar-warning")
-            )
-
-        if current_view.get() == "samples":
-            toolbar_children.append(
-                ui.div(
-                    ui.input_switch("include_hist", "Historical samples", False),
-                    class_="detail-toolbar-switch",
-                )
             )
 
         if current_view.get() in metadata_table_views:
@@ -900,6 +977,9 @@ def server(input, output, session):
 
         if current_view.get() == "sequencing":
             return _detail_shell("sequencing", seq_ui())
+
+        if current_view.get() == "metadata_archive":
+            return _detail_shell("metadata_archive", _metadata_archive_ui())
 
         if current_view.get() == "reagents":
             if not is_allowed_reagents_user(session):

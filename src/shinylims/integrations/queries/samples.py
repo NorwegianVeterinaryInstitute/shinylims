@@ -113,9 +113,9 @@ def _build_nird_filename(
 
 
 def _format_well_label(x_position: int | None, y_position: int | None) -> str | None:
-    if x_position is None or y_position is None or y_position < 1:
+    if x_position is None or y_position is None or y_position < 0:
         return None
-    return f"{chr(64 + y_position)}:{x_position}"
+    return f"{chr(65 + y_position)}:{x_position + 1}"
 
 
 def _format_storage_box_html(container_name: str | None, container_state: str | None) -> str | None:
