@@ -1,11 +1,11 @@
-### Shinylims
+# Shinylims
 
 A Python Shiny app for LIMS reporting hosted on Posit Connect.
 
 The app displays live metadata read from the Clarity Postgres database. Supporting data preparation and publishing workflows are maintained in scripts running on the Illumina LIMS Clarity server:
 https://github.com/NorwegianVeterinaryInstitute/nvi_lims_epps/tree/main/shiny_app 
 
-This python package is managed with uv (https://docs.astral.sh/uv). To run it, clone the repository and install the package with:
+This python package requires Python 3.12+ and is managed with [uv](https://docs.astral.sh/uv). To run it, clone the repository and install the package with:
 
 ```
 uv sync
@@ -37,7 +37,7 @@ Recommended development flow:
 7. Only switch `deploy_mode.txt` to `prod` on the branch or commit that is intended to go to `main` for production deployment.
 8. Use `both` only when you intentionally want to update both deploy branches in the same run.
 
-For doing code development locally, the api-key and Posit Connect URL must be provided in an .env file. Variables for the credentials are named ```POSIT_API_KEY``` and ```POSIT_SERVER_URL```.
+For doing code development locally, the api-key and Posit Connect URL must be provided in an .env file. Variables for the credentials are named `POSIT_API_KEY` and `POSIT_SERVER_URL`.
 
 The deployment is handled by the GitHub Actions workflow stored in `.github/workflows/deploy.yml`. That workflow generates the manifest and `requirements.txt` file used for Posit deployment.
 
@@ -45,7 +45,7 @@ Automated dependency updates are configured with Dependabot in `.github/dependab
 
 ## Lab Tools
 
-The **Lab Tools** tab currently contains:
+The **Lab Tools** tab contains LIMS-integrated features that require Clarity credentials (see secrets section below):
 
 - `Reagent Lot Registration`: create and submit reagent lots to Clarity LIMS.
 - `Reagent Overview`: review prep sets, sequencing stock, and index plate usage together.
@@ -60,7 +60,7 @@ The LIMS-backed lab tools read Clarity credentials only from environment variabl
 - `LIMS_API_PASS`
 
 Local development can use a `.env` file (loaded automatically when `python-dotenv` is available).
-See .env.example file.
+See [.env.example](.env.example).
 
 On Posit Connect, configure these values in **Vars / Secrets** for the content item instead of using `.env`.
 

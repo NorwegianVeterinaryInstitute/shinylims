@@ -34,6 +34,8 @@ from shinylims.integrations.queries._shared import (
     _process_record,
 )
 
+SEQUENCING_RUNIDS_TO_EXCLUDE = ["24-3775", "24-3774", "24-534", "24-442", "24-423"]
+
 SEQUENCING_ARTIFACT_UDFS = {
     "% Aligned R1",
     "% Bases >=Q30 R1",

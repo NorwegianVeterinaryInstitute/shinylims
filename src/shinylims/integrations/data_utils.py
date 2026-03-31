@@ -28,6 +28,7 @@ from shinylims.integrations.queries import (
     build_project_rows,
     build_sample_rows,
     build_sequencing_run_rows,
+    SEQUENCING_RUNIDS_TO_EXCLUDE,
     build_storage_container_rows,
 )
 ####################
@@ -205,6 +206,8 @@ def _fetch_sequencing_data_from_postgres() -> tuple[pd.DataFrame, str]:
         rows = build_sequencing_run_rows(session, sequencing_type_ids)
 
     df = pd.DataFrame(rows)
+    if not df.empty and "seq_limsid" in df.columns:
+        df = df[~df["seq_limsid"].isin(SEQUENCING_RUNIDS_TO_EXCLUDE)]
     if df.empty:
         df = pd.DataFrame(columns=[
             "seq_limsid",
