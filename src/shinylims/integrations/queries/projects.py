@@ -24,9 +24,10 @@ from shinylims.integrations.queries._shared import (
 )
 
 PROJECT_COMMENT_UDF = "Message to the lab (attached to email and Clarity LIMS)"
-PROJECT_COMMENT_PLACEHOLDER = (
+PROJECT_COMMENT_PLACEHOLDERS = (
     "USE THIS FIELD. Any comments placed here will be forwarded to all lab members "
-    "working on NGS samples."
+    "working on NGS samples.",
+    "Ingen merknad vedlagt prosjektet",
 )
 
 
@@ -74,7 +75,7 @@ def build_project_rows(session: Session) -> list[dict[str, Any]]:
         if project is None:
             status = "CLOSED" if row.closedate else ("OPEN" if row.opendate else "PENDING")
             comment = row.comment
-            if comment == PROJECT_COMMENT_PLACEHOLDER:
+            if comment in PROJECT_COMMENT_PLACEHOLDERS:
                 comment = ""
             project = {
                 "Project LIMS ID": row.luid,
