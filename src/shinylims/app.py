@@ -26,6 +26,7 @@ from shinylims.features.storage import storage_server, storage_ui
 from shinylims.integrations.clarity_pg import (
     get_clarity_pg_env_diagnostics,
     get_clarity_pg_network_diagnostics,
+    get_clarity_pg_ssl_diagnostics,
 )
 from shinylims.integrations.data_utils import (
     fetch_all_samples_data,
@@ -447,6 +448,30 @@ def _format_dataset_load_error(error: Exception) -> str:
     )
 
 
+def _format_ssl_modal_info() -> dict[str, str]:
+    """Return a concise user-facing SSL summary for the info modal."""
+    diagnostics = get_clarity_pg_ssl_diagnostics()
+
+    info = {
+        "connection_security": "Unavailable",
+    }
+
+    if not diagnostics.get("connection_ok"):
+        return info
+
+    if not diagnostics.get("ssl_status_available"):
+        return info
+
+    if diagnostics.get("ssl_in_use"):
+        tls_version = str(diagnostics.get("ssl_version") or "").strip()
+        info["connection_security"] = (
+            f"Encrypted ({tls_version})" if tls_version else "Encrypted"
+        )
+    else:
+        info["connection_security"] = "Not encrypted"
+    return info
+
+
 def server(input, output, session):
     """
     Fetch data and wire the single-page dashboard/detail views.
@@ -700,6 +725,7 @@ def server(input, output, session):
     def on_info_button_click():
         """Handle the info button click event."""
         formatted_info = get_update_display_info()
+        ssl_info = _format_ssl_modal_info()
         ui.modal_show(
             ui.modal(
                 ui.h2("ShinyClarity Information", class_="mb-4"),
@@ -729,6 +755,8 @@ def server(input, output, session):
                         ui.tags.dd(formatted_info["app_refresh"]),
                         class_="row",
                     ),
+                    ui.h4("Database Connection Security:"),
+                    ui.p(f"Database connection: {ssl_info['connection_security']}"),
                     ui.h3("Data Fields Collection"),
                     ui.h4("Projects"),
                     ui.p(

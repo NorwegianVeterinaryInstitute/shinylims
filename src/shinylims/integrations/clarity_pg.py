@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from dotenv import load_dotenv
-from sqlalchemy import URL, create_engine
+from sqlalchemy import URL, create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session, sessionmaker
@@ -31,6 +31,10 @@ class ClarityPostgresConfig:
     port: int = 5432
     url: str | None = None
     connect_timeout_seconds: int = 5
+    sslmode: str | None = None
+    sslrootcert: str | None = None
+    sslcert: str | None = None
+    sslkey: str | None = None
 
     @classmethod
     def from_env(cls) -> "ClarityPostgresConfig":
@@ -42,11 +46,30 @@ class ClarityPostgresConfig:
             port=int(os.getenv("CLARITY_PG_PORT", "5432")),
             url=os.getenv("CLARITY_PG_URL"),
             connect_timeout_seconds=int(os.getenv("CLARITY_PG_CONNECT_TIMEOUT_SECONDS", "5")),
+            sslmode=(os.getenv("CLARITY_PG_SSLMODE") or "").strip() or None,
+            sslrootcert=(os.getenv("CLARITY_PG_SSLROOTCERT") or "").strip() or None,
+            sslcert=(os.getenv("CLARITY_PG_SSLCERT") or "").strip() or None,
+            sslkey=(os.getenv("CLARITY_PG_SSLKEY") or "").strip() or None,
         )
 
     def sqlalchemy_url(self) -> str | URL:
+        ssl_query = {
+            key: value
+            for key, value in {
+                "sslmode": self.sslmode,
+                "sslrootcert": self.sslrootcert,
+                "sslcert": self.sslcert,
+                "sslkey": self.sslkey,
+            }.items()
+            if value
+        }
         if self.url:
-            return self.url
+            parsed_url = make_url(self.url)
+            url_ssl_query = {key: value for key, value in parsed_url.query.items() if key in ssl_query}
+            ssl_query = {key: value for key, value in ssl_query.items() if key not in url_ssl_query}
+            if ssl_query:
+                return parsed_url.update_query_dict(ssl_query)
+            return parsed_url
         return URL.create(
             "postgresql+psycopg",
             username=self.username or None,
@@ -54,6 +77,7 @@ class ClarityPostgresConfig:
             host=self.host,
             port=self.port,
             database=self.database or None,
+            query=ssl_query or None,
         )
 
 
@@ -89,6 +113,10 @@ def get_clarity_pg_env_diagnostics() -> dict[str, object]:
     raw_password = (os.getenv("CLARITY_PG_PASSWORD") or "").strip()
     raw_port = (os.getenv("CLARITY_PG_PORT") or "").strip()
     raw_timeout = (os.getenv("CLARITY_PG_CONNECT_TIMEOUT_SECONDS") or "").strip()
+    raw_sslmode = (os.getenv("CLARITY_PG_SSLMODE") or "").strip()
+    raw_sslrootcert = (os.getenv("CLARITY_PG_SSLROOTCERT") or "").strip()
+    raw_sslcert = (os.getenv("CLARITY_PG_SSLCERT") or "").strip()
+    raw_sslkey = (os.getenv("CLARITY_PG_SSLKEY") or "").strip()
     raw_seq_type_ids = (os.getenv("CLARITY_PG_SEQUENCING_TYPE_IDS") or "").strip()
 
     return {
@@ -99,9 +127,61 @@ def get_clarity_pg_env_diagnostics() -> dict[str, object]:
         "password_present": bool(raw_password),
         "port_present": bool(raw_port),
         "connect_timeout_present": bool(raw_timeout),
+        "sslmode_present": bool(raw_sslmode),
+        "sslmode_value": raw_sslmode or "<missing>",
+        "sslrootcert_present": bool(raw_sslrootcert),
+        "sslcert_present": bool(raw_sslcert),
+        "sslkey_present": bool(raw_sslkey),
         "sequencing_type_ids_present": bool(raw_seq_type_ids),
         "sequencing_type_ids_value": raw_seq_type_ids or "<missing>",
     }
+
+
+def get_clarity_pg_ssl_diagnostics() -> dict[str, object]:
+    """Return configured and live SSL details for the current Postgres session."""
+    config = ClarityPostgresConfig.from_env()
+    result: dict[str, object] = {
+        "configured_sslmode": config.sslmode or "<driver-default>",
+        "sslrootcert_present": bool(config.sslrootcert),
+        "sslcert_present": bool(config.sslcert),
+        "sslkey_present": bool(config.sslkey),
+        "connection_ok": False,
+        "ssl_status_available": False,
+    }
+
+    try:
+        with create_session() as session:
+            row = (
+                session.execute(
+                    text(
+                        """
+                        select ssl, version, cipher, bits, client_dn
+                        from pg_stat_ssl
+                        where pid = pg_backend_pid()
+                        """
+                    )
+                )
+                .mappings()
+                .first()
+            )
+    except Exception as exc:
+        result["error_type"] = type(exc).__name__
+        result["error"] = str(exc)
+        return result
+
+    result["connection_ok"] = True
+    if row is None:
+        result["error"] = "pg_stat_ssl returned no row for the current backend session"
+        return result
+
+    ssl_details = dict(row)
+    result["ssl_status_available"] = True
+    result["ssl_in_use"] = bool(ssl_details.get("ssl"))
+    result["ssl_version"] = ssl_details.get("version")
+    result["ssl_cipher"] = ssl_details.get("cipher")
+    result["ssl_bits"] = ssl_details.get("bits")
+    result["ssl_client_dn"] = ssl_details.get("client_dn")
+    return result
 
 
 def _detect_public_egress_ip(timeout_seconds: float = 3.0) -> tuple[str | None, str | None, str | None]:

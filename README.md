@@ -64,6 +64,13 @@ See .env.example file.
 
 On Posit Connect, configure these values in **Vars / Secrets** for the content item instead of using `.env`.
 
+For direct Clarity Postgres access, SSL can be configured with:
+
+- `CLARITY_PG_SSLMODE` such as `prefer`, `require`, `verify-ca`, or `verify-full`
+- `CLARITY_PG_SSLROOTCERT`, `CLARITY_PG_SSLCERT`, and `CLARITY_PG_SSLKEY` when certificate validation or client certificates are required
+
+If you use `CLARITY_PG_URL`, include SSL parameters directly in that URL, for example `?sslmode=require`.
+
 Authorization for `Reagent Lot Registration` and `Reagent Overview`:
 - Authorization is configured in `src/shinylims/security.py`:
   - `CONNECT_ALLOWED_GROUP` (required Connect group)
