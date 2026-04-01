@@ -43,7 +43,6 @@ def samples_ui():
         """),
         # Widget container
         ui.div(
-            ui.output_ui("hist_mode_indicator"),
             output_widget("data_samples", fillable=False),
             style="position: relative;"
         ),
@@ -55,73 +54,11 @@ def samples_ui():
 ##############################
 
 # Server logic for the Samples page
-def samples_server(samples_df, samples_historical_df, input):
-    has_shown_hist_warning = reactive.Value(False)
+def samples_server(samples_df, input):
 
-    @render.ui
-    def hist_mode_indicator():
-        if not input.include_hist():
-            return None
-        return ui.div(
-            "Historical data: ON",
-            class_="badge text-bg-warning",
-            style="position: absolute; top: -6px; right: 10px; z-index: 20;"
-        )
-
-    @reactive.Effect
-    def show_warning_modal():
-        if not input.include_hist() or has_shown_hist_warning.get():
-            return
-
-        has_shown_hist_warning.set(True)
-        return ui.modal_show(
-            ui.modal(
-                ui.div(
-                    ui.p("⚠️ You are now including historical samples. The historical data was recorded before Clarity LIMS was implemented. It may not be complete or accurate. It will also make searching more difficult since data isnt formatted consistently."),
-                    ui.p("Please review the data carefully. Data can be filtered through the 'Search Builder' by 'Clarity LIMS' or 'Historical' using the 'Data Source' column.")
-                ),
-                title="Historical Data Warning",
-                easy_close=False,
-                footer=ui.div(
-                    ui.input_action_button(
-                        "cancel_hist_warning",
-                        "Cancel",
-                        class_="btn btn-secondary",
-                    ),
-                    ui.modal_button("Continue", class_="btn-primary"),
-                    class_="d-flex justify-content-end gap-2",
-                ),
-            )
-        )
-
-    @reactive.Effect
-    @reactive.event(input.cancel_hist_warning)
-    def cancel_hist_warning():
-        has_shown_hist_warning.set(False)
-        ui.update_switch("include_hist", value=False)
-        ui.modal_remove()
-        
-    # Create a reactive expression for the combined dataframe
     @reactive.Calc
     def combined_samples():
-        # Start with the regular samples
-        dat = samples_df.copy()
-        
-        # If checkbox is checked and historical data exists, combine them
-        if input.include_hist() and samples_historical_df is not None and not samples_historical_df.empty:
-            # Add a column to distinguish data sources if needed
-            dat['Data_Source'] = 'Clarity LIMS'
-            hist_dat = samples_historical_df.copy()
-            hist_dat['Data_Source'] = 'Historical'
-            
-            # Remove the 'data_source' column if it exists
-            if 'data_source' in hist_dat.columns:
-                hist_dat = hist_dat.drop('data_source', axis=1)
-
-            # Combine the dataframes
-            dat = pd.concat([dat, hist_dat], ignore_index=True, sort=False)
-        
-        return dat.reset_index(drop=True)
+        return samples_df().reset_index(drop=True)
 
 
     # Step 1 — "Send to SAGA" button (triggered via Shiny.setInputValue from the export dropdown):
@@ -260,10 +197,9 @@ def samples_server(samples_df, samples_historical_df, input):
     @render_widget
     def data_samples():
         dat = combined_samples()
-        
-        # Properly format date columns for DataTables
+
+        # Format date column for DataTables display
         if "Received Date" in dat.columns:
-            dat["Received Date"] = pd.to_datetime(dat["Received Date"], errors='coerce')
             dat["Received Date"] = dat["Received Date"].apply(
                 lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else ''
             )
@@ -308,7 +244,6 @@ def samples_server(samples_df, samples_historical_df, input):
                         "buttons": [
                             select_all_columns_button(),
                             deselect_all_columns_button(),
-                            {},
                             visibility_preset_button([2, 3, 4, 5, 9, 10, 21]),
                         ]
                     },

@@ -32,38 +32,22 @@ def seq_ui():
 
 # Server logic for the Sequencing page
 def seq_server(seq_df):
-    
+
     # Return HTML tag with DT table element
     @render_widget
     def data_seq():
-        dat = seq_df.copy().reset_index(drop=True)
-        
-        # Properly format date columns for DataTables
+        dat = seq_df().copy().reset_index(drop=True)
+
+        # Format date column for DataTables display
         if "Seq Date" in dat.columns:
-            # Convert to datetime type first
-            dat["Seq Date"] = pd.to_datetime(dat["Seq Date"], errors='coerce')
-            
-            # Format dates as strings in a consistent format for display
-            # Keep NaT values as empty strings
             dat["Seq Date"] = dat["Seq Date"].apply(
                 lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else ''
             )
-        
+
         # Determine indices for special column handling
-        if 'Comment' in dat.columns:
-            comment_index = dat.columns.get_loc('Comment')
-        else:
-            comment_index = "Dummy"
-
-        if 'Run Number' in dat.columns:
-            run_number_index = dat.columns.get_loc('Run Number')
-        else:
-            run_number_index = "Dummy"
-
-        if 'Cluster density (K/mm2)' in dat.columns:
-            cluster_density_index = dat.columns.get_loc('Cluster density (K/mm2)')
-        else:
-            cluster_density_index = "Dummy"
+        comment_index = dat.columns.get_loc('Comment') if 'Comment' in dat.columns else -1
+        run_number_index = dat.columns.get_loc('Run Number') if 'Run Number' in dat.columns else -1
+        cluster_density_index = dat.columns.get_loc('Cluster Density') if 'Cluster Density' in dat.columns else -1
         
         # Find index for order column
         column_to_sort = "Seq Date"
@@ -106,9 +90,6 @@ def seq_server(seq_df):
                         "buttons": [
                             select_all_columns_button(),
                             deselect_all_columns_button(),
-                            {
-                               
-                            },
                             visibility_preset_button([2, 3, 4, 5, 9, 10, 21])
                         ]
                     },
@@ -156,10 +137,10 @@ def seq_server(seq_df):
                       ],
                       order=[[column_index, "desc"]],
                       columnDefs=[
-                          {'targets': comment_index, 'className': 'left-column', 'width': '200px'} ,
+                          {'targets': comment_index, 'className': 'left-column', 'width': '200px'} if comment_index != -1 else {},
                           {"className": "dt-center", "targets": "_all"},
-                          {"targets": run_number_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")},
-                          {"targets": cluster_density_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")},
+                          {"targets": run_number_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")} if run_number_index != -1 else {},
+                          {"targets": cluster_density_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")} if cluster_density_index != -1 else {},
                           # Explicitly define the Seq Date column as a date type for searchBuilder
                           {
                               "targets": date_column_index,

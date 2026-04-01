@@ -6,6 +6,7 @@ front page into the individual table and tool views.
 """
 
 from datetime import datetime
+import os
 from pathlib import Path
 import re
 
@@ -22,17 +23,17 @@ from shinylims.features.reagent_overview import (
 from shinylims.features.reagents import reagents_server, reagents_ui
 from shinylims.features.samples import samples_server, samples_ui
 from shinylims.features.sequencing import seq_server, seq_ui
+from shinylims.features.storage import storage_server, storage_ui
+from shinylims.integrations.clarity_pg import (
+    get_clarity_pg_env_diagnostics,
+    get_clarity_pg_network_diagnostics,
+    get_clarity_pg_ssl_diagnostics,
+)
 from shinylims.integrations.data_utils import (
     fetch_all_samples_data,
-    fetch_historical_samples_data,
     fetch_projects_data,
     fetch_sequencing_data,
     get_app_version,
-)
-from shinylims.integrations.db_utils import (
-    get_db_update_info,
-    query_to_dataframe,
-    refresh_db_connection,
 )
 from shinylims.security import (
     is_allowed_reagents_user,
@@ -47,16 +48,26 @@ css_path = Path(__file__).parent / "assets" / "styles.css"
 # APP CONFIGURATION #
 ####################
 
-# Get the absolute path to the www directory
 # Shouldnt be needed, but something in the project layout is confusing Shiny's default static path discovery
 www_dir = Path(__file__).parent / "www"
 
-# Logo file to use
 logo_path = "images/favicon/favicon-96x96.png"
-
-# Get the app version from the config file
 app_version = get_app_version()
 access_request_email = "hts@vetinst.no"
+LEGACY_METADATA_DOWNLOADS = [
+    {
+        "id": "legacy_sample_prep",
+        "label": "Sample Prep Log",
+        "description": "Archived sample preparation log from before November 2023.",
+        "pin_name": "vi2172/legacy_metadata_sample_prep",
+    },
+    {
+        "id": "legacy_sequencing_log",
+        "label": "Sequencing Log",
+        "description": "Archived sequencing log from before November 2023.",
+        "pin_name": "vi2172/legacy_metadata_sequencing_log",
+    },
+]
 
 DASHBOARD_SECTIONS = [
     {
@@ -71,6 +82,7 @@ DASHBOARD_SECTIONS = [
                 "eyebrow": "Metadata Table",
                 "title": "Projects",
                 "description": "Browse project-level metadata from Clarity LIMS.",
+                "availability_note": "Nov 2023+",
             },
             {
                 "view": "samples",
@@ -79,6 +91,7 @@ DASHBOARD_SECTIONS = [
                 "eyebrow": "Metadata Table",
                 "title": "Samples",
                 "description": "Explore sample metadata. Integration to SAGA (ATLAS tool).",
+                "availability_note": "Nov 2023+",
             },
             {
                 "view": "sequencing",
@@ -87,6 +100,16 @@ DASHBOARD_SECTIONS = [
                 "eyebrow": "Metadata Table",
                 "title": "Illumina Sequencing",
                 "description": "Inspect sequencing run metadata and performance metrics.",
+                "availability_note": "Nov 2023+",
+            },
+            {
+                "view": "metadata_archive",
+                "button_id": "open_metadata_archive",
+                "icon": "box-archive",
+                "eyebrow": "Metadata Archive",
+                "title": "Before November 2023",
+                "description": "Access archived metadata files from before LIMS.",
+                "availability_note": "Archive",
             },
         ],
     },
@@ -141,6 +164,11 @@ VIEW_DETAILS = {
         "title": "Illumina Sequencing",
         "description": "Inspect sequencing run metadata and metrics from completed runs.",
     },
+    "metadata_archive": {
+        "eyebrow": "Metadata Archive",
+        "title": "Metadata Before November 2023",
+        "description": "Download archived metadata files from before the live Clarity Postgres coverage begins.",
+    },
     "reagents": {
         "eyebrow": "Lab Tool",
         "title": "Reagent Lot Registration",
@@ -162,12 +190,19 @@ VIEW_DETAILS = {
 def _dashboard_card(card: dict[str, str], *, current_user_blocked: bool = False):
     badges = []
     restricted_group = card.get("restricted")
-    if restricted_group:
+    if restricted_group and current_user_blocked:
         badges.append(
             ui.span(
                 ui.span(icon_svg("lock"), class_="dashboard-card-badge-icon", aria_hidden="true"),
                 ui.span("Restricted access"),
                 class_="dashboard-card-badge restricted",
+            )
+        )
+    if card.get("availability_note"):
+        badges.append(
+            ui.span(
+                ui.span(card["availability_note"]),
+                class_="dashboard-card-badge availability",
             )
         )
 
@@ -189,7 +224,7 @@ def _dashboard_card(card: dict[str, str], *, current_user_blocked: bool = False)
                 ui.div(
                     (
                         ui.div(*badges, class_="dashboard-card-badges")
-                        if current_user_blocked and badges
+                        if badges
                         else None
                     ),
                     (
@@ -214,17 +249,42 @@ def _dashboard_card(card: dict[str, str], *, current_user_blocked: bool = False)
 
 def _dashboard_section(section: dict[str, object], *, blocked_views: set[str] | None = None):
     blocked_views = blocked_views or set()
-    cards = [
-        _dashboard_card(card, current_user_blocked=card["view"] in blocked_views)
-        for card in section["cards"]
-    ]
+    cards = section["cards"]
+    if section["id"] == "metadata":
+        live_cards = [
+            _dashboard_card(card, current_user_blocked=card["view"] in blocked_views)
+            for card in cards
+            if card["view"] != "metadata_archive"
+        ]
+        archive_cards = [
+            _dashboard_card(card, current_user_blocked=card["view"] in blocked_views)
+            for card in cards
+            if card["view"] == "metadata_archive"
+        ]
+        content = [
+            ui.layout_columns(*live_cards, col_widths=[4] * len(live_cards)),
+        ]
+        if archive_cards:
+            content.append(
+                ui.div(
+                    ui.layout_columns(*archive_cards, col_widths=[4] * len(archive_cards)),
+                    class_="dashboard-subrow",
+                )
+            )
+    else:
+        rendered_cards = [
+            _dashboard_card(card, current_user_blocked=card["view"] in blocked_views)
+            for card in cards
+        ]
+        content = [ui.layout_columns(*rendered_cards, col_widths=[4] * len(rendered_cards))]
+
     return ui.div(
         ui.div(
             ui.h2(section["title"], class_="dashboard-section-title"),
             ui.p(section["description"], class_="dashboard-section-description"),
             class_="dashboard-section-header",
         ),
-        ui.layout_columns(*cards, col_widths=[4] * len(cards)),
+        *content,
         class_="dashboard-section",
     )
 
@@ -286,6 +346,33 @@ def _restricted_tool_card(title: str):
     )
 
 
+def _legacy_metadata_download_card(item: dict) -> object:
+    """Render a single archive metadata download card."""
+    return ui.card(
+        ui.card_header(item["label"]),
+        ui.card_body(
+            ui.p(item["description"]),
+            ui.download_button(item["id"], "Download file", class_="btn-outline-primary btn-sm"),
+        ),
+        class_="h-100",
+    )
+
+
+def _metadata_archive_ui() -> object:
+    """Render the archive download view for metadata before November 2023."""
+    download_cards = [
+        _legacy_metadata_download_card(item)
+        for item in LEGACY_METADATA_DOWNLOADS
+    ]
+    return ui.div(
+        ui.p(
+            "These archive downloads are intended for metadata recorded before November 2023, before the current live Clarity Postgres-backed tables begin."
+        ),
+        ui.layout_columns(*download_cards, col_widths=[4] * len(download_cards)),
+        class_="d-flex flex-column gap-3",
+    )
+
+
 ####################
 # CONSTRUCT THE UI #
 ####################
@@ -326,102 +413,303 @@ app_ui = ui.page_fluid(
 )
 
 
+####################
+# DATASET CACHE    #
+####################
+
+class DatasetCache:
+    """Per-session cache for the four live datasets loaded from Clarity Postgres."""
+
+    def __init__(self):
+        self._projects = reactive.Value(pd.DataFrame())
+        self._samples = reactive.Value(pd.DataFrame())
+        self._seq = reactive.Value(pd.DataFrame())
+
+        self._projects_meta = reactive.Value(None)
+        self._samples_meta = reactive.Value(None)
+        self._seq_meta = reactive.Value(None)
+
+        self._projects_loaded = reactive.Value(False)
+        self._samples_loaded = reactive.Value(False)
+        self._seq_loaded = reactive.Value(False)
+
+    # --- Accessors (callable, can be passed directly to feature server functions) ---
+
+    def projects(self) -> pd.DataFrame:
+        return self._projects.get()
+
+    def samples(self) -> pd.DataFrame:
+        return self._samples.get()
+
+    def seq(self) -> pd.DataFrame:
+        return self._seq.get()
+
+    # --- Loaders ---
+
+    def load_projects(self, force: bool = False) -> None:
+        if self._projects_loaded.get() and not force:
+            return
+        df, meta = fetch_projects_data()
+        self._projects.set(df)
+        self._projects_meta.set(meta)
+        self._projects_loaded.set(True)
+
+    def load_samples(self, force: bool = False) -> None:
+        if self._samples_loaded.get() and not force:
+            return
+        df, meta = fetch_all_samples_data()
+        self._samples.set(df)
+        self._samples_meta.set(meta)
+        self._samples_loaded.set(True)
+
+    def load_sequencing(self, force: bool = False) -> None:
+        if self._seq_loaded.get() and not force:
+            return
+        df, meta = fetch_sequencing_data()
+        self._seq.set(df)
+        self._seq_meta.set(meta)
+        self._seq_loaded.set(True)
+
+    # --- State queries ---
+
+    def is_projects_loaded(self) -> bool:
+        return self._projects_loaded.get()
+
+    def is_samples_loaded(self) -> bool:
+        return self._samples_loaded.get()
+
+    def is_seq_loaded(self) -> bool:
+        return self._seq_loaded.get()
+
+    def refresh_loaded(self) -> list[tuple[str, object]]:
+        """Return (label, loader) pairs for all currently-loaded datasets."""
+        loaders = []
+        if self._projects_loaded.get():
+            loaders.append(("projects", lambda: self.load_projects(force=True)))
+        if self._samples_loaded.get():
+            loaders.append(("samples", lambda: self.load_samples(force=True)))
+        if self._seq_loaded.get():
+            loaders.append(("sequencing", lambda: self.load_sequencing(force=True)))
+        return loaders
+
+    def timestamps(self) -> dict[str, str | None]:
+        return {
+            "projects": self._projects_meta.get(),
+            "samples": self._samples_meta.get(),
+            "ilmn_sequencing": self._seq_meta.get(),
+        }
+
+
 ###################
 # SERVER FUNCTION #
 ###################
 
 
-def _load_sqlite_datasets_with_fallback() -> tuple[dict[str, object], str | None]:
-    """Load SQLite-backed datasets, returning empty fallbacks if the pin is unavailable."""
-    try:
-        projects_df, project_date_created = fetch_projects_data()
-        samples_df, samples_date_created = fetch_all_samples_data()
-        samples_historical_df = fetch_historical_samples_data()
-        seq_df, seq_date_created = fetch_sequencing_data()
-        return (
-            {
-                "projects_df": projects_df,
-                "project_date_created": project_date_created,
-                "samples_df": samples_df,
-                "samples_date_created": samples_date_created,
-                "samples_historical_df": samples_historical_df,
-                "seq_df": seq_df,
-                "seq_date_created": seq_date_created,
-            },
-            None,
+def _metadata_backend_label() -> str:
+    """Return a short user-facing label for the live metadata backend."""
+    return "Clarity Postgres"
+
+
+def _format_dataset_load_error(error: Exception) -> str:
+    """Return a concise user-facing error for metadata load failures."""
+    details = f"{type(error).__name__}: {error}"
+    return (
+        "Clarity Postgres is unavailable, so metadata could not be loaded. "
+        "This usually means the database is unreachable from your current network, "
+        "for example because your IP is not whitelisted. "
+        f"Details: {details}"
+    )
+
+
+def _format_ssl_modal_info() -> dict[str, str]:
+    """Return a concise user-facing SSL summary for the info modal."""
+    diagnostics = get_clarity_pg_ssl_diagnostics()
+
+    info = {
+        "connection_security": "Unavailable",
+    }
+
+    if not diagnostics.get("connection_ok"):
+        return info
+
+    if not diagnostics.get("ssl_status_available"):
+        return info
+
+    if diagnostics.get("ssl_in_use"):
+        tls_version = str(diagnostics.get("ssl_version") or "").strip()
+        info["connection_security"] = (
+            f"Encrypted ({tls_version})" if tls_version else "Encrypted"
         )
-    except Exception as e:
-        warning = (
-            "SQLite metadata is temporarily unavailable. Metadata tables will load empty until the "
-            "Connect pin recovers."
+    else:
+        info["connection_security"] = "Not encrypted"
+    return info
+
+
+def _info_table(rows: list[tuple[str, str]]) -> object:
+    """Build a compact two-column table for info-modal summaries."""
+    body_rows = [
+        ui.tags.tr(
+            ui.tags.th(label, scope="row", class_="text-nowrap"),
+            ui.tags.td(value),
         )
-        print(f"[app-startup] {warning} Root cause: {str(e)}")
-        return (
-            {
-                "projects_df": pd.DataFrame(),
-                "project_date_created": None,
-                "samples_df": pd.DataFrame(),
-                "samples_date_created": None,
-                "samples_historical_df": pd.DataFrame(),
-                "seq_df": pd.DataFrame(),
-                "seq_date_created": None,
-            },
-            warning,
-        )
+        for label, value in rows
+    ]
+    return ui.tags.table(
+        ui.tags.tbody(*body_rows),
+        class_="table table-sm table-borderless align-middle mb-0",
+    )
+
+
+def _build_data_field_sources_accordion() -> object:
+    """Describe the data-entry points and lineage/UDF sourcing used by the app."""
+    return ui.accordion(
+        ui.accordion_panel(
+            "Projects",
+            ui.p(
+                "Entry point: project records in the Clarity project table."
+            ),
+            ui.p(
+                "Fields such as project LIMS ID, dates, project name, submitter, and lab are read directly from the project, researcher, and lab tables."
+            ),
+            ui.p(
+                "Species is aggregated by joining project-linked samples and reading the sample-level Species UDF from the sample UDF view."
+            ),
+            ui.p(
+                "Project comments are read from the entity UDF view using the project-attached 'Message to the lab' field."
+            ),
+            value="projects",
+        ),
+        ui.accordion_panel(
+            "Samples",
+            ui.p(
+                "Entry point: sample entities in the Clarity sample table."
+            ),
+            ui.p(
+                "Fields such as sample LIMS ID, project, received date, sample name, submitter, and lab are built directly from sample, project, researcher, and lab records, together with sample-level UDFs."
+            ),
+            ui.p(
+                "Some downstream metadata is not discovered by a single direct join. Instead, sample UDFs store process LUID references such as nd_limsid, qubit_limsid, prep_limsid, seq_limsid, billed_limsid, and extractions_limsid."
+            ),
+            ui.p(
+                "Those UDF-recorded process IDs are resolved back to real process records, and the app then loads process UDFs and artifact UDFs from the linked extraction, quantification, prep, billing, and sequencing steps."
+            ),
+            ui.p(
+                "That is how fields such as Extraction Number, Experiment Name, concentrations, billing values, run-linked filenames, reagent labels, and storage locations are assembled."
+            ),
+            value="samples",
+        ),
+        ui.accordion_panel(
+            "Sequencing",
+            ui.p(
+                "Entry point: sequencing step records of the configured sequencing process types."
+            ),
+            ui.p(
+                "From each sequencing step, the app walks upstream through the actual artifact chain, starting from the representative sequencing input artifact and then moving back through the linked Step 7, Step 6, and Step 5 producer processes."
+            ),
+            ui.p(
+                "Process UDFs on the sequencing, Step 7, and Step 6 processes provide run setup and operator-facing fields such as Run ID, read cycles, loading concentration, PhiX percentage, and comment."
+            ),
+            ui.p(
+                "Artifact UDFs on representative and upstream artifacts provide experiment and performance fields such as Experiment Name, application/cassette type, average fragment size, yield, Q30, PF reads, and cluster density."
+            ),
+            ui.p(
+                "Sample context such as species and sample count is recovered by mapping the representative sequencing artifact back to the linked samples."
+            ),
+            value="sequencing",
+        ),
+        open=False,
+        multiple=True,
+    )
+
+
+def _build_info_modal(formatted_info: dict[str, str], ssl_info: dict[str, str]) -> object:
+    """Build the main information modal shown from metadata table views."""
+    timestamp_items = [
+        ("Projects", formatted_info["projects"]),
+        ("Samples", formatted_info["samples"]),
+        ("Sequencing", formatted_info["ilmn_sequencing"]),
+        ("App Last Refreshed", formatted_info["app_refresh"]),
+    ]
+
+    return ui.modal(
+        ui.h2("ShinyClarity Information", class_="mb-4"),
+        ui.div(
+            ui.h3("About"),
+            ui.p(
+                """This app provides a user-friendly interface to explore and filter LIMS metadata.
+                 It connects to the LIMS database and displays information about projects, samples,
+                 and sequencing runs."""
+            ),
+            ui.p(f"App version: {app_version}"),
+            ui.h3("Database Information"),
+            ui.p(
+                "Projects, samples, sequencing runs, and storage boxes are read directly from the live Clarity Postgres database when those views are opened."
+            ),
+            ui.p(f"Database connection: {ssl_info['connection_security']}"),
+            ui.h4("Last Loaded Timestamps"),
+            _info_table(timestamp_items),
+            ui.h3("Data Fields Collection"),
+            ui.p(
+                "Source views used by the live metadata queries include sample_udf_view, process_udf_view, artifact_udf_view, and entity_udf_view. The accordion sections below explain which tables and views are used as entry points and where the displayed fields are collected from."
+            ),
+            _build_data_field_sources_accordion(),
+            class_="p-4",
+            style="max-height: 70vh; overflow-y: auto;",
+        ),
+        size="l",
+        easy_close=True,
+        id="info_modal",
+    )
 
 
 def server(input, output, session):
     """
-    Fetch data from SQLite and wire the single-page dashboard/detail views.
+    Fetch data and wire the single-page dashboard/detail views.
     """
     current_view = reactive.Value("dashboard")
+    cache = DatasetCache()
+
+    print(f"[clarity-pg-config] {get_clarity_pg_env_diagnostics()}")
+    print(f"[clarity-pg-network] {get_clarity_pg_network_diagnostics()}")
 
     reagents_server(input, output, session)
     reagent_overview_server(input, output, session)
+    storage_server()
+
+    projects_server(cache.projects)
+    samples_server(cache.samples, input)
+    seq_server(cache.seq)
 
     db_warning_state = reactive.Value(None)
     shown_db_warning_state = reactive.Value(None)
 
-    with ui.Progress(min=1, max=15) as p:
-        p.set(message="Loading datasets from SQLite database...")
-
-        datasets, load_warning = _load_sqlite_datasets_with_fallback()
-        db_warning_state.set(load_warning)
-        p.set(11, message="SQLite load attempt completed")
-
-        projects_df_reactive = reactive.Value(datasets["projects_df"])
-        samples_df_reactive = reactive.Value(datasets["samples_df"])
-        samples_historical_df_reactive = reactive.Value(datasets["samples_historical_df"])
-        seq_df_reactive = reactive.Value(datasets["seq_df"])
-        p.set(13, message="Reactive dataframe values established")
-
-        projects_date_created_reactive = reactive.Value(datasets["project_date_created"])
-        samples_date_created_reactive = reactive.Value(datasets["samples_date_created"])
-        seq_date_created_reactive = reactive.Value(datasets["seq_date_created"])
-        p.set(15, message="Datasets loaded successfully")
+    def _run_load_step(step_label: str, loader) -> None:
+        try:
+            loader()
+            db_warning_state.set(None)
+        except Exception as e:
+            warning = _format_dataset_load_error(e)
+            print(f"[app-load] step={step_label} backend={_metadata_backend_label()} error={warning}")
+            db_warning_state.set(warning)
 
     def update_database_data():
-        """Update the reactive values with the latest data from the database."""
-        with ui.Progress(min=1, max=12) as p:
-            p.set(message="Refreshing database connection...")
+        """Refresh only the datasets that have already been loaded in this session."""
+        with ui.Progress(min=1, max=5) as p:
+            p.set(message="Refreshing loaded datasets...")
 
-            refresh_db_connection()
+            active_loaders = cache.refresh_loaded()
+            if not active_loaders:
+                active_loaders = [
+                    ("projects", cache.load_projects),
+                    ("samples", cache.load_samples),
+                    ("sequencing", cache.load_sequencing),
+                ]
 
-            datasets, load_warning = _load_sqlite_datasets_with_fallback()
-            db_warning_state.set(load_warning)
-            p.set(9, message="SQLite load attempt completed")
+            for idx, (label, loader) in enumerate(active_loaders, start=1):
+                p.set(idx, message=f"Refreshing {label}...")
+                _run_load_step(label, loader)
 
-            projects_df_reactive.set(datasets["projects_df"])
-            samples_df_reactive.set(datasets["samples_df"])
-            samples_historical_df_reactive.set(datasets["samples_historical_df"])
-            seq_df_reactive.set(datasets["seq_df"])
-            p.set(10, message="Reactive dataframe values updated")
-
-            projects_date_created_reactive.set(datasets["project_date_created"])
-            samples_date_created_reactive.set(datasets["samples_date_created"])
-            seq_date_created_reactive.set(datasets["seq_date_created"])
-
-            p.set(12, message="Datasets updated successfully")
+            p.set(5, message="Loaded datasets refreshed")
 
     def _format_display_timestamp(raw_timestamp: str | None) -> str:
         if not raw_timestamp:
@@ -433,46 +721,63 @@ def server(input, output, session):
 
     def get_update_display_info():
         """Return simple display strings for tooltip/info modal."""
-        update_info = get_db_update_info()
+        ts = cache.timestamps()
         display_info = {
-            "projects": "Not available",
-            "samples": "Not available",
-            "ilmn_sequencing": "Not available",
-            "app_refresh": datetime.now(pytz.timezone("Europe/Oslo")).strftime("%Y-%m-%d %H:%M"),
+            key: _format_display_timestamp(ts[key]) if ts[key] else "Not loaded yet"
+            for key in ("projects", "samples", "ilmn_sequencing")
         }
-
-        table_updates = update_info.get("table_updates") or {}
-        for table_name in ("projects", "samples", "ilmn_sequencing"):
-            exact_match = table_updates.get(table_name)
-            if exact_match:
-                display_info[table_name] = _format_display_timestamp(
-                    exact_match.get("timestamp")
-                )
-                continue
-
-            for db_table, update in table_updates.items():
-                if table_name in db_table:
-                    display_info[table_name] = _format_display_timestamp(
-                        update.get("timestamp")
-                    )
-                    break
-
+        display_info["app_refresh"] = datetime.now(pytz.timezone("Europe/Oslo")).strftime("%Y-%m-%d %H:%M")
         return display_info
 
     @reactive.Effect
     @reactive.event(input.open_table_projects)
     def _open_projects():
         current_view.set("projects")
+        if not cache.is_projects_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading projects...")
+                _run_load_step("projects", cache.load_projects)
 
     @reactive.Effect
     @reactive.event(input.open_table_samples)
     def _open_samples():
         current_view.set("samples")
+        if not cache.is_samples_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading samples...")
+                _run_load_step("samples", cache.load_samples)
 
     @reactive.Effect
     @reactive.event(input.open_table_sequencing)
     def _open_sequencing():
         current_view.set("sequencing")
+        if not cache.is_seq_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading sequencing...")
+                _run_load_step("sequencing", cache.load_sequencing)
+
+    @reactive.Effect
+    @reactive.event(input.open_metadata_archive)
+    def _open_metadata_archive():
+        current_view.set("metadata_archive")
+
+    # Legacy metadata archive downloads (served from Posit Connect pins)
+    def _download_legacy_pin(pin_name: str) -> str:
+        from pins import board_connect
+
+        board = board_connect(
+            api_key=os.getenv("POSIT_API_KEY"),
+            server_url=os.getenv("POSIT_SERVER_URL"),
+        )
+        return board.pin_download(pin_name)[0]
+
+    @render.download
+    def legacy_sample_prep():
+        return _download_legacy_pin("vi2172/legacy_metadata_sample_prep")
+
+    @render.download
+    def legacy_sequencing_log():
+        return _download_legacy_pin("vi2172/legacy_metadata_sequencing_log")
 
     @reactive.Effect
     @reactive.event(input.open_tool_reagents)
@@ -509,8 +814,8 @@ def server(input, output, session):
         shown_db_warning_state.set(warning)
         ui.notification_show(
             warning,
-            duration=10,
-            type="warning",
+            duration=None,
+            type="error",
         )
 
     @output
@@ -541,16 +846,6 @@ def server(input, output, session):
                         icon_svg("info"),
                         class_="btn btn-outline-primary app-icon-button",
                     ),
-                    ui.tooltip(
-                        ui.input_action_button(
-                            "update_button",
-                            "Refresh data",
-                            class_="btn btn-primary app-refresh-button",
-                        ),
-                        ui.output_ui("update_tooltip_output"),
-                        placement="left",
-                        id="update_tooltip",
-                    ),
                     class_="app-toolbar",
                 ),
                 class_="app-header-side",
@@ -568,15 +863,7 @@ def server(input, output, session):
         toolbar_children = []
         if db_warning_state.get():
             toolbar_children.append(
-                ui.span("SQLite warning", class_="badge text-bg-warning detail-toolbar-warning")
-            )
-
-        if current_view.get() == "samples":
-            toolbar_children.append(
-                ui.div(
-                    ui.input_switch("include_hist", "Historical samples", False),
-                    class_="detail-toolbar-switch",
-                )
+                ui.span("Database error", class_="badge text-bg-danger detail-toolbar-warning")
             )
 
         if current_view.get() in metadata_table_views:
@@ -608,10 +895,10 @@ def server(input, output, session):
     @output
     @render.ui
     def update_tooltip_output():
-        """Render tooltip content about SQL update information."""
+        """Render tooltip content about metadata freshness and current load status."""
         formatted_info = get_update_display_info()
         return ui.div(
-            ui.tags.strong("SQL db last updated:"),
+            ui.tags.strong("Loaded from live Clarity Postgres:"),
             ui.tags.br(),
             f"Projects: {formatted_info['projects']}",
             ui.tags.br(),
@@ -625,7 +912,7 @@ def server(input, output, session):
             formatted_info["app_refresh"],
             ui.tags.br() if db_warning_state.get() else None,
             ui.tags.br() if db_warning_state.get() else None,
-            ui.tags.strong("Current warning:") if db_warning_state.get() else None,
+            ui.tags.strong("Current database error:") if db_warning_state.get() else None,
             ui.tags.br() if db_warning_state.get() else None,
             db_warning_state.get() if db_warning_state.get() else None,
         )
@@ -635,94 +922,8 @@ def server(input, output, session):
     def on_info_button_click():
         """Handle the info button click event."""
         formatted_info = get_update_display_info()
-        ui.modal_show(
-            ui.modal(
-                ui.h2("ShinyClarity Information", class_="mb-4"),
-                ui.div(
-                    ui.h3("About"),
-                    ui.p(
-                        """This app provides a user-friendly interface to explore and filter LIMS metadata.
-                         It connects to the LIMS database and displays information about projects, samples,
-                         and sequencing runs."""
-                    ),
-                    ui.h3("Database Information"),
-                    ui.p(
-                        "The database is updated hourly on the LIMS server and synced to the app every 30 minutes past the hour."
-                    ),
-                    ui.h4("Last Database Updates:"),
-                    ui.tags.dl(
-                        ui.tags.dt("Projects"),
-                        ui.tags.dd(formatted_info["projects"]),
-                        ui.tags.dt("Samples"),
-                        ui.tags.dd(formatted_info["samples"]),
-                        ui.tags.dt("Sequencing"),
-                        ui.tags.dd(formatted_info["ilmn_sequencing"]),
-                        ui.tags.dt("App Last Refreshed"),
-                        ui.tags.dd(formatted_info["app_refresh"]),
-                        class_="row",
-                    ),
-                    ui.h3("SQL Database Update Scripts"),
-                    ui.p(
-                        ui.tags.a(
-                            "update_sqlite.py",
-                            href="https://github.com/NorwegianVeterinaryInstitute/nvi_lims_epps/blob/main/shiny_app/update_sqlite.py",
-                            target="_blank",
-                        ),
-                        " and ",
-                        ui.tags.a(
-                            "update_sqlite_ilmn_seq.py",
-                            href="https://github.com/NorwegianVeterinaryInstitute/nvi_lims_epps/blob/main/shiny_app/update_sqlite_ilmn_seq.py",
-                            target="_blank",
-                        ),
-                    ),
-                    ui.h3("Data Fields Collection"),
-                    ui.h4("Projects"),
-                    ui.p(
-                        "All fields in this table are collected from submitted sample UDFs directly except for the project sample number which is retrieved using a genologics API-batch function."
-                    ),
-                    ui.h4("Samples"),
-                    ui.p(ui.tags.strong("Extraction step"), ": Extraction Number"),
-                    ui.p(
-                        ui.tags.strong("Fluorescence step"),
-                        ": Absorbance, A260/280 ratio, A260/230 ratio, Fluorescence, Storage Box Name, Storage Well",
-                    ),
-                    ui.p(
-                        ui.tags.strong("Prep Step"),
-                        ": Experiment Name, Reagent Labels",
-                    ),
-                    ui.p(
-                        ui.tags.strong("Billing Step"),
-                        ": Invoice ID, Price, Billing Description",
-                    ),
-                    ui.p(
-                        "Note that the step must be completed in LIMS before the data fields are updated in the Shiny App."
-                    ),
-                    ui.h4("Sequencing"),
-                    ui.p(
-                        ui.tags.strong("Step 8 (NS/MS Run)"),
-                        ": Technician Name, Species, Experiment Name, Comment, Run ID, Flow Cell ID, Reagent Cartridge ID, Date",
-                    ),
-                    ui.p(
-                        ui.tags.strong("Step 7 (Generate SampleSheet)"),
-                        ": Read 1 Cycles, Read 2 Cycles, Index Cycles",
-                    ),
-                    ui.p(
-                        ui.tags.strong("Step 6 (Make Final Loading Dilution)"),
-                        ": Final Library Loading (pM), Volume 20pM Denat Sample (µl), PhiX / library spike-in (%), Average Size - bp",
-                    ),
-                    ui.p(
-                        "Table will not be updated until the sequencing step has been completed."
-                    ),
-                    ui.h3("App Version"),
-                    ui.p(f"Version: {app_version}"),
-                    class_="p-4",
-                    style="max-height: 70vh; overflow-y: auto;",
-                ),
-                size="l",
-                easy_close=True,
-                id="info_modal",
-            )
-        )
+        ssl_info = _format_ssl_modal_info()
+        ui.modal_show(_build_info_modal(formatted_info, ssl_info))
 
     def show_restricted_access_modal(tool_name: str) -> None:
         ui.modal_show(
@@ -777,6 +978,9 @@ def server(input, output, session):
         if current_view.get() == "sequencing":
             return _detail_shell("sequencing", seq_ui())
 
+        if current_view.get() == "metadata_archive":
+            return _detail_shell("metadata_archive", _metadata_archive_ui())
+
         if current_view.get() == "reagents":
             if not is_allowed_reagents_user(session):
                 return _detail_shell(
@@ -796,131 +1000,12 @@ def server(input, output, session):
                 reagent_overview_ui(show_title=False),
             )
 
-        return _detail_shell("storage", ui.output_ui("storage_status_tool"))
-
-    @output
-    @render.ui
-    def storage_status_tool():
-        try:
-            query = """
-            SELECT
-                container_name,
-                state,
-                last_checked,
-                last_updated
-            FROM storage_containers
-            """
-            containers_df = query_to_dataframe(query)
-
-            if containers_df.empty:
-                return ui.p("No storage container data available.")
-
-            def extract_number(name):
-                if pd.isna(name):
-                    return 0
-                match = re.search(r"(\d+)", str(name))
-                return int(match.group(1)) if match else 0
-
-            containers_df["sort_num"] = containers_df["container_name"].apply(
-                extract_number
-            )
-            containers_df = containers_df.sort_values(by="sort_num", ascending=False)
-
-            containers_df = containers_df.rename(
-                columns={
-                    "container_name": "Box Name",
-                    "state": "Status",
-                    "last_checked": "Last Checked",
-                    "last_updated": "Last Updated",
-                }
-            )
-
-            for col in ["Last Checked", "Last Updated"]:
-                if col in containers_df.columns:
-                    containers_df[col] = pd.to_datetime(
-                        containers_df[col], errors="coerce"
-                    ).dt.strftime("%Y-%m-%d %H:%M")
-
-            def format_status(status):
-                if status == "Discarded":
-                    return f"🗑️ {status}"
-                if status == "Populated":
-                    return f"✅ {status}"
-                return status
-
-            containers_df["Status"] = containers_df["Status"].apply(format_status)
-
-            populated_count = containers_df["Status"].str.contains(
-                "Populated", case=False
-            ).sum()
-            discarded_count = containers_df["Status"].str.contains(
-                "Discarded", case=False
-            ).sum()
-            total_count = len(containers_df)
-
-            summary = ui.p(
-                f"📦 Total: {total_count} | ✅ Populated: {populated_count} | 🗑️ Discarded: {discarded_count}",
-                style="font-weight: bold; margin-bottom: 15px;",
-            )
-
-            display_df = containers_df.drop("sort_num", axis=1)
-            table_html = display_df.to_html(
-                index=False,
-                escape=True,
-                classes="table table-striped table-bordered table-sm",
-                border=0,
-            )
-
-            styled_table = f"""
-            <style>
-                .storage-status-table {{
-                    width: 100%;
-                    max-height: 90vh;
-                    overflow-y: auto;
-                    overflow-x: auto;
-                }}
-                .storage-status-table table {{
-                    width: 100%;
-                    table-layout: fixed;
-                    margin: 0;
-                }}
-                .storage-status-table th,
-                .storage-status-table td {{
-                    text-align: left;
-                    vertical-align: middle;
-                    white-space: nowrap;
-                }}
-                .storage-status-table th {{
-                    position: sticky;
-                    top: 0;
-                    z-index: 2;
-                    background: #f8f9fa;
-                }}
-            </style>
-            <div class="storage-status-table">
-                {table_html}
-            </div>
-            """
-
-            return ui.div(summary, ui.HTML(styled_table))
-        except Exception as e:
-            return ui.p(
-                f"⚠️ Error loading storage container data: {str(e)}",
-                style="color: red;",
-            )
+        return _detail_shell("storage", storage_ui())
 
     @output
     @render.ui
     def render_updated_data():
-        """Initialize table modules with the latest reactive datasets."""
-        projects_server(projects_df_reactive.get())
-        samples_server(
-            samples_df_reactive.get(),
-            samples_historical_df_reactive.get(),
-            input,
-        )
-        seq_server(seq_df_reactive.get())
-
+        """Provide a placeholder output so table modules are initialized once above."""
         return ui.TagList()
 
 

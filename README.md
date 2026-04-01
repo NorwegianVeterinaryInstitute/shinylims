@@ -1,11 +1,10 @@
-### Shinylims
+# ShinyClarity
 
-A Python Shiny app for LIMS reporting hosted on Posit Connect.
+A Python Shiny app extending Clarity LIMS with reporting and additional tools for lab users, hosted on Posit Connect.
 
-The app displays metadata stored in a SQLite pin. The db upserts and subsequent pinning to Posit Connect is done using scripts running on the Illumina LIMS Clarity server:
-https://github.com/NorwegianVeterinaryInstitute/nvi_lims_epps/tree/main/shiny_app 
+The app displays live metadata read from the Clarity Postgres database, and communicates with the Clarity API to provide additional tools for lab users.
 
-This python package is managed with uv (https://docs.astral.sh/uv). To run it, clone the repository and install the package with:
+This python package requires Python 3.11+ and is managed with [uv](https://docs.astral.sh/uv). To run it, clone the repository and install the package with:
 
 ```
 uv sync
@@ -17,7 +16,9 @@ Then, run the shiny app with:
 uv run uvicorn shinylims.app:app
 ```
 
-Pushes to `main` are automatically processed by the deployment workflow and can update the Posit Connect deploy branches. There are two instances running: one test instance with admin-only access and one main production instance where access can be granted on request. Each instance is associated with its own git deploy branch. The value in `deploy_mode.txt` specifies which deploy branch should be updated.
+## Development and Posit deployment
+
+Pushes to `main` are automatically processed by the [deployment workflow](https://github.com/NorwegianVeterinaryInstitute/shinylims/blob/main/.github/workflows/deploy.yml) and can update the Posit Connect deploy branches. There are two instances running: one test instance with admin-only access and one main production instance where access can be granted on request. Each instance is associated with its own git deploy branch. The value in `deploy_mode.txt` specifies which deploy branch should be updated.
 
 | Posit instance name | Git deploy branch name | Value for deploy_mode.txt | Access |
 | ------------------- | ---------------------  | ------------------------- | ------ |
@@ -35,9 +36,9 @@ Recommended development flow:
 5. Push the feature branch to update the test Posit instance, then verify the change there.
 6. After verification, open a PR and merge the branch into `main`.
 7. Only switch `deploy_mode.txt` to `prod` on the branch or commit that is intended to go to `main` for production deployment.
-8. Use `both` only when you intentionally want to update both deploy branches in the same run.
+8. Use `both` only when you intentionally want to update both deploy branches at the same time.
 
-For doing code development locally, the api-key and Posit Connect URL must be provided in an .env file. Variables for the credentials are named ```POSIT_API_KEY``` and ```POSIT_SERVER_URL```.
+For doing code development locally, the required environment variables must be provided in an `.env` file. See [`.env.example`](.env.example) for the full list of variables.
 
 The deployment is handled by the GitHub Actions workflow stored in `.github/workflows/deploy.yml`. That workflow generates the manifest and `requirements.txt` file used for Posit deployment.
 
@@ -45,7 +46,7 @@ Automated dependency updates are configured with Dependabot in `.github/dependab
 
 ## Lab Tools
 
-The **Lab Tools** tab currently contains:
+The **Lab Tools** tab contains LIMS-integrated features that require Clarity credentials (see secrets section below):
 
 - `Reagent Lot Registration`: create and submit reagent lots to Clarity LIMS.
 - `Reagent Overview`: review prep sets, sequencing stock, and index plate usage together.
@@ -60,9 +61,16 @@ The LIMS-backed lab tools read Clarity credentials only from environment variabl
 - `LIMS_API_PASS`
 
 Local development can use a `.env` file (loaded automatically when `python-dotenv` is available).
-See .env.example file.
+See [.env.example](.env.example).
 
 On Posit Connect, configure these values in **Vars / Secrets** for the content item instead of using `.env`.
+
+For direct Clarity Postgres access, SSL can be configured with:
+
+- `CLARITY_PG_SSLMODE` such as `prefer`, `require`, `verify-ca`, or `verify-full`
+- `CLARITY_PG_SSLROOTCERT`, `CLARITY_PG_SSLCERT`, and `CLARITY_PG_SSLKEY` when certificate validation or client certificates are required
+
+If you use `CLARITY_PG_URL`, include SSL parameters directly in that URL, for example `?sslmode=require`.
 
 Authorization for `Reagent Lot Registration` and `Reagent Overview`:
 - Authorization is configured in `src/shinylims/security.py`:
