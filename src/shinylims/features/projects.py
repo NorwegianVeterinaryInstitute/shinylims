@@ -2,7 +2,7 @@
 projects.py - Table module containing UI and server logic for the Projects table tab
 '''
 
-from shiny import ui
+from shiny import ui, reactive, render
 from shinywidgets import output_widget, render_widget
 from itables.widget import ITable
 from itables.javascript import JavascriptFunction
@@ -10,8 +10,10 @@ import pandas as pd
 
 from shinylims.ui_helpers.table_controls import (
     DATE_VALUE_RENDERER,
-    clear_all_filters_button,
+    build_filter_status_bar,
+    clear_all_filters_script,
     deselect_all_columns_button,
+    filter_state_draw_callback,
     select_all_columns_button,
 )
 
@@ -23,7 +25,9 @@ from shinylims.ui_helpers.table_controls import (
 def projects_ui():
     """Define UI for the Projects tab."""
     return ui.div(
-        output_widget("projects_table", fillable=False) 
+        clear_all_filters_script("projects"),
+        ui.output_ui("filter_status_bar_projects"),
+        output_widget("projects_table", fillable=False),
     )
 
 
@@ -31,8 +35,16 @@ def projects_ui():
 # SERVER: PROJECT TABLE      #
 ##############################
 
-def projects_server(projects_df):
+def projects_server(projects_df, input):
     """Render the Projects table as an interactive ITable widget."""
+
+    @render.ui
+    def filter_status_bar_projects():
+        try:
+            raw = input.dt_filter_state_projects()
+        except Exception:
+            raw = None
+        return build_filter_status_bar("projects", raw)
 
     @render_widget
     def projects_table():
@@ -111,10 +123,10 @@ def projects_server(projects_df):
                 },
                 {"extend": "spacer", "style": "bar", "text": "Filter"},
                 {"extend": "searchBuilder"},
-                clear_all_filters_button(),
                 {"extend": "spacer", "style": "bar"},
             ],
             order=[[order_column_index, "desc"]],
+            drawCallback=filter_state_draw_callback("projects"),
             columnDefs=[
                 {
                     "targets": comment_index,

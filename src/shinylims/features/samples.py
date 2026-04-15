@@ -10,11 +10,15 @@ import pandas as pd
 import io
 from shinylims.ui_helpers.table_controls import (
     DATE_VALUE_RENDERER,
-    clear_all_filters_button,
+    batch_filter_button,
+    build_filter_status_bar,
+    clear_all_filters_script,
     deselect_all_columns_button,
+    filter_state_draw_callback,
     select_all_columns_button,
     visibility_preset_button,
 )
+import re
 from shinylims.integrations.upload_atlas_file_to_saga import _upload_csv_to_saga
 from datetime import datetime
 
@@ -41,6 +45,9 @@ def samples_ui():
                 min-width: 280px;
             }
         """),
+        clear_all_filters_script("samples"),
+        # Unified filter status bar (visible when any filter is active)
+        ui.output_ui("filter_status_bar"),
         # Widget container
         ui.div(
             output_widget("data_samples", fillable=False),
@@ -56,10 +63,135 @@ def samples_ui():
 # Server logic for the Samples page
 def samples_server(samples_df, input):
 
+    # ── Batch filter state ────────────────────────────────────────────────
+    batch_filter_ids = reactive.Value(None)      # set[str] | None
+    batch_filter_column = reactive.Value("Sample Name")
+
     @reactive.Calc
     def combined_samples():
-        return samples_df().reset_index(drop=True)
+        df = samples_df().reset_index(drop=True)
+        ids = batch_filter_ids.get()
+        if ids is not None:
+            col = batch_filter_column.get()
+            if col in df.columns:
+                df = df[df[col].isin(ids)].reset_index(drop=True)
+        return df
 
+    # ── Unified filter status bar ────────────────────────────────────────
+    @render.ui
+    def filter_status_bar():
+        extra = []
+        ids = batch_filter_ids.get()
+        if ids is not None:
+            col = batch_filter_column.get()
+            df = samples_df()
+            matched = df[col].isin(ids).sum() if col in df.columns else 0
+            extra.append(f"Batch filter: {matched} of {len(ids)} matched in \"{col}\"")
+
+        try:
+            raw = input.dt_filter_state_samples()
+        except Exception:
+            raw = None
+
+        return build_filter_status_bar("samples", raw, extra_lines=extra)
+
+    # ── Batch filter modal ───────────────────────────────────────────────
+    @reactive.Effect
+    @reactive.event(input.batch_filter_open)
+    def _show_batch_filter_modal():
+        ui.modal_show(
+            ui.modal(
+                ui.input_text_area(
+                    "batch_filter_text",
+                    "Paste sample names or IDs (one per line, or separated by commas/tabs):",
+                    rows=10,
+                    width="100%",
+                ),
+                ui.input_select(
+                    "batch_filter_col",
+                    "Match column:",
+                    choices=["Sample Name", "LIMS ID"],
+                    selected=batch_filter_column.get(),
+                ),
+                ui.div(
+                    ui.span(
+                        "Note: ",
+                        style="font-weight: 600;",
+                    ),
+                    "Applying a batch filter will reset any active search and column filters.",
+                    class_="alert alert-warning",
+                    style="font-size: 0.85rem; margin-top: 10px; padding: 8px 12px; margin-bottom: 0;",
+                ),
+                title="Batch Filter",
+                easy_close=True,
+                footer=ui.div(
+                    ui.modal_button("Cancel"),
+                    ui.input_action_button(
+                        "batch_filter_apply",
+                        "Apply",
+                        class_="btn-primary",
+                        style="margin-left: 10px;",
+                    ),
+                    style="display: flex; justify-content: flex-end; gap: 10px;",
+                ),
+            )
+        )
+
+    @reactive.Effect
+    @reactive.event(input.batch_filter_apply)
+    def _apply_batch_filter():
+        raw = input.batch_filter_text() or ""
+        col = input.batch_filter_col() or "Sample Name"
+
+        # Split on newlines, commas, or tabs and strip whitespace
+        ids = {v.strip() for v in re.split(r"[\n,\t]+", raw) if v.strip()}
+
+        if not ids:
+            ui.notification_show("No IDs entered.", type="warning")
+            return
+
+        # Check how many match
+        df = samples_df()
+        if col in df.columns:
+            found = ids & set(df[col].astype(str))
+            not_found = ids - found
+        else:
+            found = set()
+            not_found = ids
+
+        batch_filter_ids.set(ids)
+        batch_filter_column.set(col)
+
+        # Show results in a modal so the user can review before dismissing
+        body_children = [
+            ui.p(f"Matched {len(found)} of {len(ids)} IDs in \"{col}\"."),
+        ]
+        if not_found:
+            body_children.append(
+                ui.p(
+                    ui.tags.strong(f"{len(not_found)} not found: "),
+                    ", ".join(sorted(not_found)),
+                )
+            )
+
+        ui.modal_show(
+            ui.modal(
+                *body_children,
+                title="Batch Filter Applied",
+                easy_close=True,
+                footer=ui.modal_button("OK"),
+            )
+        )
+
+    @reactive.Effect
+    @reactive.event(input.batch_filter_clear)
+    def _clear_batch_filter():
+        batch_filter_ids.set(None)
+
+    @reactive.Effect
+    @reactive.event(input.clear_all_filters_samples)
+    def _clear_all_filters():
+        batch_filter_ids.set(None)
 
     # Step 1 — "Send to SAGA" button (triggered via Shiny.setInputValue from the export dropdown):
     # validate selection, then show credentials modal
@@ -313,12 +445,13 @@ def samples_server(samples_df, input):
                     {'extend': "spacer",
                      'style': 'bar',
                      'text': 'Filter'},
+                    batch_filter_button(),
                     {"extend": "searchBuilder"},
-                    clear_all_filters_button(),
                     {'extend': "spacer",
                      'style': 'bar'},
                 ],
                 order=[[column_index, "desc"]],
+                drawCallback=filter_state_draw_callback("samples"),
                 columnDefs=[
                     {"className": "dt-center", "targets": "_all"},
                     {"width": "200px", "targets": "_all"},

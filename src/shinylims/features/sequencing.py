@@ -2,7 +2,7 @@
 sequencing.py - table module containing UI and server logic for the Sequencing table tab
 '''
 
-from shiny import ui
+from shiny import ui, reactive, render
 from shinywidgets import output_widget, render_widget
 from itables.widget import ITable
 from itables.javascript import JavascriptFunction
@@ -10,8 +10,10 @@ import pandas as pd
 
 from shinylims.ui_helpers.table_controls import (
     DATE_VALUE_RENDERER,
-    clear_all_filters_button,
+    build_filter_status_bar,
+    clear_all_filters_script,
     deselect_all_columns_button,
+    filter_state_draw_callback,
     select_all_columns_button,
     visibility_preset_button,
 )
@@ -23,7 +25,9 @@ from shinylims.ui_helpers.table_controls import (
 
 def seq_ui():
     return ui.div(
-        output_widget("data_seq", fillable=False)
+        clear_all_filters_script("sequencing"),
+        ui.output_ui("filter_status_bar_sequencing"),
+        output_widget("data_seq", fillable=False),
     )
 
 ##############################
@@ -31,7 +35,15 @@ def seq_ui():
 ##############################
 
 # Server logic for the Sequencing page
-def seq_server(seq_df):
+def seq_server(seq_df, input):
+
+    @render.ui
+    def filter_status_bar_sequencing():
+        try:
+            raw = input.dt_filter_state_sequencing()
+        except Exception:
+            raw = None
+        return build_filter_status_bar("sequencing", raw)
 
     # Return HTML tag with DT table element
     @render_widget
@@ -131,11 +143,11 @@ def seq_server(seq_df):
                          'style': 'bar',
                          'text': 'Filter'},
                         {"extend": "searchBuilder"},
-                        clear_all_filters_button(),
                         {'extend': "spacer",
                          'style': 'bar'},
                       ],
                       order=[[column_index, "desc"]],
+                      drawCallback=filter_state_draw_callback("sequencing"),
                       columnDefs=[
                           {'targets': comment_index, 'className': 'left-column', 'width': '200px'} if comment_index != -1 else {},
                           {"className": "dt-center", "targets": "_all"},

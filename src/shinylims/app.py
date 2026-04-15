@@ -676,9 +676,9 @@ def server(input, output, session):
     reagent_overview_server(input, output, session)
     storage_server()
 
-    projects_server(cache.projects)
+    projects_server(cache.projects, input)
     samples_server(cache.samples, input)
-    seq_server(cache.seq)
+    seq_server(cache.seq, input)
 
     db_warning_state = reactive.Value(None)
     shown_db_warning_state = reactive.Value(None)
