@@ -27,6 +27,22 @@ from datetime import datetime
 SAGA_BASE_PATH = "/cluster/shared/vetinst/users/"
 
 
+def _find_batch_filter_matches(
+    df: pd.DataFrame, col: str, ids: set[str]
+) -> tuple[set[str], list[str]]:
+    """Return the matched IDs and sorted non-matches for the selected column."""
+    if col not in df.columns:
+        return set(), sorted(ids)
+
+    found = ids & set(df[col].astype(str))
+    return found, sorted(ids - found)
+
+
+def _batch_filter_non_matches_csv(non_matches: list[str], col: str) -> str:
+    """Serialize batch-filter non-matches for download."""
+    return pd.DataFrame({col: non_matches}).to_csv(index=False)
+
+
 ##############################
 # UI SAMPLES TABLE
 ##############################
@@ -66,6 +82,7 @@ def samples_server(samples_df, input):
     # ── Batch filter state ────────────────────────────────────────────────
     batch_filter_ids = reactive.Value(None)      # set[str] | None
     batch_filter_column = reactive.Value("Sample Name")
+    batch_filter_non_matches = reactive.Value(None)  # dict[str, str | list[str]] | None
 
     @reactive.Calc
     def combined_samples():
@@ -152,15 +169,13 @@ def samples_server(samples_df, input):
 
         # Check how many match
         df = samples_df()
-        if col in df.columns:
-            found = ids & set(df[col].astype(str))
-            not_found = ids - found
-        else:
-            found = set()
-            not_found = ids
+        found, not_found = _find_batch_filter_matches(df, col, ids)
 
         batch_filter_ids.set(ids)
         batch_filter_column.set(col)
+        batch_filter_non_matches.set(
+            {"column": col, "values": not_found} if not_found else None
+        )
 
         # Show results in a modal so the user can review before dismissing
         body_children = [
@@ -170,28 +185,61 @@ def samples_server(samples_df, input):
             body_children.append(
                 ui.p(
                     ui.tags.strong(f"{len(not_found)} not found: "),
-                    ", ".join(sorted(not_found)),
+                    ", ".join(not_found),
                 )
             )
+
+        footer_children = []
+        if not_found:
+            footer_children.append(
+                ui.download_button(
+                    "batch_filter_non_matches_download",
+                    "Download non-matches CSV",
+                    class_="btn-outline-secondary",
+                )
+            )
+        footer_children.append(ui.modal_button("OK"))
 
         ui.modal_show(
             ui.modal(
                 *body_children,
                 title="Batch Filter Applied",
                 easy_close=True,
-                footer=ui.modal_button("OK"),
+                footer=ui.div(
+                    *footer_children,
+                    style="display: flex; justify-content: flex-end; gap: 10px;",
+                ),
             )
+        )
+
+    @render.download(
+        filename=lambda: (
+            f"batch_filter_non_matches_"
+            f"{(batch_filter_non_matches.get() or {'column': 'samples'})['column'].lower().replace(' ', '_')}.csv"
+        ),
+        media_type="text/csv",
+    )
+    def batch_filter_non_matches_download():
+        non_matches = batch_filter_non_matches.get()
+        if non_matches is None:
+            yield _batch_filter_non_matches_csv([], "Sample Name")
+            return
+
+        yield _batch_filter_non_matches_csv(
+            non_matches["values"], non_matches["column"]
         )
 
     @reactive.Effect
     @reactive.event(input.batch_filter_clear)
     def _clear_batch_filter():
         batch_filter_ids.set(None)
+        batch_filter_non_matches.set(None)
 
     @reactive.Effect
     @reactive.event(input.clear_all_filters_samples)
     def _clear_all_filters():
         batch_filter_ids.set(None)
+        batch_filter_non_matches.set(None)
 
     # Step 1 — "Send to SAGA" button (triggered via Shiny.setInputValue from the export dropdown):
     # validate selection, then show credentials modal
