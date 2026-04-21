@@ -2056,7 +2056,7 @@ requires-dist = [
     { name = "scp", specifier = "==0.15.0" },
     { name = "seaborn", specifier = "==0.13.2" },
     { name = "shiny", extras = ["theme"], specifier = "==1.4.0" },
-    { name = "shinyswatch", specifier = "==0.6.1" },
+    { name = "shinyswatch", specifier = "==0.10.0" },
     { name = "shinywidgets", specifier = "==0.5.1" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
     { name = "tomli", specifier = "==2.2.1" },
@@ -2067,7 +2067,7 @@ dev = [{ name = "pytest", specifier = ">=9.0.3,<10" }]
 
 [[package]]
 name = "shinyswatch"
-version = "0.6.1"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "htmltools" },
@@ -2075,9 +2075,9 @@ dependencies = [
     { name = "shiny" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/87/3dc2f847a0e675595d1d9de9364b4bdb2596dcefe5c9d9f61a9427d85959/shinyswatch-0.6.1.tar.gz", hash = "sha256:056417c8405e3dd0927694f1bcaebad1e35992fc443cc7feaa1415afb42a2384", size = 1083767, upload-time = "2024-04-23T17:13:16.235Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/02/09f4f3aa08bf8cb65505df2b890352ca4e8d1ec40006acafdd5c580041df/shinyswatch-0.10.0.tar.gz", hash = "sha256:8a5320b39210f1d17209c1b850af3ffde8eff17f14f80cb59e618e31c730d59d", size = 1342646, upload-time = "2026-03-20T20:49:04.136Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/e3/097fbbcf9e1644157056c34936b5c19e982235ed09e2be6c6be1ab5fec57/shinyswatch-0.6.1-py3-none-any.whl", hash = "sha256:176eed49f0f7ebb4a1e83eb9f1b80f6ea56b260d0f95798bc68a02adc68c5277", size = 1102716, upload-time = "2024-04-23T17:13:13.697Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/aa/ee71cc77cc9a3c3cf33096d65ab9cd3824536e3749eeffc9d08939da1032/shinyswatch-0.10.0-py3-none-any.whl", hash = "sha256:5164f3677a2e15794349fc90e6e3bf5d33b753d4cf21a44cff6510d8e8b06d83", size = 1357657, upload-time = "2026-03-20T20:49:02.543Z" },
 ]
 
 [[package]]
