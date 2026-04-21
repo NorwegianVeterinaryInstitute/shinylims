@@ -12,8 +12,6 @@ from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
 
-import pytest
-
 from shinylims.integrations.queries._shared import (
     PROJECT_IDS_EXCLUDED_FROM_APP,
     _container_state_label,
