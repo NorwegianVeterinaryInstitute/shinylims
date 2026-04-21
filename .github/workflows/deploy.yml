@@ -1,6 +1,9 @@
 # Deploy branch is followed by Posit Connect
 name: Update Requirements and Manifest on Deploy Branch
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
