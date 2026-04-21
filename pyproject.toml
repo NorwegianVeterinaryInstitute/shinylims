@@ -22,7 +22,7 @@ dependencies = [
     "sqlalchemy>=2.0,<3",
     "plotly==6.0.1",
     "shinywidgets==0.8.0",
-    "tomli==2.2.1",
+    "tomli==2.4.1",
     "paramiko==4.0.0",
     "scp==0.15.0"
 
