@@ -16,7 +16,7 @@ dependencies = [
     "psycopg[binary]>=3.2,<4",
     "python-dotenv>=1.0.1",
     "seaborn==0.13.2",
-    "shiny[theme]==1.4.0",
+    "shiny[theme]==1.6.0",
     "brand-yml==0.1.1",
     "shinyswatch==0.6.1",
     "sqlalchemy>=2.0,<3",
