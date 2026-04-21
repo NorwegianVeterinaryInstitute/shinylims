@@ -13,7 +13,7 @@ dependencies = [
     "itables==2.7.3",
     "pandas==2.2.2",
     "pins==0.8.5",
-    "psycopg[binary]>=3.2,<4",
+    "psycopg[binary]>=3.3.3,<4",
     "python-dotenv>=1.0.1",
     "seaborn==0.13.2",
     "shiny[theme]==1.4.0",

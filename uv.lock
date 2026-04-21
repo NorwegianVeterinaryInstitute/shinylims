@@ -2046,7 +2046,7 @@ requires-dist = [
     { name = "paramiko", specifier = "==4.0.0" },
     { name = "pins", specifier = "==0.8.5" },
     { name = "plotly", specifier = "==6.0.1" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.3,<4" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "scp", specifier = "==0.15.0" },
     { name = "seaborn", specifier = "==0.13.2" },
