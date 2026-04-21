@@ -257,11 +257,16 @@ div.dt-button-collection .dt-button {
 }
 
 div.dt-button-collection:has(.dtsb-searchBuilder) {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
   width: min(1000px, calc(100vw - 2rem)) !important;
   max-width: calc(100vw - 2rem);
   max-height: 85vh;
   overflow-y: auto;
   column-count: 1;
+  z-index: 2001;
 }
 
 .index-plate-toolbar {
