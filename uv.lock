@@ -1210,6 +1210,19 @@ wheels = [
 ]
 
 [[package]]
+name = "opentelemetry-api"
+version = "1.41.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "importlib-metadata" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fa/fc/b7564cbef36601aef0d6c9bc01f7badb64be8e862c2e1c3c5c3b43b53e4f/opentelemetry_api-1.41.1.tar.gz", hash = "sha256:0ad1814d73b875f84494387dae86ce0b12c68556331ce6ce8fe789197c949621", size = 71416, upload-time = "2026-04-24T13:15:38.262Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/29/59/3e7118ed140f76b0982ba4321bdaed1997a0473f9720de2d10788a577033/opentelemetry_api-1.41.1-py3-none-any.whl", hash = "sha256:a22df900e75c76dc08440710e51f52f1aa6b451b429298896023e60db5b3139f", size = 69007, upload-time = "2026-04-24T13:15:15.662Z" },
+]
+
+[[package]]
 name = "orjson"
 version = "3.11.7"
 source = { registry = "https://pypi.org/simple" }
@@ -1975,10 +1988,9 @@ wheels = [
 
 [[package]]
 name = "shiny"
-version = "1.4.0"
+version = "1.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "appdirs" },
     { name = "asgiref" },
     { name = "click", marker = "sys_platform != 'emscripten'" },
     { name = "htmltools" },
@@ -1986,27 +1998,43 @@ dependencies = [
     { name = "markdown-it-py" },
     { name = "mdit-py-plugins" },
     { name = "narwhals" },
+    { name = "opentelemetry-api" },
     { name = "orjson" },
     { name = "packaging" },
+    { name = "platformdirs" },
     { name = "prompt-toolkit", marker = "sys_platform != 'emscripten'" },
     { name = "python-multipart", marker = "sys_platform != 'emscripten'" },
     { name = "questionary", marker = "sys_platform != 'emscripten'" },
     { name = "setuptools", marker = "python_full_version >= '3.12'" },
+    { name = "shinychat" },
     { name = "starlette" },
     { name = "typing-extensions" },
     { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
     { name = "watchfiles", marker = "sys_platform != 'emscripten'" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/dc/1f1da052f0af709ee73dc07ef12f4c5395eff861e430143ae115fabdc3bb/shiny-1.4.0.tar.gz", hash = "sha256:05c709c2a074b9e9f5a82065460815ff40bc686286bacfcab5195a69f3ae759b", size = 4837146, upload-time = "2025-04-08T16:49:45.406Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3c/09/cbb28b11ac6556aa654c2cbc403aa75c89844e699d4f45897743c91ea139/shiny-1.6.1.tar.gz", hash = "sha256:f58450c36faffc6ca27773331a0007d9455d7c396360257a4c4df924162f5f69", size = 5112401, upload-time = "2026-05-01T16:01:28.358Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f5/e8/ae54ce930d965211c77b28a8c3792f78a80ad1bd012bbb05000176dd246c/shiny-1.4.0-py3-none-any.whl", hash = "sha256:c7748d0cd32696477613b9c00664320ea1604b9d9770a2ec2e8ea7ea5e0b44b4", size = 3870396, upload-time = "2025-04-08T16:49:43.516Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/8c/330a7c763626c71214c1f6dfd0a28af0deef32ae5dda1faf19fbe0a16a24/shiny-1.6.1-py3-none-any.whl", hash = "sha256:47822d6fdbe54d61cd5a369549655bf69e2a8160a488244d6e76aa81d133bf79", size = 3917952, upload-time = "2026-05-01T16:01:26.435Z" },
 ]
 
 [package.optional-dependencies]
 theme = [
     { name = "brand-yml" },
     { name = "libsass" },
+]
+
+[[package]]
+name = "shinychat"
+version = "0.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "htmltools" },
+    { name = "shiny" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/57/6d/d37a85041b5fc356b4a8bb3a5f9b057a7a3677a3c2204ff81363c67cabc6/shinychat-0.3.1.tar.gz", hash = "sha256:ed66c2ca42987a0afb09fb6ac8e51fba64b9c57eb3f4f6d1105108307189caeb", size = 1018448, upload-time = "2026-05-01T00:11:12.94Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f9/96/1bc079897a0c2c2ec6356b684eb2b83c6fd3ae84ff1084170a0128bd8973/shinychat-0.3.1-py3-none-any.whl", hash = "sha256:4fbe3f06dd7501412323eaaaa16c0af3c32bbb74b57f454574796846e0e40494", size = 1039386, upload-time = "2026-05-01T00:11:10.349Z" },
 ]
 
 [[package]]
@@ -2050,7 +2078,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "scp", specifier = "==0.15.0" },
     { name = "seaborn", specifier = "==0.13.2" },
-    { name = "shiny", extras = ["theme"], specifier = "==1.4.0" },
+    { name = "shiny", extras = ["theme"], specifier = "==1.6.1" },
     { name = "shinyswatch", specifier = "==0.6.1" },
     { name = "shinywidgets", specifier = "==0.8.0" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
