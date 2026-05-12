@@ -2052,7 +2052,7 @@ requires-dist = [
     { name = "seaborn", specifier = "==0.13.2" },
     { name = "shiny", extras = ["theme"], specifier = "==1.4.0" },
     { name = "shinyswatch", specifier = "==0.6.1" },
-    { name = "shinywidgets", specifier = "==0.8.0" },
+    { name = "shinywidgets", specifier = "==0.8.1" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
     { name = "tomli", specifier = "==2.4.1" },
 ]
@@ -2077,7 +2077,7 @@ wheels = [
 
 [[package]]
 name = "shinywidgets"
-version = "0.8.0"
+version = "0.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anywidget" },
@@ -2086,9 +2086,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "shiny" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/86/f8/1d801918db6e64d93cf1b95299a74ebe65ce9efed07f00fa15d5cb10b333/shinywidgets-0.8.0.tar.gz", hash = "sha256:429541acfe248a72e72b333446ef75371a3f7f5217e41096382af0a94bdcfea7", size = 1908760, upload-time = "2026-04-13T23:16:03.44Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/66/46/59401018da794cbf75f05bc44ee1e176f191dedad9abddf6deee2b721b83/shinywidgets-0.8.1.tar.gz", hash = "sha256:8a541205d15d94475c384beebbc3debc8b67b825bbd87da71f9a8db562a82d5a", size = 1908922, upload-time = "2026-05-06T15:11:32.561Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/26/486c13c9d9618dca053bafbb088ccc8bb19894496714acab3be37d175e9f/shinywidgets-0.8.0-py3-none-any.whl", hash = "sha256:7be5cba2d551f68668638e74a8ede61e49b98892ca5056091dd69da5df2e8c5a", size = 1818664, upload-time = "2026-04-13T23:16:01.766Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/2d/baa64d73633afecbd4c7d212bcf514582c5ce8dea4f9e65ac7829ef5b822/shinywidgets-0.8.1-py3-none-any.whl", hash = "sha256:c766a7b92785e00e5cb4a4cec9f2b73d039249dbea88400487dd9bc894d54779", size = 1818747, upload-time = "2026-05-06T15:11:30.575Z" },
 ]
 
 [[package]]
