@@ -1665,6 +1665,61 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
   margin-top: var(--space-2);
 }
 
+/* De-emphasized, collapsed archive disclosure (rarely-used pre-Nov-2023 data) */
+.dashboard-archive-disclosure {
+  margin-top: var(--space-2);
+}
+
+.dashboard-archive-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 0.75rem;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.dashboard-archive-summary::-webkit-details-marker {
+  display: none;
+}
+
+.dashboard-archive-summary:hover {
+  color: var(--text-strong);
+  border-color: var(--border-strong);
+  background-color: rgba(28, 79, 185, 0.04);
+}
+
+.dashboard-archive-icon {
+  display: inline-flex;
+}
+
+.dashboard-archive-icon svg,
+.dashboard-archive-chevron svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  opacity: 0.75;
+}
+
+.dashboard-archive-chevron {
+  margin-left: auto;
+  display: inline-flex;
+  transition: transform 140ms ease;
+}
+
+.dashboard-archive-disclosure[open] .dashboard-archive-chevron {
+  transform: rotate(90deg);
+}
+
+.dashboard-archive-body {
+  padding: var(--space-2) 0.25rem 0.25rem;
+}
+
 .dashboard-card-trigger:focus-visible,
 .app-toolbar .btn:focus-visible,
 .detail-toolbar .btn:focus-visible,
@@ -1788,6 +1843,18 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
 
 .detail-toolbar-switch .form-check-input:checked:focus {
   box-shadow: inset 0 0 0 0.2rem #1c4fb9, inset 1rem 0 0 0 #ffffff, 0 0 0 0.2rem rgba(28, 79, 185, 0.2);
+}
+
+.detail-view-switcher {
+  margin-right: 0.35rem;
+}
+
+.detail-view-switcher .btn {
+  font-weight: 600;
+}
+
+.detail-home-button {
+  font-weight: 600;
 }
 
 .detail-icon-button {

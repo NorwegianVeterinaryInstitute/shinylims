@@ -43,6 +43,18 @@ def _batch_filter_non_matches_csv(non_matches: list[str], col: str) -> str:
     return pd.DataFrame({col: non_matches}).to_csv(index=False)
 
 
+def _split_seq_limsids(cell) -> set[str]:
+    """Split a samples ``seq_limsid`` cell (comma-separated LUIDs) into a set."""
+    if cell is None or (isinstance(cell, float) and pd.isna(cell)):
+        return set()
+    return {part.strip() for part in str(cell).split(",") if part.strip()}
+
+
+def _seq_limsid_matches(cell, wanted: set[str]) -> bool:
+    """True when any LUID in ``cell`` is one of the wanted sequencing LUIDs."""
+    return bool(_split_seq_limsids(cell) & wanted)
+
+
 ##############################
 # UI SAMPLES TABLE
 ##############################
@@ -84,6 +96,10 @@ def samples_server(samples_df, input):
     batch_filter_column = reactive.Value("Sample Name")
     batch_filter_non_matches = reactive.Value(None)  # dict[str, str | list[str]] | None
 
+    # ── Run filter state (set from the Sequencing tab) ────────────────────
+    run_filter_seq_ids = reactive.Value(None)    # set[str] | None
+    run_filter_label = reactive.Value(None)      # str | None (run IDs, for display)
+
     @reactive.Calc
     def combined_samples():
         df = samples_df().reset_index(drop=True)
@@ -92,12 +108,29 @@ def samples_server(samples_df, input):
             col = batch_filter_column.get()
             if col in df.columns:
                 df = df[df[col].isin(ids)].reset_index(drop=True)
+        seq_ids = run_filter_seq_ids.get()
+        if seq_ids and "seq_limsid" in df.columns:
+            mask = df["seq_limsid"].apply(lambda cell: _seq_limsid_matches(cell, seq_ids))
+            df = df[mask].reset_index(drop=True)
         return df
 
     # ── Unified filter status bar ────────────────────────────────────────
     @render.ui
     def filter_status_bar():
         extra = []
+        seq_ids = run_filter_seq_ids.get()
+        if seq_ids:
+            df = samples_df()
+            if "seq_limsid" in df.columns:
+                matched = df["seq_limsid"].apply(
+                    lambda cell: _seq_limsid_matches(cell, seq_ids)
+                ).sum()
+            else:
+                matched = 0
+            label = run_filter_label.get()
+            run_desc = f" (run {label})" if label else ""
+            extra.append(f"Run filter{run_desc}: {matched} samples")
+
         ids = batch_filter_ids.get()
         if ids is not None:
             col = batch_filter_column.get()
@@ -240,6 +273,20 @@ def samples_server(samples_df, input):
     def _clear_all_filters():
         batch_filter_ids.set(None)
         batch_filter_non_matches.set(None)
+        run_filter_seq_ids.set(None)
+        run_filter_label.set(None)
+
+    def set_run_filter(seq_ids, label: str | None = None) -> None:
+        """Filter the samples table to rows whose seq_limsid is in ``seq_ids``.
+
+        Called from the Sequencing tab. Clears any active batch filter so the
+        run view starts clean; DataTables search/column filters are reset by
+        the shared clear-all script when the user dismisses the status bar.
+        """
+        batch_filter_ids.set(None)
+        batch_filter_non_matches.set(None)
+        run_filter_seq_ids.set(set(seq_ids) if seq_ids else None)
+        run_filter_label.set(label)
 
     # Step 1 — "Send to SAGA" button (triggered via Shiny.setInputValue from the export dropdown):
     # validate selection, then show credentials modal
@@ -510,3 +557,5 @@ def samples_server(samples_df, input):
                     }
                 ]
             )
+
+    return {"set_run_filter": set_run_filter}
