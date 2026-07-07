@@ -102,15 +102,6 @@ DASHBOARD_SECTIONS = [
                 "description": "Inspect sequencing run metadata and performance metrics.",
                 "availability_note": "Nov 2023+",
             },
-            {
-                "view": "metadata_archive",
-                "button_id": "open_metadata_archive",
-                "icon": "box-archive",
-                "eyebrow": "Metadata Archive",
-                "title": "Before November 2023",
-                "description": "Access archived metadata files from before LIMS.",
-                "availability_note": "Archive",
-            },
         ],
     },
     {
@@ -163,11 +154,6 @@ VIEW_DETAILS = {
         "eyebrow": "Metadata Table",
         "title": "Illumina Sequencing",
         "description": "Inspect sequencing run metadata and metrics from completed runs.",
-    },
-    "metadata_archive": {
-        "eyebrow": "Metadata Archive",
-        "title": "Metadata Before November 2023",
-        "description": "Download archived metadata files from before the live Clarity Postgres coverage begins.",
     },
     "reagents": {
         "eyebrow": "Lab Tool",
@@ -247,6 +233,32 @@ def _dashboard_card(card: dict[str, str], *, current_user_blocked: bool = False)
     )
 
 
+def _dashboard_archive_disclosure() -> object:
+    """Render the pre-Nov-2023 archive as a collapsed, de-emphasized disclosure.
+
+    Uses a native ``<details>`` element (collapsed by default) so the rarely-used
+    archive stays out of the way but remains reachable, with the download cards
+    revealed inline on expand.
+    """
+    return ui.tags.details(
+        ui.tags.summary(
+            ui.span(icon_svg("box-archive"), class_="dashboard-archive-icon", aria_hidden="true"),
+            ui.span("Archived metadata (before November 2023)"),
+            ui.span(
+                icon_svg("chevron-right"),
+                class_="dashboard-archive-chevron",
+                aria_hidden="true",
+            ),
+            class_="dashboard-archive-summary",
+        ),
+        ui.div(
+            _metadata_archive_ui(),
+            class_="dashboard-archive-body",
+        ),
+        class_="dashboard-archive-disclosure",
+    )
+
+
 def _dashboard_section(section: dict[str, object], *, blocked_views: set[str] | None = None):
     blocked_views = blocked_views or set()
     cards = section["cards"]
@@ -254,23 +266,12 @@ def _dashboard_section(section: dict[str, object], *, blocked_views: set[str] | 
         live_cards = [
             _dashboard_card(card, current_user_blocked=card["view"] in blocked_views)
             for card in cards
-            if card["view"] != "metadata_archive"
-        ]
-        archive_cards = [
-            _dashboard_card(card, current_user_blocked=card["view"] in blocked_views)
-            for card in cards
-            if card["view"] == "metadata_archive"
         ]
         content = [
             ui.layout_columns(*live_cards, col_widths=[4] * len(live_cards)),
         ]
-        if archive_cards:
-            content.append(
-                ui.div(
-                    ui.layout_columns(*archive_cards, col_widths=[4] * len(archive_cards)),
-                    class_="dashboard-subrow",
-                )
-            )
+        if LEGACY_METADATA_DOWNLOADS:
+            content.append(_dashboard_archive_disclosure())
     else:
         rendered_cards = [
             _dashboard_card(card, current_user_blocked=card["view"] in blocked_views)
@@ -677,8 +678,8 @@ def server(input, output, session):
     storage_server()
 
     projects_server(cache.projects, input)
-    samples_server(cache.samples, input)
-    seq_server(cache.seq, input)
+    samples_controller = samples_server(cache.samples, input)
+    seq_controller = seq_server(cache.seq, input)
 
     db_warning_state = reactive.Value(None)
     shown_db_warning_state = reactive.Value(None)
@@ -691,6 +692,31 @@ def server(input, output, session):
             warning = _format_dataset_load_error(e)
             print(f"[app-load] step={step_label} backend={_metadata_backend_label()} error={warning}")
             db_warning_state.set(warning)
+
+    # ── Navigation ────────────────────────────────────────────────────────
+    nav_history = reactive.Value([])  # stack of previously-visited views
+
+    def _navigate(target: str) -> None:
+        """Switch views, remembering the prior view so Back returns to it."""
+        prev = current_view.get()
+        if prev != target:
+            nav_history.set(nav_history.get() + [prev])
+        current_view.set(target)
+
+    _METADATA_LOADERS = {
+        "projects": (cache.load_projects, cache.is_projects_loaded),
+        "samples": (cache.load_samples, cache.is_samples_loaded),
+        "sequencing": (cache.load_sequencing, cache.is_seq_loaded),
+    }
+
+    def _open_metadata_view(view: str) -> None:
+        """Navigate to a metadata table view, loading its dataset on first open."""
+        _navigate(view)
+        loader, is_loaded = _METADATA_LOADERS[view]
+        if not is_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message=f"Loading {view}...")
+                _run_load_step(view, loader)
 
     def update_database_data():
         """Refresh only the datasets that have already been loaded in this session."""
@@ -732,34 +758,56 @@ def server(input, output, session):
     @reactive.Effect
     @reactive.event(input.open_table_projects)
     def _open_projects():
-        current_view.set("projects")
-        if not cache.is_projects_loaded():
-            with ui.Progress(min=1, max=1) as p:
-                p.set(message="Loading projects...")
-                _run_load_step("projects", cache.load_projects)
+        _open_metadata_view("projects")
 
     @reactive.Effect
     @reactive.event(input.open_table_samples)
     def _open_samples():
-        current_view.set("samples")
+        _open_metadata_view("samples")
+
+    @reactive.Effect
+    @reactive.event(input.open_table_sequencing)
+    def _open_sequencing():
+        _open_metadata_view("sequencing")
+
+    # Direct switch between metadata tables (from the detail header quick-nav)
+    @reactive.Effect
+    @reactive.event(input.nav_projects)
+    def _nav_projects():
+        _open_metadata_view("projects")
+
+    @reactive.Effect
+    @reactive.event(input.nav_samples)
+    def _nav_samples():
+        _open_metadata_view("samples")
+
+    @reactive.Effect
+    @reactive.event(input.nav_sequencing)
+    def _nav_sequencing():
+        _open_metadata_view("sequencing")
+
+    @reactive.Effect
+    @reactive.event(input.view_run_samples)
+    def _view_samples_for_run():
+        """Cross-link: filter the Samples view to the run(s) selected in Sequencing."""
+        selection = seq_controller["get_selected_runs"]()
+        if not selection:
+            ui.notification_show(
+                "Select one or more run rows in the table first.",
+                type="warning",
+                duration=4,
+            )
+            return
+
+        seq_ids, run_labels = selection
         if not cache.is_samples_loaded():
             with ui.Progress(min=1, max=1) as p:
                 p.set(message="Loading samples...")
                 _run_load_step("samples", cache.load_samples)
 
-    @reactive.Effect
-    @reactive.event(input.open_table_sequencing)
-    def _open_sequencing():
-        current_view.set("sequencing")
-        if not cache.is_seq_loaded():
-            with ui.Progress(min=1, max=1) as p:
-                p.set(message="Loading sequencing...")
-                _run_load_step("sequencing", cache.load_sequencing)
-
-    @reactive.Effect
-    @reactive.event(input.open_metadata_archive)
-    def _open_metadata_archive():
-        current_view.set("metadata_archive")
+        label = ", ".join(dict.fromkeys(run_labels)) if run_labels else None
+        samples_controller["set_run_filter"](seq_ids, label)
+        _navigate("samples")
 
     # Legacy metadata archive downloads (served from Posit Connect pins)
     def _download_legacy_pin(pin_name: str) -> str:
@@ -782,21 +830,34 @@ def server(input, output, session):
     @reactive.Effect
     @reactive.event(input.open_tool_reagents)
     def _open_reagents():
-        current_view.set("reagents")
+        _navigate("reagents")
 
     @reactive.Effect
     @reactive.event(input.open_tool_index_plate_maps)
     def _open_reagent_overview():
-        current_view.set("reagent_overview")
+        _navigate("reagent_overview")
 
     @reactive.Effect
     @reactive.event(input.open_tool_storage)
     def _open_storage():
-        current_view.set("storage")
+        _navigate("storage")
 
     @reactive.Effect
     @reactive.event(input.back_to_dashboard)
     def _back_to_dashboard():
+        """Return to the previous view (or the dashboard when history is empty)."""
+        hist = nav_history.get()
+        if hist:
+            nav_history.set(hist[:-1])
+            current_view.set(hist[-1])
+        else:
+            current_view.set("dashboard")
+
+    @reactive.Effect
+    @reactive.event(input.go_home)
+    def _go_home():
+        """Always return to the dashboard front page and reset navigation history."""
+        nav_history.set([])
         current_view.set("dashboard")
 
     @reactive.Effect
@@ -867,8 +928,35 @@ def server(input, output, session):
             )
 
         if current_view.get() in metadata_table_views:
+            active = current_view.get()
+            metadata_switcher = ui.div(
+                *[
+                    ui.input_action_button(
+                        f"nav_{view}",
+                        label,
+                        class_=(
+                            "btn btn-sm "
+                            + ("btn-primary" if view == active else "btn-outline-primary")
+                        ),
+                    )
+                    for view, label in (
+                        ("projects", "Projects"),
+                        ("samples", "Samples"),
+                        ("sequencing", "Sequencing"),
+                    )
+                ],
+                class_="btn-group btn-group-sm detail-view-switcher",
+                role="group",
+                aria_label="Switch metadata table",
+            )
             toolbar_children.extend(
                 [
+                    metadata_switcher,
+                    ui.input_action_button(
+                        "go_home",
+                        ui.TagList(icon_svg("house"), " Home"),
+                        class_="btn btn-outline-primary btn-sm detail-home-button",
+                    ),
                     ui.input_action_button(
                         "info_button",
                         icon_svg("info"),
@@ -977,9 +1065,6 @@ def server(input, output, session):
 
         if current_view.get() == "sequencing":
             return _detail_shell("sequencing", seq_ui())
-
-        if current_view.get() == "metadata_archive":
-            return _detail_shell("metadata_archive", _metadata_archive_ui())
 
         if current_view.get() == "reagents":
             if not is_allowed_reagents_user(session):

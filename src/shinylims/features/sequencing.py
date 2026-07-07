@@ -3,7 +3,7 @@ sequencing.py - table module containing UI and server logic for the Sequencing t
 '''
 
 from shiny import ui, reactive, render
-from shinywidgets import output_widget, render_widget
+from shinywidgets import output_widget, render_widget, reactive_read
 from itables.widget import ITable
 from itables.javascript import JavascriptFunction
 import pandas as pd
@@ -26,6 +26,19 @@ from shinylims.ui_helpers.table_controls import (
 def seq_ui():
     return ui.div(
         clear_all_filters_script("sequencing"),
+        ui.div(
+            ui.input_action_button(
+                "view_run_samples",
+                "View samples for selected run",
+                class_="btn btn-outline-primary btn-sm",
+            ),
+            ui.span(
+                "Select one or more run rows, then view their samples.",
+                class_="text-muted",
+                style="margin-left: 10px; font-size: 0.85rem;",
+            ),
+            class_="mb-2 d-flex align-items-center",
+        ),
         ui.output_ui("filter_status_bar_sequencing"),
         output_widget("data_seq", fillable=False),
     )
@@ -160,3 +173,34 @@ def seq_server(seq_df, input):
                               "render": DATE_VALUE_RENDERER
                           }
                       ])
+
+    def get_selected_runs():
+        """Return (seq_limsids, run_labels) for the currently selected run rows,
+        or None when nothing is selected. Row indices are positional into the
+        same dataframe passed to the widget (reset_index in ``data_seq``)."""
+        try:
+            selected = reactive_read(data_seq.widget, "selected_rows")
+        except Exception:
+            selected = None
+        if not selected:
+            return None
+
+        dat = seq_df().reset_index(drop=True)
+        if "seq_limsid" not in dat.columns:
+            return None
+
+        rows = dat.iloc[list(selected)]
+        seq_ids = {
+            str(v).strip() for v in rows["seq_limsid"].dropna() if str(v).strip()
+        }
+        if not seq_ids:
+            return None
+
+        run_labels = []
+        if "Run ID" in rows.columns:
+            run_labels = [
+                str(v).strip() for v in rows["Run ID"].dropna() if str(v).strip()
+            ]
+        return seq_ids, run_labels
+
+    return {"get_selected_runs": get_selected_runs}
