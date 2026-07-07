@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main  # Trigger when pushing to main
-      - feature/batch-filtering # Trigger when pushing to feature branch (temp for testing)
+      - feature/run-to-samples-filter
 jobs:
   update-branches:
     env:
