@@ -9,7 +9,9 @@ from itables.javascript import JavascriptFunction
 import pandas as pd
 
 from shinylims.ui_helpers.table_controls import (
+    COLVIS_COLUMN_TEXT,
     DATE_VALUE_RENDERER,
+    FILTER_BUILDER_LANGUAGE,
     build_filter_status_bar,
     clear_all_filters_script,
     deselect_all_columns_button,
@@ -68,14 +70,18 @@ def projects_server(projects_df, input):
         return ITable(
             dat,
             select=True,
-            layout={"topStart": "buttons", "topEnd": "search"},
-            column_filters="footer",
+            layout={"topStart": "buttons", "topEnd": "search", "bottomEnd": None},
+            column_filters="header",
             search={"smart": True, "regex": True, "caseInsensitive": True},
             lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],
             classes="compact hover order-column cell-border",
             scrollY="84vh",
             scrollX=True,
             paging=True,
+            scroller=True,
+            deferRender=True,
+            colReorder=True,
+            language=FILTER_BUILDER_LANGUAGE,
             maxBytes=0,
             allow_html=True,
             autoWidth=True,
@@ -86,6 +92,7 @@ def projects_server(projects_df, input):
                     "extend": "colvis",
                     "text": "Selection",
                     "collectionLayout": "two-column",
+                    "columnText": COLVIS_COLUMN_TEXT,
                 },
                 {
                     "extend": "collection",
@@ -95,8 +102,8 @@ def projects_server(projects_df, input):
                         deselect_all_columns_button(),
                     ],
                 },
-                {"extend": "spacer", "style": "bar", "text": "Rows"},
-                "pageLength",
+                {"extend": "spacer", "style": "bar", "text": "Filter"},
+                {"extend": "searchBuilder"},
                 {"extend": "spacer", "style": "bar", "text": "Export"},
                 {
                     "extend": "collection",
@@ -121,8 +128,6 @@ def projects_server(projects_df, input):
                         },
                     ],
                 },
-                {"extend": "spacer", "style": "bar", "text": "Filter"},
-                {"extend": "searchBuilder"},
                 {"extend": "spacer", "style": "bar"},
             ],
             order=[[order_column_index, "desc"]],

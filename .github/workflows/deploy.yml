@@ -8,7 +8,7 @@ on:
   push:
     branches:
       - main  # Trigger when pushing to main
-      - feature/run-to-samples-filter
+      - feature/itables-2.9.1
 jobs:
   update-branches:
     env:
