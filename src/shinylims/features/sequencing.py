@@ -9,12 +9,15 @@ from itables.javascript import JavascriptFunction
 import pandas as pd
 
 from shinylims.ui_helpers.table_controls import (
+    COLVIS_COLUMN_TEXT,
     DATE_VALUE_RENDERER,
+    FILTER_BUILDER_LANGUAGE,
     build_filter_status_bar,
     clear_all_filters_script,
     deselect_all_columns_button,
     filter_state_draw_callback,
     select_all_columns_button,
+    truncated_text_renderer,
     visibility_preset_button,
 )
 
@@ -73,6 +76,8 @@ def seq_server(seq_df, input):
         comment_index = dat.columns.get_loc('Comment') if 'Comment' in dat.columns else -1
         run_number_index = dat.columns.get_loc('Run Number') if 'Run Number' in dat.columns else -1
         cluster_density_index = dat.columns.get_loc('Cluster Density') if 'Cluster Density' in dat.columns else -1
+        species_index = dat.columns.get_loc('Species') if 'Species' in dat.columns else -1
+        experiment_name_index = dat.columns.get_loc('Experiment Name') if 'Experiment Name' in dat.columns else -1
         
         # Find index for order column
         column_to_sort = "Seq Date"
@@ -85,16 +90,20 @@ def seq_server(seq_df, input):
 
         return ITable(
                 dat, 
-                layout={"topStart": "buttons", "topEnd": "search"},
+                layout={"topStart": "buttons", "topEnd": "search", "bottomEnd": None},
                 lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],
                 select=True,  
-                column_filters="footer", 
+                column_filters="header",
                 search={"smart": True},
                 classes="nowrap compact hover order-column cell-border",
                 scrollY="84vh",
                 scrollX=True,
                 paging=True,
-                maxBytes=0, 
+                scroller=True,
+                deferRender=True,
+                colReorder=True,
+                language=FILTER_BUILDER_LANGUAGE,
+                maxBytes=0,
                 allow_html=True,
                 autoWidth=True,
                 keys=True,
@@ -107,6 +116,7 @@ def seq_server(seq_df, input):
                             "extend": "colvis",
                             "text": "Selection",
                             "collectionLayout": "two-column",
+                            "columnText": COLVIS_COLUMN_TEXT,
                         },
                         # Button to select specific columns presets
                         {
@@ -120,32 +130,28 @@ def seq_server(seq_df, input):
                     },
                         {'extend': "spacer",
                          'style': 'bar',
-                         'text': 'Rows'},
-                         "pageLength",
+                         'text': 'Filter'},
+                        {"extend": "searchBuilder"},
                         {'extend': "spacer",
                          'style': 'bar',
                          'text': 'Export'},
-                        # Collection of export options
                         {
-                            "extend": "collection", 
+                            "extend": "collection",
                             "text": "Type",
                             "buttons": [
-                                # Copy to clipboard
                                 {
                                     "extend": "copyHtml5",
                                     "exportOptions": {"columns": ":visible"},
                                     "text": "Copy to Clipboard"
                                 },
-                                # CSV export with visible columns
                                 {
-                                    "extend": "csvHtml5", 
+                                    "extend": "csvHtml5",
                                     "exportOptions": {"columns": ":visible"},
                                     "title": "Sequencing Data Export",
                                     "text": "Export to CSV"
                                 },
-                                # Excel export with visible columns
                                 {
-                                    "extend": "excelHtml5", 
+                                    "extend": "excelHtml5",
                                     "exportOptions": {"columns": ":visible"},
                                     "title": "Sequencing Data Export",
                                     "text": "Export to Excel"
@@ -153,16 +159,17 @@ def seq_server(seq_df, input):
                             ]
                         },
                         {'extend': "spacer",
-                         'style': 'bar',
-                         'text': 'Filter'},
-                        {"extend": "searchBuilder"},
-                        {'extend': "spacer",
                          'style': 'bar'},
                       ],
                       order=[[column_index, "desc"]],
                       drawCallback=filter_state_draw_callback("sequencing"),
                       columnDefs=[
-                          {'targets': comment_index, 'className': 'left-column', 'width': '200px'} if comment_index != -1 else {},
+                          {
+                              'targets': comment_index,
+                              'className': 'left-column',
+                              'width': '800px',
+                              'render': truncated_text_renderer(max_chars=250, max_width_px=800),
+                          } if comment_index != -1 else {},
                           {"className": "dt-center", "targets": "_all"},
                           {"targets": run_number_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")} if run_number_index != -1 else {},
                           {"targets": cluster_density_index, "render": JavascriptFunction("function(data, type, row) { return type === 'display' ? Math.round(data).toString() : data; }")} if cluster_density_index != -1 else {},
@@ -171,7 +178,19 @@ def seq_server(seq_df, input):
                               "targets": date_column_index,
                               "type": "date",
                               "render": DATE_VALUE_RENDERER
-                          }
+                          },
+                          {
+                              "targets": species_index,
+                              "className": "left-column",
+                              "width": "220px",
+                              "render": truncated_text_renderer(max_chars=50, max_width_px=220),
+                          } if species_index != -1 else {},
+                          {
+                              "targets": experiment_name_index,
+                              "className": "left-column",
+                              "width": "260px",
+                              "render": truncated_text_renderer(max_chars=60, max_width_px=260),
+                          } if experiment_name_index != -1 else {},
                       ])
 
     def get_selected_runs():

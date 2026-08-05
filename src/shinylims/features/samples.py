@@ -9,13 +9,16 @@ from itables.javascript import JavascriptFunction
 import pandas as pd
 import io
 from shinylims.ui_helpers.table_controls import (
+    COLVIS_COLUMN_TEXT,
     DATE_VALUE_RENDERER,
+    FILTER_BUILDER_LANGUAGE,
     batch_filter_button,
     build_filter_status_bar,
     clear_all_filters_script,
     deselect_all_columns_button,
     filter_state_draw_callback,
     select_all_columns_button,
+    truncated_text_renderer,
     visibility_preset_button,
 )
 import re
@@ -440,17 +443,27 @@ def samples_server(samples_df, input):
             column_index = 0
             date_column_index = -1
 
+        # Indices for columns whose content is truncated with a hover tooltip
+        nird_filename_index = dat.columns.get_loc("NIRD Filename") if "NIRD Filename" in dat.columns else -1
+        experiment_name_index = dat.columns.get_loc("Experiment Name") if "Experiment Name" in dat.columns else -1
+        billing_description_index = dat.columns.get_loc("Billing Description") if "Billing Description" in dat.columns else -1
+        reagent_label_index = dat.columns.get_loc("Reagent Label") if "Reagent Label" in dat.columns else -1
+
         return ITable(
                 dat,
                 select=True,
-                layout={"topStart": "buttons", "topEnd": "search"},
+                layout={"topStart": "buttons", "topEnd": "search", "bottomEnd": None},
                 lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],
-                column_filters="footer",
+                column_filters="header",
                 search={"smart": True},
                 classes="nowrap compact hover order-column cell-border",
                 scrollY="84vh",
                 scrollX=True,
                 paging=True,
+                scroller=True,
+                deferRender=True,
+                colReorder=True,
+                language=FILTER_BUILDER_LANGUAGE,
                 autoWidth=True,
                 maxBytes=0,
                 allow_html=True,
@@ -464,6 +477,7 @@ def samples_server(samples_df, input):
                         "extend": "colvis",
                         "text": "Selection",
                         "collectionLayout": "two-column",
+                        "columnText": COLVIS_COLUMN_TEXT,
                     },
                     {
                         "extend": "collection",
@@ -474,11 +488,11 @@ def samples_server(samples_df, input):
                             visibility_preset_button([2, 3, 4, 5, 9, 10, 21]),
                         ]
                     },
-                    # ── Row settings ──────────────────────────────────────────
                     {'extend': "spacer",
                      'style': 'bar',
-                     'text': 'Rows'},
-                    "pageLength",
+                     'text': 'Filter'},
+                    batch_filter_button(),
+                    {"extend": "searchBuilder"},
                     {
                         "text": "☑️ Select All Filtered Rows",
                         "action": JavascriptFunction("""
@@ -497,7 +511,6 @@ def samples_server(samples_df, input):
                             }
                         """)
                     },
-                    # ── Export ────────────────────────────────────────────────
                     {'extend': "spacer",
                      'style': 'bar',
                      'text': 'Export'},
@@ -505,21 +518,18 @@ def samples_server(samples_df, input):
                         "extend": "collection",
                         "text": "📤 Export",
                         "buttons": [
-                            # Export to CSV — selected rows, visible columns
                             {
                                 "extend": "csvHtml5",
                                 "exportOptions": {"columns": ":visible"},
                                 "text": "📄 Export to CSV",
                                 "title": "Sample Data Export"
                             },
-                            # Export to Excel — selected rows, visible columns
                             {
                                 "extend": "excelHtml5",
                                 "exportOptions": {"columns": ":visible"},
                                 "text": "📊 Export to Excel",
                                 "title": "Sample Data Export"
                             },
-                            # Send selected rows to SAGA via FTP — triggers Shiny server logic
                             {
                                 "text": "🖥️ Send to SAGA for ATLAS",
                                 "action": JavascriptFunction("""
@@ -538,11 +548,6 @@ def samples_server(samples_df, input):
                         ]
                     },
                     {'extend': "spacer",
-                     'style': 'bar',
-                     'text': 'Filter'},
-                    batch_filter_button(),
-                    {"extend": "searchBuilder"},
-                    {'extend': "spacer",
                      'style': 'bar'},
                 ],
                 order=[[column_index, "desc"]],
@@ -554,7 +559,31 @@ def samples_server(samples_df, input):
                         "targets": date_column_index,
                         "type": "date",
                         "render": DATE_VALUE_RENDERER
-                    }
+                    },
+                    {
+                        "targets": nird_filename_index,
+                        "className": "left-column",
+                        "width": "805px",
+                        "render": truncated_text_renderer(max_chars=172, max_width_px=805),
+                    } if nird_filename_index != -1 else {},
+                    {
+                        "targets": experiment_name_index,
+                        "className": "left-column",
+                        "width": "260px",
+                        "render": truncated_text_renderer(max_chars=60, max_width_px=260),
+                    } if experiment_name_index != -1 else {},
+                    {
+                        "targets": billing_description_index,
+                        "className": "left-column",
+                        "width": "320px",
+                        "render": truncated_text_renderer(max_chars=100, max_width_px=320),
+                    } if billing_description_index != -1 else {},
+                    {
+                        "targets": reagent_label_index,
+                        "className": "left-column",
+                        "width": "690px",
+                        "render": truncated_text_renderer(max_chars=156, max_width_px=690),
+                    } if reagent_label_index != -1 else {},
                 ]
             )
 

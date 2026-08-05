@@ -17,6 +17,13 @@
   --text-muted: rgba(9, 26, 62, 0.76);
   --shadow-soft: 0 4px 12px rgba(9, 26, 62, 0.05);
   --shadow-hover: 0 10px 24px rgba(28, 79, 185, 0.12);
+  /* itables >=2.9 paints its widget/table container with this instead of
+     leaving it transparent; match the app background so it doesn't show
+     as a white block against --surface-page. itables injects its own
+     :root/:host rule for this variable via an inline <style> tag added
+     to <head> after this stylesheet loads, so !important is required to
+     win the cascade regardless of load order. */
+  --dt-html-background: var(--surface-page) !important;
 }
 
 html,
@@ -107,7 +114,10 @@ table.dataTable td.left-column {
 /* Modal Backdrop Fix for Scaled UI */
 /* ─────────────────────────────────────────────────────────────── */
 
-/* Ensures modal backdrop covers entire viewport even after scaling */
+/* Ensures modal backdrop covers entire viewport even after scaling. The
+   backdrop is a child of body, so it's shrunk by body's own `zoom` just
+   like everything else; scale it back up by zoom's inverse so it still
+   spans the true viewport instead of only 80% of it. */
 .modal-backdrop {
   position: fixed !important;
   top: 0 !important;
@@ -1358,13 +1368,14 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
 /* ─────────────────────────────────────────────────────────────── */
 
 @media (min-width: 992px) {
-  /* Scale entire app to 80% while compensating the width and height */
+  /* Shrink the entire app to 80% on desktop widths. `zoom` (unlike
+     `transform: scale`) resizes the actual layout box rather than just the
+     painted output, so body's real height/width already match what's
+     visible on screen -- no width/height/position compensation hack needed,
+     and no artificially inflated scrollHeight causing a residual outer
+     scrollbar. */
   body {
-    transform: scale(0.8);
-    transform-origin: top left;
-    width: 125%;
-    height: 125%;
-    position: absolute;
+    zoom: 0.8;
   }
 
   /* Expand wrapper and table elements fully */
