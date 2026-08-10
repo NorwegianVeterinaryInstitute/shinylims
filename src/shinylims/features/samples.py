@@ -10,6 +10,7 @@ import pandas as pd
 import io
 from shinylims.ui_helpers.table_controls import (
     COLVIS_COLUMN_TEXT,
+    searchbuilder_title_defs,
     DATE_VALUE_RENDERER,
     FILTER_BUILDER_LANGUAGE,
     batch_filter_button,
@@ -584,7 +585,7 @@ def samples_server(samples_df, input):
                         "width": "690px",
                         "render": truncated_text_renderer(max_chars=156, max_width_px=690),
                     } if reagent_label_index != -1 else {},
-                ]
+                ] + searchbuilder_title_defs(dat.columns)
             )
 
     return {"set_run_filter": set_run_filter}

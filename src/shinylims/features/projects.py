@@ -10,6 +10,7 @@ import pandas as pd
 
 from shinylims.ui_helpers.table_controls import (
     COLVIS_COLUMN_TEXT,
+    searchbuilder_title_defs,
     DATE_VALUE_RENDERER,
     FILTER_BUILDER_LANGUAGE,
     build_filter_status_bar,
@@ -183,5 +184,5 @@ def projects_server(projects_df, input):
                     "type": "date",
                     "render": DATE_VALUE_RENDERER,
                 } if date_column_index != -1 else {},
-            ],
+            ] + searchbuilder_title_defs(dat.columns),
         )

@@ -30,6 +30,22 @@ COLVIS_COLUMN_TEXT = JavascriptFunction(
 )
 
 
+def searchbuilder_title_defs(columns):
+    """With column_filters="header", SearchBuilder's "Data" field list hits
+    the same broken title lookup COLVIS_COLUMN_TEXT works around above: it
+    reads each column's derived title (now `<input placeholder=...>`
+    markup) and strips HTML tags from it, leaving an empty string for a
+    void element like <input> -- so every "Data" option renders with no
+    text at all (still selectable, just blank). SearchBuilder honors a
+    per-column `searchBuilderTitle` override ahead of that broken title,
+    so set it explicitly to the real column name for every column.
+    """
+    return [
+        {"targets": idx, "searchBuilderTitle": str(col)}
+        for idx, col in enumerate(columns)
+    ]
+
+
 COLUMN_VISIBILITY_SELECT_ALL_ACTION = JavascriptFunction(
     """
     function(e, dt, node, config) {

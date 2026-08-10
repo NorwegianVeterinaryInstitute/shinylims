@@ -10,6 +10,7 @@ import pandas as pd
 
 from shinylims.ui_helpers.table_controls import (
     COLVIS_COLUMN_TEXT,
+    searchbuilder_title_defs,
     DATE_VALUE_RENDERER,
     FILTER_BUILDER_LANGUAGE,
     build_filter_status_bar,
@@ -191,7 +192,7 @@ def seq_server(seq_df, input):
                               "width": "260px",
                               "render": truncated_text_renderer(max_chars=60, max_width_px=260),
                           } if experiment_name_index != -1 else {},
-                      ])
+                      ] + searchbuilder_title_defs(dat.columns))
 
     def get_selected_runs():
         """Return (seq_limsids, run_labels) for the currently selected run rows,
