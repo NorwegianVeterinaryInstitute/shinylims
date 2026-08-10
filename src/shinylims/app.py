@@ -403,6 +403,29 @@ app_ui = ui.page_fluid(
             href="images/favicon/favicon-96x96.png",
         ),
         ui.include_css(css_path),
+        # This app is deliberately light-only (see the `color-scheme: light
+        # !important` rule in styles.css), but itables >=2.9 independently
+        # watches `prefers-color-scheme` in JS and adds a `dark` class to
+        # <html> regardless of that CSS. Its bundled stylesheet then applies
+        # dozens of dark-theme rules scoped to `html.dark` -- e.g. table body
+        # text turning near-white, unreadable against this app's light
+        # background. Rather than override each such rule as it's found,
+        # strip the class the instant itables (or anything else) adds it.
+        ui.tags.script("""
+            (function() {
+                var html = document.documentElement;
+                function stripDark() {
+                    if (html.classList.contains('dark')) {
+                        html.classList.remove('dark');
+                    }
+                }
+                stripDark();
+                new MutationObserver(stripDark).observe(html, {
+                    attributes: true,
+                    attributeFilter: ['class'],
+                });
+            })();
+        """),
     ),
     ui.output_ui("render_updated_data"),
     ui.div(
