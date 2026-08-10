@@ -58,6 +58,27 @@ textarea::placeholder {
   color: #6c757d !important;
 }
 
+/* itables >=2.9 ships its own dark-mode rule
+   (html.dark div.dtsb-searchBuilder select.dtsb-dropDown) that is more
+   specific than the plain .dtsb-dropDown override above, so when the
+   browser/OS reports a dark color-scheme preference it wins the cascade
+   and paints the Filter Builder "Data" dropdown with a dark background,
+   leaving the (still-forced-light) text unreadable. Duplicate the class
+   selectors below to exceed that specificity and force light styling
+   regardless of load order or OS theme. */
+html.dark div.dtsb-searchBuilder select.dtsb-dropDown.dtsb-dropDown,
+html.dark div.dtsb-searchBuilder input.dtsb-input.dtsb-input,
+html.dark .dtsb-dropDown.dtsb-dropDown,
+html.dark .dtsb-input.dtsb-input,
+html.dark .dtsb-value.dtsb-value,
+html.dark .dtsb-list-items.dtsb-list-items,
+html.dark .dtsb-searchBuilder select.dtsb-searchBuilder,
+html.dark .dtsb-searchBuilder input.dtsb-searchBuilder {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+  color-scheme: light !important;
+}
+
 .dt-center { text-align: center; }
 .dt-left { text-align: left; }
 .nowrap { white-space: nowrap; }
