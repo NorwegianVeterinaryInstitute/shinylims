@@ -1,0 +1,368 @@
+{
+  "version": 1,
+  "locale": "en_US.UTF-8",
+  "metadata": {
+    "appmode": "python-shiny",
+    "entrypoint": "shinylims.app:app"
+  },
+  "python": {
+    "version": "3.11.5",
+    "package_manager": {
+      "name": "pip",
+      "version": "26.2.1",
+      "package_file": "requirements.txt"
+    }
+  },
+  "environment": {
+    "python": {
+      "requires": "~=3.11.0"
+    }
+  },
+  "files": {
+    "requirements.txt": {
+      "checksum": "2af5087da106e57b1c63d5693528c07c"
+    },
+    ".env.example": {
+      "checksum": "bb15d697658f7711333a03c75fcdd4d1"
+    },
+    ".github/dependabot.yml": {
+      "checksum": "4f4832ff8e33cc91f17a3e0ac749f131"
+    },
+    ".github/workflows/deploy.yml": {
+      "checksum": "ea91eb32b7f76b45b2d5e9ee8824acad"
+    },
+    ".github/workflows/test.yml": {
+      "checksum": "4408738ce3fc6dfbfef09aceb6c0c563"
+    },
+    ".gitignore": {
+      "checksum": "dd76201071057bc6f5c80aa7348fe32f"
+    },
+    ".python-version": {
+      "checksum": "215923581f8fcce0029639f7ab16ccb6"
+    },
+    "LICENSE": {
+      "checksum": "fc80e042aeec4b637e104910d16812fc"
+    },
+    "README.md": {
+      "checksum": "9d9380e7875f7b60ae92dc290a483d2e"
+    },
+    "deploy_mode.txt": {
+      "checksum": "d8e8fca2dc0f896fd7cb4cb0031ba249"
+    },
+    "docs/be392a2bbb1715066fc7e2732553dc5ce5cb8875-risk_matrix.md": {
+      "checksum": "15d50c59412b0c47be8ba7a09c49845a"
+    },
+    "pyproject.toml": {
+      "checksum": "065330e628977addb26c3d8d3abe0d40"
+    },
+    "src/shinylims/__init__.py": {
+      "checksum": "307cc3e530ff345a54e2c5485707a0f7"
+    },
+    "src/shinylims/__pycache__/__init__.cpython-311.pyc": {
+      "checksum": "c52ad43e27cdd5216cd90691de71f46e"
+    },
+    "src/shinylims/__pycache__/__init__.cpython-36.pyc": {
+      "checksum": "e4d34b2d1112ff20ac57e7e871d57380"
+    },
+    "src/shinylims/__pycache__/app.cpython-311.pyc": {
+      "checksum": "816065f33209f54d89a4622260013eaf"
+    },
+    "src/shinylims/__pycache__/app.cpython-36.pyc": {
+      "checksum": "650f96be6840673948f993d3a00ba42f"
+    },
+    "src/shinylims/__pycache__/security.cpython-311.pyc": {
+      "checksum": "ea2f86318a94135122bd525e2a8effe4"
+    },
+    "src/shinylims/__pycache__/test_clarity_api.cpython-311.pyc": {
+      "checksum": "44c9e30e74631cf5aff2de66ec56cf94"
+    },
+    "src/shinylims/__pycache__/test_clarity_api.cpython-36.pyc": {
+      "checksum": "b1af36252a1f50475c37a8bcd9957def"
+    },
+    "src/shinylims/_brand.yml": {
+      "checksum": "9473050e5b3d9032e1a1616885f4f8a8"
+    },
+    "src/shinylims/app.py": {
+      "checksum": "7d78b288176a7c07a0f4d2b7a2d17e71"
+    },
+    "src/shinylims/assets/styles.css": {
+      "checksum": "32bd3f942c09df705f25164bc8758bf4"
+    },
+    "src/shinylims/config/__init__.py": {
+      "checksum": "7a1c1145278fc0eba7f98abad038eecf"
+    },
+    "src/shinylims/config/__pycache__/__init__.cpython-311.pyc": {
+      "checksum": "ed99c1f51e3dd58d8df03a86f1b06b15"
+    },
+    "src/shinylims/config/__pycache__/index_plate_maps.cpython-311.pyc": {
+      "checksum": "c2e4a8393976c6e40c97c235df51e9a3"
+    },
+    "src/shinylims/config/__pycache__/reagents.cpython-311.pyc": {
+      "checksum": "0a486735edab3284b95d4f0c010e2faa"
+    },
+    "src/shinylims/config/index_plate_maps.py": {
+      "checksum": "ab7655ec51926537bf5b3e1a56d3e1ea"
+    },
+    "src/shinylims/config/reagents.py": {
+      "checksum": "28759505f06de1001e89199832f06c85"
+    },
+    "src/shinylims/features/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "src/shinylims/features/__pycache__/__init__.cpython-311.pyc": {
+      "checksum": "1adfdf672048f5995b9747ecdd1dcffe"
+    },
+    "src/shinylims/features/__pycache__/__init__.cpython-36.pyc": {
+      "checksum": "ece5ad5800392b4327da510ebf66fb2e"
+    },
+    "src/shinylims/features/__pycache__/index_plate_maps.cpython-311.pyc": {
+      "checksum": "44750f5e34d0a503d32848089d44f585"
+    },
+    "src/shinylims/features/__pycache__/lab_tools.cpython-311.pyc": {
+      "checksum": "87c4c659cb58fc6f85d1eb92fbe72878"
+    },
+    "src/shinylims/features/__pycache__/lab_tools.cpython-36.pyc": {
+      "checksum": "a7773688ed36e2303294a3f0d5b1e359"
+    },
+    "src/shinylims/features/__pycache__/loading.cpython-311.pyc": {
+      "checksum": "3bcef1da4990ef629a7b113db57c454e"
+    },
+    "src/shinylims/features/__pycache__/metadata_tables.cpython-311.pyc": {
+      "checksum": "ed21d713cdbfda1206169b2757f2030b"
+    },
+    "src/shinylims/features/__pycache__/metadata_tables.cpython-36.pyc": {
+      "checksum": "1b7288342d6f34d552eb1608581bee86"
+    },
+    "src/shinylims/features/__pycache__/projects.cpython-311.pyc": {
+      "checksum": "e187760c84e2f9b247200c3c028d65ba"
+    },
+    "src/shinylims/features/__pycache__/projects.cpython-36.pyc": {
+      "checksum": "17ad85760eee0e5e69a089ab59e84937"
+    },
+    "src/shinylims/features/__pycache__/reagent_overview.cpython-311.pyc": {
+      "checksum": "c24faa60f58fa37c6e6db60e8821a824"
+    },
+    "src/shinylims/features/__pycache__/reagents.cpython-311.pyc": {
+      "checksum": "47edf2781a56b0712e36755f8f71cdbb"
+    },
+    "src/shinylims/features/__pycache__/reagents.cpython-36.pyc": {
+      "checksum": "20da5c77baa0aaed5997f4e8a184c31e"
+    },
+    "src/shinylims/features/__pycache__/samples.cpython-311.pyc": {
+      "checksum": "65410240722aa6b9269380194a872bc3"
+    },
+    "src/shinylims/features/__pycache__/samples.cpython-36.pyc": {
+      "checksum": "c35ce014a889aabcbca7ca834dc431c2"
+    },
+    "src/shinylims/features/__pycache__/sequencing.cpython-311.pyc": {
+      "checksum": "c7e3b336251b0cffda25c24415ba0f71"
+    },
+    "src/shinylims/features/__pycache__/sequencing.cpython-36.pyc": {
+      "checksum": "c6a1d6dd1a47b2b9fe7bca926fc2ee07"
+    },
+    "src/shinylims/features/__pycache__/storage.cpython-311.pyc": {
+      "checksum": "a759fdf506ca8189390a2aa0b4df88cf"
+    },
+    "src/shinylims/features/__pycache__/table_controls.cpython-311.pyc": {
+      "checksum": "4eb515f1adf13e19126ffc2118bfea1d"
+    },
+    "src/shinylims/features/projects.py": {
+      "checksum": "1e5b058eb58c349e8916d071ed0bb68e"
+    },
+    "src/shinylims/features/reagent_overview.py": {
+      "checksum": "154dce302907b56050782432e72dc21b"
+    },
+    "src/shinylims/features/reagents/__init__.py": {
+      "checksum": "301a428a99a4c6011ec2f549ae99b7ee"
+    },
+    "src/shinylims/features/reagents/__pycache__/__init__.cpython-311.pyc": {
+      "checksum": "16bf8aee37b861a0ff9e1448979c82f5"
+    },
+    "src/shinylims/features/reagents/__pycache__/domain.cpython-311.pyc": {
+      "checksum": "5e977d07347566abddf4de523a6c1d1c"
+    },
+    "src/shinylims/features/reagents/__pycache__/page.cpython-311.pyc": {
+      "checksum": "c3f1326a553ab78fdfcfcf85aa726fe5"
+    },
+    "src/shinylims/features/reagents/domain.py": {
+      "checksum": "c6b42b39a7e7bb687e43123421cd0d99"
+    },
+    "src/shinylims/features/reagents/page.py": {
+      "checksum": "6e85fe033f30c80411e34f1aa6fa0350"
+    },
+    "src/shinylims/features/samples.py": {
+      "checksum": "59b0e555c6c14ed0093631f17f50f77b"
+    },
+    "src/shinylims/features/sequencing.py": {
+      "checksum": "16c46b270e3612c7da08838acad6d414"
+    },
+    "src/shinylims/features/storage.py": {
+      "checksum": "28418ab22ee4d1ac153c5562b887c0f0"
+    },
+    "src/shinylims/integrations/README.md": {
+      "checksum": "6cfa8dd564f3074f16214a95408629f1"
+    },
+    "src/shinylims/integrations/__init__.py": {
+      "checksum": "71e4635a8219d5ee5e6818cf24f5b5a4"
+    },
+    "src/shinylims/integrations/__pycache__/__init__.cpython-311.pyc": {
+      "checksum": "e5eb0fee7a026b37598e584e97d60de8"
+    },
+    "src/shinylims/integrations/__pycache__/clarity_debug.cpython-311.pyc": {
+      "checksum": "b962c35e24fd3aab8bc5590673f16ce2"
+    },
+    "src/shinylims/integrations/__pycache__/clarity_models.cpython-311.pyc": {
+      "checksum": "ea6be8c0f4aca548c36c4d70261f32a9"
+    },
+    "src/shinylims/integrations/__pycache__/clarity_pg.cpython-311.pyc": {
+      "checksum": "303e09d9d673e4f505c77671032c4eb9"
+    },
+    "src/shinylims/integrations/__pycache__/clarity_queries.cpython-311.pyc": {
+      "checksum": "599e7406bf24c30051472723a671398a"
+    },
+    "src/shinylims/integrations/__pycache__/data_utils.cpython-311.pyc": {
+      "checksum": "c25ce1238b757a4c9cbd66414acb1a6e"
+    },
+    "src/shinylims/integrations/__pycache__/data_utils.cpython-36.pyc": {
+      "checksum": "8e410a8673bad2be8458ce8494b5f7ee"
+    },
+    "src/shinylims/integrations/__pycache__/db_utils.cpython-311.pyc": {
+      "checksum": "9c78dad97090161285790a94998261a8"
+    },
+    "src/shinylims/integrations/__pycache__/lims_api.cpython-311.pyc": {
+      "checksum": "63284e14c77e635001c647230235def1"
+    },
+    "src/shinylims/integrations/__pycache__/ssh_transport.cpython-311.pyc": {
+      "checksum": "b3fd062c9cbdd1964390d5cac12a2330"
+    },
+    "src/shinylims/integrations/__pycache__/upload_atlas_file_to_saga.cpython-311.pyc": {
+      "checksum": "acb669d6420f5427c42934c32966ee93"
+    },
+    "src/shinylims/integrations/clarity_models.py": {
+      "checksum": "71df96ed2bdf15a69048741876e47173"
+    },
+    "src/shinylims/integrations/clarity_pg.py": {
+      "checksum": "ce5074c23528a0e7c4e3fe32dc675159"
+    },
+    "src/shinylims/integrations/data_utils.py": {
+      "checksum": "989f54c432dc89b4d8dca37f7107f805"
+    },
+    "src/shinylims/integrations/lims_api.py": {
+      "checksum": "a8bb9470461f220ec2d6eb21b62ecbc4"
+    },
+    "src/shinylims/integrations/queries/__init__.py": {
+      "checksum": "6752c3953871f05e09d645a549a1ab9f"
+    },
+    "src/shinylims/integrations/queries/__pycache__/__init__.cpython-311.pyc": {
+      "checksum": "1642e2dfda41314e9713e1d85d5420a7"
+    },
+    "src/shinylims/integrations/queries/__pycache__/_shared.cpython-311.pyc": {
+      "checksum": "d6392393e13ceac7a10b868adf25e94a"
+    },
+    "src/shinylims/integrations/queries/__pycache__/projects.cpython-311.pyc": {
+      "checksum": "fa078c24f4df3e150071f54ac8618f59"
+    },
+    "src/shinylims/integrations/queries/__pycache__/samples.cpython-311.pyc": {
+      "checksum": "26219b69084df1699e63e9eed67947db"
+    },
+    "src/shinylims/integrations/queries/__pycache__/sequencing.cpython-311.pyc": {
+      "checksum": "b9f909c0f7f7ca13eb63f355aa7eb040"
+    },
+    "src/shinylims/integrations/queries/__pycache__/storage.cpython-311.pyc": {
+      "checksum": "a7ab1a605e23dcceab0cf51a06294185"
+    },
+    "src/shinylims/integrations/queries/_shared.py": {
+      "checksum": "c5cc5e6122e89387c062f7bd3a3e3b3d"
+    },
+    "src/shinylims/integrations/queries/projects.py": {
+      "checksum": "7045093e74271bf507b1a08a2de8dbc6"
+    },
+    "src/shinylims/integrations/queries/samples.py": {
+      "checksum": "45f854b7246febd85acfc8483bb28103"
+    },
+    "src/shinylims/integrations/queries/sequencing.py": {
+      "checksum": "1cbd594ae947244a3e9e942ee5414768"
+    },
+    "src/shinylims/integrations/queries/storage.py": {
+      "checksum": "018c176ffe2c5f24e73643f724fda0ea"
+    },
+    "src/shinylims/integrations/ssh_transport.py": {
+      "checksum": "710ee56c5d8f4269c3c7a9aebff34126"
+    },
+    "src/shinylims/integrations/upload_atlas_file_to_saga.py": {
+      "checksum": "bad91caf2b733f2e512271bc25157ba8"
+    },
+    "src/shinylims/security.py": {
+      "checksum": "a4e75e7cc123b3c1cb82e20da1bd2cbf"
+    },
+    "src/shinylims/ui_helpers/__init__.py": {
+      "checksum": "ca8043a8198378c7240a3010d9ac1539"
+    },
+    "src/shinylims/ui_helpers/__pycache__/__init__.cpython-311.pyc": {
+      "checksum": "e27bd1d260002c4d1f5b5c90f9ae8aab"
+    },
+    "src/shinylims/ui_helpers/__pycache__/loading.cpython-311.pyc": {
+      "checksum": "9af43dd4c5fea14e0c00c4d34f12df17"
+    },
+    "src/shinylims/ui_helpers/__pycache__/table_controls.cpython-311.pyc": {
+      "checksum": "26086154b3da69ce0a7d397ffdd681b0"
+    },
+    "src/shinylims/ui_helpers/__pycache__/table_controls.cpython-36.pyc": {
+      "checksum": "63f280cdb924838ff88f257fe341d0c3"
+    },
+    "src/shinylims/ui_helpers/loading.py": {
+      "checksum": "5fcf66ddc125baec774ba83ef11499fa"
+    },
+    "src/shinylims/ui_helpers/table_controls.py": {
+      "checksum": "32aaf5d12aecb43ac33d183e4051d5ca"
+    },
+    "src/shinylims/www/images/favicon/favicon-16x16.png": {
+      "checksum": "7d2a3023cd584c3bad3e51badc2c564f"
+    },
+    "src/shinylims/www/images/favicon/favicon-32x32.png": {
+      "checksum": "76ac2e6519fd487af329543073d68949"
+    },
+    "src/shinylims/www/images/favicon/favicon-96x96.png": {
+      "checksum": "bf6e7f3b1b2760adeece99252b0b4de9"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-eng-hvit.png": {
+      "checksum": "0856c06ad4bd26d8d9796bd1087b2bd0"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-eng.png": {
+      "checksum": "9b26f213f0e64ea8e49223e5ca460706"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-eng.svg": {
+      "checksum": "a61767313defeb6cc5c479b28323efe2"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-hvit.png": {
+      "checksum": "c021fe8bf6b93b57340e03b46b2d3e34"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-neg-eng.svg": {
+      "checksum": "a263abcf5aec93ad19da03c011a15cae"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-neg-no.svg": {
+      "checksum": "8694b33984da3e8b3dfe438b3bb4e166"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-neg-sam.svg": {
+      "checksum": "9c4ee272e648c5b71034c5b81ca6049f"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-no.svg": {
+      "checksum": "40aae281a95551bb2d19ad90d14847c3"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-sam-hvit.png": {
+      "checksum": "be79ecf8755d10dc60d078d2f0873da9"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-sam.png": {
+      "checksum": "c27295fbe739601bc154d168a69a8c89"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo-sam.svg": {
+      "checksum": "595c6160ede650e125fdc1986b60a6b7"
+    },
+    "src/shinylims/www/images/logos/vetinst-logo.png": {
+      "checksum": "9a73087d8d84377a82955262fdd2d1af"
+    },
+    "uv.lock": {
+      "checksum": "5f17b324af7ee7dcf3ed9042ca59d0ef"
+    }
+  }
+}
