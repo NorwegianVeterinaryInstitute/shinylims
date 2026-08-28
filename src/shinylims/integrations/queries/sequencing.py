@@ -126,6 +126,12 @@ def _kit_type_from_application(application: str | None) -> str | None:
     return application
 
 
+def _application_or_unknown(application: str | None) -> str:
+    if application is None or str(application).strip() == "":
+        return "Unknown"
+    return application
+
+
 def _first_input_artifact_by_process(session: Session, process_ids: list[int]) -> dict[int, int]:
     if not process_ids:
         return {}
@@ -444,6 +450,7 @@ def build_sequencing_run_rows(
             )
 
         sample_context = representative_sample_context.get(lineage.representative_input_artifactid, {})
+        application = _application_or_unknown(representative_udfs.get("Application"))
 
         rows.append(
             {
@@ -455,7 +462,8 @@ def build_sequencing_run_rows(
                 "Operator": operator,
                 "Species": sample_context.get("species"),
                 "Experiment Name": representative_udfs.get("Experiment Name"),
-                "Casette Type": _kit_type_from_application(representative_udfs.get("Application")),
+                "Application": application,
+                "Casette Type": _kit_type_from_application(application),
                 "Read Length": read_length,
                 "Index Cycles": _coerce_int(step7_udfs.get("Index Cycles")),
                 "Sample Count": sample_context.get("sample_count"),

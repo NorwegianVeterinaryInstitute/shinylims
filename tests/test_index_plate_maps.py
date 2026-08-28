@@ -9,10 +9,13 @@ from shinylims.features.reagent_overview import (
     _merge_action_clicks,
     _planner_expiry_warning_items,
     _planner_warning_items,
+    _plate_map_expiry_banner,
     _prep_set_action,
+    _prep_set_earliest_expiry_assessment,
     _render_empty_plate_map_card,
     _render_index_lot_overview_header,
     _render_prep_sets_card,
+    _resolve_effective_expiry,
     _sequencing_warning_items,
     build_index_lot_overview_rows,
     build_index_plate_maps_view_model,
@@ -91,6 +94,7 @@ def make_sequencing_lot(
     expiry_date: str = "",
     status: str = "ACTIVE",
     miseq_kit_type: str | None = None,
+    notes: str = "",
 ) -> SequencingStockLot:
     lot_slug = f"{reagent_type}-{name}".replace(" ", "_").replace("/", "_")
     return SequencingStockLot(
@@ -100,6 +104,7 @@ def make_sequencing_lot(
         expiry_date=expiry_date,
         status=status,
         miseq_kit_type=miseq_kit_type,
+        notes=notes,
     )
 
 
@@ -110,6 +115,7 @@ def make_prep_lot(
     status: str = "ACTIVE",
     sequence_number: int = 65,
     reactions_left: int = 45,
+    notes: str = "",
 ) -> ActivePrepLot:
     return ActivePrepLot(
         lot_uri=f"https://lims/reagentlots/{reagent_type}",
@@ -120,6 +126,7 @@ def make_prep_lot(
         status=status,
         sequence_number=sequence_number,
         reactions_left=reactions_left,
+        notes=notes,
     )
 
 
@@ -129,6 +136,7 @@ def make_prep_set(
     usable_reactions_left: int = 45,
     reactions_by_type: dict[str, int | None] | None = None,
     expiry_dates_by_type: dict[str, str] | None = None,
+    notes_by_type: dict[str, str] | None = None,
     warnings: list[str] | None = None,
     status: str = "ACTIVE",
     is_balanced: bool = True,
@@ -147,6 +155,7 @@ def make_prep_set(
                 status=status,
                 sequence_number=sequence_number,
                 reactions_left=lot_reactions,
+                notes=(notes_by_type or {}).get(reagent_type, ""),
             )
             for reagent_type in PREP_REAGENT_TYPES
         },
@@ -179,6 +188,124 @@ def test_assess_expiry_date_classifies_threshold_states():
     assert _assess_expiry_date("2026-04-16", today=today).state == "ok"
     assert _assess_expiry_date("", today=today).state == "missing"
     assert _assess_expiry_date("not-a-date", today=today).state == "invalid"
+
+
+def test_resolve_effective_expiry_returns_lims_date_when_no_cron_history():
+    effective = _resolve_effective_expiry("2026-10-18", "")
+    assert effective.lims_date == "2026-10-18"
+    assert effective.original_date == "2026-10-18"
+    assert effective.is_cron_adjusted is False
+
+
+def test_resolve_effective_expiry_extracts_original_date_from_single_cron_line():
+    notes = "2026-07-17: cron endret utløpsdato fra 2026-07-20 til 2026-10-18"
+    effective = _resolve_effective_expiry("2026-10-18", notes)
+    assert effective.lims_date == "2026-10-18"
+    assert effective.original_date == "2026-07-20"
+    assert effective.is_cron_adjusted is True
+
+
+def test_resolve_effective_expiry_uses_earliest_of_several_cron_pushes():
+    notes = "\n".join(
+        [
+            "2026-07-17: cron endret utløpsdato fra 2026-07-20 til 2026-10-18",
+            "2026-10-16: cron endret utløpsdato fra 2026-10-18 til 2027-01-15",
+            "Unrelated free-text note line.",
+        ]
+    )
+    effective = _resolve_effective_expiry("2027-01-15", notes)
+    assert effective.original_date == "2026-07-20"
+    assert effective.is_cron_adjusted is True
+
+
+def test_resolve_effective_expiry_ignores_malformed_or_unrelated_lines():
+    notes = "Run 1:\nKolonne 1 (A01)\nnot a cron line at all"
+    effective = _resolve_effective_expiry("2026-10-18", notes)
+    assert effective.original_date == "2026-10-18"
+    assert effective.is_cron_adjusted is False
+
+
+def test_planner_expiry_warning_items_flag_cron_adjusted_lots_by_true_expiry():
+    today = date(2026, 8, 12)
+    prep_result = ActivePrepSetsResult(
+        success=True,
+        prep_sets=[
+            make_prep_set(
+                sequence_number=27,
+                expiry_dates_by_type={
+                    PREP_REAGENT_TYPES[0]: "2026-11-01",
+                },
+                notes_by_type={
+                    PREP_REAGENT_TYPES[0]: "2026-06-01: cron endret utløpsdato fra 2026-06-05 til 2026-11-01",
+                },
+            )
+        ],
+        warnings=[],
+        message="Loaded prep sets.",
+    )
+    sequencing_result = make_sequencing_result(lots=[])
+
+    warnings = _planner_expiry_warning_items(prep_result, sequencing_result, today=today)
+
+    assert warnings == ["Prep set #27 expiry attention: IPB 2026-06-05"]
+
+
+def test_prep_set_earliest_expiry_assessment_uses_cron_corrected_dates():
+    today = date(2026, 8, 12)
+    prep_set = make_prep_set(
+        expiry_dates_by_type={
+            PREP_REAGENT_TYPES[0]: "2026-11-01",
+            PREP_REAGENT_TYPES[1]: "2026-12-01",
+            PREP_REAGENT_TYPES[2]: "2027-01-01",
+        },
+        notes_by_type={
+            PREP_REAGENT_TYPES[0]: "2026-06-01: cron endret utløpsdato fra 2026-06-05 til 2026-11-01",
+        },
+    )
+
+    earliest = _prep_set_earliest_expiry_assessment(prep_set, today=today)
+
+    assert earliest.display_date == "2026-06-05"
+    assert earliest.state == "expired"
+
+
+def test_plate_map_expiry_banner_none_when_not_expiring():
+    today = date(2026, 8, 12)
+    effective = _resolve_effective_expiry("2026-12-31", "")
+
+    assert _plate_map_expiry_banner(effective, today=today) is None
+
+
+def test_plate_map_expiry_banner_flags_expired_lot():
+    today = date(2026, 8, 12)
+    effective = _resolve_effective_expiry("2026-08-01", "")
+
+    rendered = str(_plate_map_expiry_banner(effective, today=today))
+
+    assert "index-plate-expiry-banner--expired" in rendered
+    assert "Expired 2026-08-01" in rendered
+
+
+def test_plate_map_expiry_banner_flags_expiring_soon_lot():
+    today = date(2026, 8, 12)
+    effective = _resolve_effective_expiry("2026-08-20", "")
+
+    rendered = str(_plate_map_expiry_banner(effective, today=today))
+
+    assert "index-plate-expiry-banner--soon" in rendered
+    assert "Expires in 8 day(s) (2026-08-20)" in rendered
+
+
+def test_plate_map_expiry_banner_mentions_cron_adjustment_when_applicable():
+    today = date(2026, 8, 12)
+    notes = "2026-06-01: cron endret utløpsdato fra 2026-07-20 til 2026-10-18"
+    effective = _resolve_effective_expiry("2026-10-18", notes)
+
+    rendered = str(_plate_map_expiry_banner(effective, today=today))
+
+    assert "index-plate-expiry-banner--expired" in rendered
+    assert "Expired 2026-07-20" in rendered
+    assert "LIMS currently shows 2026-10-18" in rendered
 
 
 def test_parse_index_note_line_expands_full_and_partial_columns():
@@ -1246,6 +1373,29 @@ def test_render_index_lot_overview_header_lists_active_and_pending_lots():
     assert "Activate" in rendered
 
 
+def test_render_index_lot_overview_header_flags_expired_lots_in_red():
+    expired_lot = ActiveIndexLot(
+        lot_uri="https://lims/reagentlots/5",
+        name="E#70 (192)",
+        lot_number="LOT-005",
+        expiry_date="2020-01-01",
+        status="PENDING",
+        set_letter="B",
+        notes="",
+    )
+    result = IndexPlateMapsResult(
+        success=True,
+        plate_maps=[],
+        pending_lots=[expired_lot],
+        warnings=[],
+        message="Loaded 0 active index plate maps.",
+    )
+
+    rendered = str(_render_index_lot_overview_header(result))
+
+    assert "index-planner-expiry-cell--expired" in rendered
+
+
 def test_update_reagent_lot_status_puts_full_xml(monkeypatch):
     detail_xml = """
     <reagent-lot>
@@ -1428,7 +1578,8 @@ def test_get_sequencing_stock_summary_counts_miseq_pairs_and_phix(monkeypatch):
     assert len(result.lots) == 6
     assert all(not lot.name.lower().startswith("dummy") for lot in result.lots)
     assert next(lot for lot in result.lots if lot.name == "RGT11111111 v3").expiry_date == "2026-05-01"
-    assert not hasattr(result.lots[0], "notes")
+    # Legacy listing path doesn't parse notes, unlike get_illumina_planning_data's shared snapshot.
+    assert result.lots[0].notes == ""
     assert captured_reagentlot_params == [
         {"kitname": "MiSeq Reagent Kit (Box 1 of 2)"},
         {"kitname": "MiSeq Reagent Kit (Box 2 of 2)"},
@@ -1593,6 +1744,54 @@ def test_render_prep_sets_card_flags_expiry_attention():
 
     assert "Expiry dates need attention." in rendered
     assert "Highlighted prep sets need attention." not in rendered
+
+
+def test_render_prep_sets_card_marks_expired_prep_set_row():
+    prep_result = ActivePrepSetsResult(
+        success=True,
+        prep_sets=[
+            make_prep_set(
+                sequence_number=27,
+                expiry_dates_by_type={PREP_REAGENT_TYPES[0]: "2026-03-10"},
+            )
+        ],
+        warnings=[],
+        message="Loaded prep sets.",
+    )
+
+    rendered = str(
+        _render_prep_sets_card(
+            prep_result,
+            make_sequencing_result(),
+            today=date(2026, 3, 16),
+        )
+    )
+
+    assert 'class="index-planner-row index-planner-row--expired"' in rendered
+
+
+def test_render_prep_sets_card_does_not_mark_soon_expiring_prep_set_row():
+    prep_result = ActivePrepSetsResult(
+        success=True,
+        prep_sets=[
+            make_prep_set(
+                sequence_number=27,
+                expiry_dates_by_type={PREP_REAGENT_TYPES[0]: "2026-03-20"},
+            )
+        ],
+        warnings=[],
+        message="Loaded prep sets.",
+    )
+
+    rendered = str(
+        _render_prep_sets_card(
+            prep_result,
+            make_sequencing_result(),
+            today=date(2026, 3, 16),
+        )
+    )
+
+    assert "index-planner-row--expired" not in rendered
 
 
 def test_build_sequencing_stock_summary_rows_keeps_unknown_summary_but_does_not_pair_different_names():

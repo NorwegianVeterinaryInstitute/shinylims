@@ -46,6 +46,51 @@ def searchbuilder_title_defs(columns):
     ]
 
 
+# The export buttons hit the same broken title lookup a third time: DataTables
+# builds the exported header row from column().title(), which is the *inner
+# HTML* of the header's .dt-column-title -- with column_filters="header" that
+# is the filter <input> -- and the default header formatter strips the tags
+# from it, so every exported column header comes out blank. Recover the real
+# name from the input's placeholder, and fall back to the title's own text for
+# columns that carry no filter input.
+EXPORT_HEADER_FORMAT = JavascriptFunction(
+    """
+    function(data, columnIdx, node) {
+        var input = node ? node.querySelector('.dt-column-title input') : null;
+        if (input && input.placeholder) {
+            return input.placeholder;
+        }
+        var div = document.createElement('div');
+        div.innerHTML = data == null ? '' : String(data);
+        return (div.textContent || div.innerText || '').trim();
+    }
+    """
+)
+
+
+def export_options(*, columns: str = ":visible") -> dict[str, object]:
+    """Return the exportOptions for an export button (CSV/Excel/copy).
+
+    Always go through this rather than a bare {"columns": ...} so exports keep
+    their column headers -- see EXPORT_HEADER_FORMAT above.
+    """
+    return {
+        "columns": columns,
+        "format": {"header": EXPORT_HEADER_FORMAT},
+    }
+
+
+def _preset_storage_key_js(table_key: str) -> str:
+    """The sessionStorage key holding a table's active preset name, as a JS literal.
+
+    Kept in sessionStorage beside the table's own DataTables state (see
+    ``stateSaveCallback`` at the call sites) so the two are always cleared
+    together: a tab that has forgotten its column visibility must not still
+    claim a preset is applied.
+    """
+    return json.dumps(f"shinylims_{table_key}_preset")
+
+
 COLUMN_VISIBILITY_SELECT_ALL_ACTION = JavascriptFunction(
     """
     function(e, dt, node, config) {
@@ -138,26 +183,97 @@ def deselect_all_columns_button(*, text: str = "Deselect All") -> dict[str, obje
 
 
 def visibility_preset_button(
-    visible_indexes: list[int],
+    columns: list[int] | list[str],
+    all_columns=None,
     *,
-    text: str = "Minimal View",
+    text: str,
+    table_key: str | None = None,
 ) -> dict[str, object]:
-    """Return a DataTables button config that applies a column visibility preset."""
+    """Return a DataTables button config that applies a column visibility preset.
+
+    ``columns`` is either raw DataTables column indexes or, when ``all_columns``
+    (the dataframe's column names, in table order) is passed, column *names*
+    resolved against it. Prefer the name form: the indexes shift whenever a
+    column is added to or removed from the query that builds the table, and a
+    stale index silently reveals the wrong column. A name that isn't in
+    ``all_columns`` is dropped from the preset instead.
+
+    With ``table_key`` the button also records itself as that table's active
+    preset, which ``filter_state_draw_callback`` reflects on the toolbar -- a
+    preset hides most of the table, so it has to be visible that one is on.
+    """
+    visible_indexes = resolve_preset_columns(columns, all_columns)
     visible_columns_js = "\n".join(
-        f"        dt.column({column_index}).visible(true);"
+        f"                    dt.column({column_index}).visible(true);"
         for column_index in visible_indexes
     )
+
+    # Applying a preset moves every column at once, which fires as many
+    # `column-visibility` events -- the same event the draw callback watches to
+    # notice the user overriding a preset by hand. Flag the bulk change so it
+    # doesn't immediately clear the preset it is applying.
+    if table_key:
+        track_js = f"""                try {{
+                    sessionStorage.setItem({_preset_storage_key_js(table_key)}, {json.dumps(text)});
+                }} catch (err) {{}}
+                if (window.__{table_key}SyncPreset) window.__{table_key}SyncPreset();
+"""
+        flag = f"window.__{table_key}PresetApplying"
+    else:
+        track_js = ""
+        flag = "window.__presetApplying"
+
     return {
         "text": text,
         "action": JavascriptFunction(
             f"""
             function(e, dt, node, config) {{
-                dt.columns().visible(false);
+                {flag} = true;
+                try {{
+                    dt.columns().visible(false);
 {visible_columns_js}
-            }}
+                }} finally {{
+                    {flag} = false;
+                }}
+{track_js}            }}
             """
         ),
     }
+
+
+def resolve_preset_columns(
+    columns: list[int] | list[str],
+    all_columns=None,
+) -> list[int]:
+    """Return the DataTables column indexes a preset covers (see
+    ``visibility_preset_button`` for how ``columns`` is interpreted)."""
+    if all_columns is None:
+        return list(columns)
+
+    name_to_index = {str(name): idx for idx, name in enumerate(all_columns)}
+    resolved = [
+        column if isinstance(column, int) else name_to_index.get(str(column))
+        for column in columns
+    ]
+    return [idx for idx in resolved if idx is not None]
+
+
+def preset_column_defs(
+    columns: list[int] | list[str],
+    all_columns,
+) -> list[dict[str, object]]:
+    """Return ``columnDefs`` entries that start the table on a preset, by hiding
+    every column the preset doesn't list.
+
+    Only applies on a first visit: ``stateSave`` restores the visitor's own
+    column visibility over the init config, so this is the default rather than
+    something that overrides a returning user's choice.
+    """
+    visible = set(resolve_preset_columns(columns, all_columns))
+    hidden = [idx for idx in range(len(all_columns)) if idx not in visible]
+    if not hidden:
+        return []
+    return [{"targets": hidden, "visible": False}]
 
 
 def batch_filter_button(*, text: str = "Batch Filter") -> dict[str, object]:
@@ -172,31 +288,151 @@ def batch_filter_button(*, text: str = "Batch Filter") -> dict[str, object]:
     }
 
 
-def filter_state_draw_callback(table_key: str) -> JavascriptFunction:
+def filter_state_draw_callback(
+    table_key: str,
+    *,
+    report_row_state: bool = False,
+    default_preset: str | None = None,
+) -> JavascriptFunction:
     """Return a drawCallback that stores the DT API on ``window``, reports
     the current filter state to the Shiny server via ``dt_filter_state_<table_key>``,
     and fits the table's scroll body to the remaining browser viewport height
-    (instead of a fixed vh value) on first render and on window resize."""
+    (instead of a fixed vh value) on first render and on window resize.
+
+    With ``report_row_state`` the positional indices of the rows surviving the
+    current filters are also reported, via ``dt_filtered_rows_<table_key>``, and
+    the indices of the selected rows via ``dt_selected_rows_<table_key>`` (kept
+    current by a ``select``/``deselect`` handler bound here). Both index the same
+    dataframe handed to the widget, so the server can subset it directly. This is
+    opt-in because the filtered report sends one index per row on every redraw.
+
+    It also defines ``window.__<table_key>ReportSelection()``, so a button whose
+    action changes the selection programmatically can push the new selection
+    without waiting for a redraw.
+
+    It keeps the column-preset indicator current too: the ``.dt-preset-menu``
+    toolbar button is labelled with the active preset and marked
+    ``.dt-preset-active``, and any hand-made column visibility change clears it,
+    so the toolbar never claims a preset the columns no longer match.
+    ``default_preset`` names the preset the table starts on (paired with
+    ``preset_column_defs``), shown until the visitor picks another or overrides
+    the columns themselves.
+    """
+    # Read straight off the raw settings object rather than through the DataTables
+    # API, which may be unreachable via the page-level `$` (see the jQuery note in
+    # the callback below). `aiDisplay` holds exactly the post-filter, pre-paging row
+    # indices we want, with the API kept as a fallback in case a future DataTables
+    # release renames it.
+    row_state_js = (
+        f"""
+            var filteredIdx = null;
+            if (settings && settings.aiDisplay) {{
+                filteredIdx = Array.prototype.slice.call(settings.aiDisplay);
+            }} else {{
+                try {{
+                    filteredIdx = new $.fn.dataTable.Api(settings)
+                        .rows({{ search: 'applied' }}).indexes().toArray();
+                }} catch (e) {{}}
+            }}
+            if (filteredIdx) {{
+                Shiny.setInputValue(
+                    'dt_filtered_rows_{table_key}',
+                    JSON.stringify(filteredIdx)
+                );
+            }}
+        """
+        if report_row_state
+        else ""
+    )
+    # Selection has to be reported by the table too: the widget's own
+    # `selected_rows` trait only sees rows currently in the DOM, and with
+    # deferRender + scroller most selected rows are scrolled out of it. Bound
+    # here (rather than in a button's action) so plain row clicks report as well,
+    # and guarded on `settings` rather than `window` so a remount of the widget
+    # re-binds against the live table instead of keeping a closure over the
+    # detached one.
+    selection_js = (
+        f"""
+            window.__{table_key}ReportSelection = function() {{
+                Shiny.setInputValue(
+                    'dt_selected_rows_{table_key}',
+                    JSON.stringify(dt.rows({{ selected: true }}).indexes().toArray())
+                );
+            }};
+            if (!settings.__selectionBound) {{
+                settings.__selectionBound = true;
+                dt.on('select deselect', function() {{
+                    window.__{table_key}ReportSelection();
+                }});
+                // Report once up front so an empty selection reads as "nothing
+                // selected" on the server instead of "the table hasn't reported yet".
+                window.__{table_key}ReportSelection();
+            }}
+        """
+        if report_row_state
+        else ""
+    )
+    # The preset buttons only change column visibility client-side, so nothing
+    # else on the page knows one is applied. Paint the toolbar from the stored
+    # name on every draw (covering a remount, which rebuilds the buttons), and
+    # drop the label the moment the user changes a column by hand -- an
+    # indicator that can go stale is worse than none.
+    preset_js = f"""
+            window.__{table_key}SyncPreset = function() {{
+                if (!container) return;
+                var menuBtn = container.querySelector('.dt-preset-menu');
+                var selectionBtn = container.querySelector('.dt-selection-menu');
+                if (!menuBtn && !selectionBtn) return;
+                var active = null;
+                try {{
+                    active = sessionStorage.getItem({_preset_storage_key_js(table_key)});
+                }} catch (err) {{}}
+                // `null` is a first visit, which lands on the default preset via
+                // preset_column_defs; `''` is the user having overridden it, i.e.
+                // a column selection of their own.
+                if (active === null) active = {json.dumps(default_preset or "")};
+                if (menuBtn) {{
+                    var label = menuBtn.querySelector('span') || menuBtn;
+                    label.textContent = active ? 'Presets: ' + active : 'Presets';
+                    menuBtn.classList.toggle('dt-preset-active', !!active);
+                }}
+                // The two menus are alternatives: whenever the columns are not
+                // matching a preset, they are a hand-made selection, so the
+                // Selection menu carries the indicator instead.
+                if (selectionBtn) {{
+                    var selLabel = selectionBtn.querySelector('span') || selectionBtn;
+                    selLabel.textContent = active ? 'Selection' : 'Selection: Custom';
+                    selectionBtn.classList.toggle('dt-selection-custom', !active);
+                }}
+            }};
+            if (!settings.__presetBound) {{
+                settings.__presetBound = true;
+                dt.on('column-visibility', function() {{
+                    if (window.__{table_key}PresetApplying) return;
+                    // A table with neither menu has no indicator to keep honest.
+                    if (!container) return;
+                    if (!container.querySelector('.dt-preset-menu')
+                        && !container.querySelector('.dt-selection-menu')) return;
+                    try {{
+                        sessionStorage.setItem({_preset_storage_key_js(table_key)}, '');
+                    }} catch (err) {{}}
+                    window.__{table_key}SyncPreset();
+                }});
+            }}
+            window.__{table_key}SyncPreset();
+    """
     return JavascriptFunction(f"""
         function(settings) {{
-            var dt = new $.fn.dataTable.Api(settings);
-            window.__{table_key}DT = dt;
-            var globalSearch = dt.search() || '';
-            var colFilterCount = 0;
-            dt.columns().every(function() {{
-                if (this.search()) colFilterCount++;
-            }});
-            var hasSB = false;
-            try {{
-                var groups = dt.searchBuilder.getDetails();
-                if (groups && groups.criteria && groups.criteria.length > 0) hasSB = true;
-            }} catch(e) {{}}
-            var state = JSON.stringify({{
-                global_search: globalSearch,
-                column_filter_count: colFilterCount,
-                has_search_builder: hasSB
-            }});
-            Shiny.setInputValue('dt_filter_state_{table_key}', state);
+{row_state_js}
+            // Everything below deliberately avoids the page-level `$`. Shiny loads
+            // jQuery 3.6 while itables' bundle loads jQuery 4 with DataTables
+            // registered on it, and whichever wins `window.$` is a load-order race.
+            // When Shiny's copy wins there is no `$.fn.dataTable`, so reaching for
+            // the API here used to throw and abandon the rest of this callback --
+            // leaving the table at its raw `scrollY` (which the app's `zoom: 0.8`
+            // then shrinks by a fifth) and never exposing the API below.
+            var container = settings.nTableWrapper
+                || (settings.nTable && settings.nTable.closest('.dt-container'));
 
             // Fit the scroll body to the remaining viewport height rather than a
             // fixed vh value. Bound to the DT `settings` object (not `window`) so a
@@ -204,7 +440,7 @@ def filter_state_draw_callback(table_key: str) -> JavascriptFunction:
             // instead of silently reusing a stale one.
             var MIN_HEIGHT = 240;
             function fitScrollHeight() {{
-                var scrollBody = dt.table().container().querySelector('.dt-scroll-body');
+                var scrollBody = container && container.querySelector('.dt-scroll-body');
                 if (!scrollBody) return;
                 // getBoundingClientRect/innerHeight both reflect true screen pixels,
                 // but style.height is set in the element's own local (pre-scale)
@@ -251,7 +487,8 @@ def filter_state_draw_callback(table_key: str) -> JavascriptFunction:
                 // much vertical space is left -- independent of any window
                 // resize event. Watch it directly so the table stays correctly
                 // sized instead of relying only on the resize listener below.
-                var toolbarRow = dt.table().container().querySelector('.dt-layout-row:not(.dt-layout-table)');
+                var toolbarRow = container
+                    && container.querySelector('.dt-layout-row:not(.dt-layout-table)');
                 if (toolbarRow && window.ResizeObserver) {{
                     new ResizeObserver(function() {{ fitScrollHeight(); }}).observe(toolbarRow);
                 }}
@@ -267,6 +504,40 @@ def filter_state_draw_callback(table_key: str) -> JavascriptFunction:
                     }}, 120);
                 }});
             }}
+
+            // `settings.oInstance` is a jQuery object built by whichever jQuery
+            // DataTables actually registered itself on, so `.api()` resolves even when
+            // the page-level `$` is the other copy. Kept last and non-fatal: if it ever
+            // fails, the sizing above has already happened and a later draw retries.
+            var dt = null;
+            try {{
+                if (settings.oInstance && typeof settings.oInstance.api === 'function') {{
+                    dt = settings.oInstance.api();
+                }} else if (window.$ && window.$.fn && window.$.fn.dataTable) {{
+                    dt = new window.$.fn.dataTable.Api(settings);
+                }}
+            }} catch (e) {{}}
+            if (!dt) return;
+
+            window.__{table_key}DT = dt;
+
+{selection_js}{preset_js}
+            var globalSearch = dt.search() || '';
+            var colFilterCount = 0;
+            dt.columns().every(function() {{
+                if (this.search()) colFilterCount++;
+            }});
+            var hasSB = false;
+            try {{
+                var groups = dt.searchBuilder.getDetails();
+                if (groups && groups.criteria && groups.criteria.length > 0) hasSB = true;
+            }} catch(e) {{}}
+            var state = JSON.stringify({{
+                global_search: globalSearch,
+                column_filter_count: colFilterCount,
+                has_search_builder: hasSB
+            }});
+            Shiny.setInputValue('dt_filter_state_{table_key}', state);
         }}
     """)
 

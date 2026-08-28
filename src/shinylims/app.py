@@ -21,7 +21,12 @@ from shinylims.features.reagent_overview import (
     reagent_overview_ui,
 )
 from shinylims.features.reagents import reagents_server, reagents_ui
-from shinylims.features.samples import samples_server, samples_ui
+from shinylims.features.samples import (
+    project_limsids_for_seq_limsids,
+    seq_limsids_for_project_limsids,
+    samples_server,
+    samples_ui,
+)
 from shinylims.features.sequencing import seq_server, seq_ui
 from shinylims.features.storage import storage_server, storage_ui
 from shinylims.integrations.clarity_pg import (
@@ -698,9 +703,9 @@ def server(input, output, session):
 
     reagents_server(input, output, session)
     reagent_overview_server(input, output, session)
-    storage_server()
+    storage_server(input)
 
-    projects_server(cache.projects, input)
+    projects_controller = projects_server(cache.projects, input)
     samples_controller = samples_server(cache.samples, input)
     seq_controller = seq_server(cache.seq, input)
 
@@ -831,6 +836,190 @@ def server(input, output, session):
         label = ", ".join(dict.fromkeys(run_labels)) if run_labels else None
         samples_controller["set_run_filter"](seq_ids, label)
         _navigate("samples")
+
+    @reactive.Effect
+    @reactive.event(input.view_run_projects)
+    def _view_projects_for_run():
+        """Cross-link: filter the Projects view to projects present in selected runs."""
+        selection = seq_controller["get_selected_runs"]()
+        if not selection:
+            ui.notification_show(
+                "Select one or more run rows in the table first.",
+                type="warning",
+                duration=4,
+            )
+            return
+
+        seq_ids, run_labels = selection
+        if not cache.is_samples_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading samples...")
+                _run_load_step("samples", cache.load_samples)
+
+        project_ids = project_limsids_for_seq_limsids(cache.samples(), seq_ids)
+        if not project_ids:
+            ui.notification_show(
+                "No projects were found for the selected run rows.",
+                type="warning",
+                duration=4,
+            )
+            return
+
+        if not cache.is_projects_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading projects...")
+                _run_load_step("projects", cache.load_projects)
+
+        label = ", ".join(dict.fromkeys(run_labels)) if run_labels else None
+        projects_controller["set_project_filter"](project_ids, label)
+        _navigate("projects")
+
+    def _selection_label(labels) -> str | None:
+        """Build a compact label for a cross-table filter status line."""
+        values = list(dict.fromkeys(label for label in labels if label))
+        if not values:
+            return None
+        shown = ", ".join(values[:3])
+        remaining = len(values) - 3
+        return f"{shown} +{remaining} more" if remaining > 0 else shown
+
+    @reactive.Effect
+    @reactive.event(input.view_sample_projects)
+    def _view_projects_for_samples():
+        """Cross-link: selected Samples -> related Projects."""
+        selection = samples_controller["get_selected_sample_links"](
+            input.view_sample_projects()
+        )
+        if not selection:
+            ui.notification_show(
+                "Select one or more sample rows in the table first.",
+                type="warning",
+                duration=4,
+            )
+            return
+
+        project_ids, _seq_ids, sample_labels = selection
+        if not project_ids:
+            ui.notification_show(
+                "No projects were found for the selected sample rows.",
+                type="warning",
+                duration=4,
+            )
+            return
+        if not cache.is_projects_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading projects...")
+                _run_load_step("projects", cache.load_projects)
+
+        projects_controller["set_project_filter"](
+            project_ids,
+            _selection_label(sample_labels),
+            source="sample",
+        )
+        _navigate("projects")
+
+    @reactive.Effect
+    @reactive.event(input.view_sample_runs)
+    def _view_runs_for_samples():
+        """Cross-link: selected Samples -> related Sequencing runs."""
+        selection = samples_controller["get_selected_sample_links"](
+            input.view_sample_runs()
+        )
+        if not selection:
+            ui.notification_show(
+                "Select one or more sample rows in the table first.",
+                type="warning",
+                duration=4,
+            )
+            return
+
+        _project_ids, seq_ids, sample_labels = selection
+        if not seq_ids:
+            ui.notification_show(
+                "No sequencing runs were found for the selected sample rows.",
+                type="warning",
+                duration=4,
+            )
+            return
+        if not cache.is_seq_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading sequencing runs...")
+                _run_load_step("sequencing", cache.load_sequencing)
+
+        seq_controller["set_seq_filter"](
+            seq_ids,
+            _selection_label(sample_labels),
+            source="samples",
+        )
+        _navigate("sequencing")
+
+    @reactive.Effect
+    @reactive.event(input.view_project_samples)
+    def _view_samples_for_projects():
+        """Cross-link: selected Projects -> related Samples."""
+        selection = projects_controller["get_selected_projects"](
+            input.view_project_samples()
+        )
+        if not selection:
+            ui.notification_show(
+                "Select one or more project rows in the table first.",
+                type="warning",
+                duration=4,
+            )
+            return
+
+        project_ids, project_labels = selection
+        if not cache.is_samples_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading samples...")
+                _run_load_step("samples", cache.load_samples)
+
+        samples_controller["set_project_filter"](
+            project_ids,
+            _selection_label(project_labels),
+        )
+        _navigate("samples")
+
+    @reactive.Effect
+    @reactive.event(input.view_project_runs)
+    def _view_runs_for_projects():
+        """Cross-link: selected Projects -> Samples bridge -> Sequencing runs."""
+        selection = projects_controller["get_selected_projects"](
+            input.view_project_runs()
+        )
+        if not selection:
+            ui.notification_show(
+                "Select one or more project rows in the table first.",
+                type="warning",
+                duration=4,
+            )
+            return
+
+        project_ids, project_labels = selection
+        if not cache.is_samples_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading samples...")
+                _run_load_step("samples", cache.load_samples)
+
+        seq_ids = seq_limsids_for_project_limsids(cache.samples(), project_ids)
+        if not seq_ids:
+            ui.notification_show(
+                "No sequencing runs were found for the selected project rows.",
+                type="warning",
+                duration=4,
+            )
+            return
+        if not cache.is_seq_loaded():
+            with ui.Progress(min=1, max=1) as p:
+                p.set(message="Loading sequencing runs...")
+                _run_load_step("sequencing", cache.load_sequencing)
+
+        seq_controller["set_seq_filter"](
+            seq_ids,
+            _selection_label(project_labels),
+            source="projects",
+        )
+        _navigate("sequencing")
 
     # Legacy metadata archive downloads (served from Posit Connect pins)
     def _download_legacy_pin(pin_name: str) -> str:

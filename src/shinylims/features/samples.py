@@ -2,6 +2,9 @@
 samples.py - Table module containing UI and server logic for the Samples table tab
 '''
 
+import html
+import json
+
 from shiny import ui, reactive, render
 from shinywidgets import output_widget, render_widget, reactive_read
 from itables.widget import ITable
@@ -17,7 +20,9 @@ from shinylims.ui_helpers.table_controls import (
     build_filter_status_bar,
     clear_all_filters_script,
     deselect_all_columns_button,
+    export_options,
     filter_state_draw_callback,
+    preset_column_defs,
     select_all_columns_button,
     truncated_text_renderer,
     visibility_preset_button,
@@ -29,6 +34,56 @@ from datetime import datetime
 
 # Base path on the remote cluster — full path is built dynamically using the username
 SAGA_BASE_PATH = "/cluster/shared/vetinst/users/"
+
+# Fixed sessionStorage key so the table's setup survives a view switch, which
+# unmounts it (app_content renders one view at a time). DataTables' own state
+# storage keys off the table's id, and the widget gets a fresh auto-generated one
+# on every mount, so the key would never match -- hence the explicit one here.
+SAMPLES_TABLE_STATE_KEY = "shinylims_samples_dt_state"
+
+# Column visibility presets for the "Presets" menu, as column names rather than
+# positions -- see visibility_preset_button. Each one is a task the table gets
+# used for, not a slice of the schema. The per-step *_limsid links belong to the
+# step they record, so they sit with it rather than in a preset of their own.
+COLUMN_PRESETS = [
+    # What the sample is, who it belongs to, and how far it has got.
+    ("🧫 Sample Overview", [
+        "LIMS ID", "Received Date", "progress", "Species",
+        "Sample Name", "Project Name", "Experiment Name",
+    ]),
+    # Nanodrop and Qubit readings, with the steps that produced them.
+    ("🔬 QC Metrics", [
+        "LIMS ID", "Sample Name", "Species", "Extraction Number",
+        "Absorbance", "A260/280 ratio", "A260/230 ratio", "Fluorescence",
+        "nd_limsid", "qubit_limsid",
+    ]),
+    # Finding the physical sample, and knowing what it is before you handle it.
+    ("📦 Storage & Handling", [
+        "LIMS ID", "Sample Name", "Species", "sample_type", "gram_stain",
+        "Storage Box", "Storage Well", "Received Date",
+    ]),
+    # Library prep through to delivered data.
+    ("🧬 Prep & Sequencing", [
+        "LIMS ID", "Sample Name", "Experiment Name", "Increased Pooling (%)",
+        "Reagent Label", "prep_limsid", "seq_limsid", "NIRD Filename",
+    ]),
+    # What gets invoiced, and against which account.
+    ("💰 Billing", [
+        "LIMS ID", "Project Name", "Project Account", "Invoice ID",
+        "Billing Description", "price", "billed_limsid",
+    ]),
+    # Who sent the samples in, and under what project.
+    ("👤 Project & Submitter", [
+        "LIMS ID", "Project LIMS ID", "Project Name", "submitter",
+        "submitting_lab", "Project Account", "Received Date",
+    ]),
+]
+
+# The table opens on this one rather than all 31 columns: a first-time visitor
+# gets a readable sample list instead of a wall of horizontal scroll. Only a
+# default -- stateSave restores a returning visitor's own columns over it.
+DEFAULT_COLUMN_PRESET = "🧫 Sample Overview"
+DEFAULT_PRESET_COLUMNS = dict(COLUMN_PRESETS)[DEFAULT_COLUMN_PRESET]
 
 
 def _find_batch_filter_matches(
@@ -48,15 +103,72 @@ def _batch_filter_non_matches_csv(non_matches: list[str], col: str) -> str:
 
 
 def _split_seq_limsids(cell) -> set[str]:
-    """Split a samples ``seq_limsid`` cell (comma-separated LUIDs) into a set."""
+    """Extract plain LUIDs from comma-separated plain, HTML, or Markdown links."""
     if cell is None or (isinstance(cell, float) and pd.isna(cell)):
         return set()
-    return {part.strip() for part in str(cell).split(",") if part.strip()}
 
+    seq_ids = set()
+    for raw_part in str(cell).split(","):
+        part = raw_part.strip()
+        if not part:
+            continue
+
+        html_link = re.fullmatch(
+            r"<a\b[^>]*>([^<]+)</a>",
+            part,
+            flags=re.IGNORECASE,
+        )
+        markdown_link = re.fullmatch(r"\[([^]]+)]\([^)]+\)", part)
+        if html_link:
+            part = html.unescape(html_link.group(1)).strip()
+        elif markdown_link:
+            part = markdown_link.group(1).strip()
+
+        if part:
+            seq_ids.add(part)
+    return seq_ids
 
 def _seq_limsid_matches(cell, wanted: set[str]) -> bool:
     """True when any LUID in ``cell`` is one of the wanted sequencing LUIDs."""
     return bool(_split_seq_limsids(cell) & wanted)
+
+
+def project_limsids_for_seq_limsids(df: pd.DataFrame, seq_ids) -> list[str]:
+    """Return project LIMS IDs for samples linked to any selected sequencing LUID."""
+    wanted = set()
+    for seq_id in seq_ids:
+        wanted.update(_split_seq_limsids(seq_id))
+    if not wanted or "seq_limsid" not in df.columns or "Project LIMS ID" not in df.columns:
+        return []
+
+    rows = df[df["seq_limsid"].apply(lambda cell: _seq_limsid_matches(cell, wanted))]
+    project_ids = [
+        str(value).strip()
+        for value in rows["Project LIMS ID"].dropna()
+        if str(value).strip()
+    ]
+    return list(dict.fromkeys(project_ids))
+
+
+def seq_limsids_for_project_limsids(df: pd.DataFrame, project_ids) -> list[str]:
+    """Return sequencing LIMS IDs for samples belonging to selected projects."""
+    wanted = {
+        str(project_id).strip()
+        for project_id in project_ids
+        if str(project_id).strip()
+    }
+    if (
+        not wanted
+        or "Project LIMS ID" not in df.columns
+        or "seq_limsid" not in df.columns
+    ):
+        return []
+
+    rows = df[df["Project LIMS ID"].astype(str).isin(wanted)]
+    seq_ids = []
+    for value in rows["seq_limsid"]:
+        seq_ids.extend(_split_seq_limsids(value))
+    return sorted(set(seq_ids))
 
 
 ##############################
@@ -104,6 +216,10 @@ def samples_server(samples_df, input):
     run_filter_seq_ids = reactive.Value(None)    # set[str] | None
     run_filter_label = reactive.Value(None)      # str | None (run IDs, for display)
 
+    # Project filter state (set from the Projects tab)
+    project_filter_ids = reactive.Value(None)    # set[str] | None
+    project_filter_label = reactive.Value(None)  # str | None
+
     @reactive.Calc
     def combined_samples():
         df = samples_df().reset_index(drop=True)
@@ -116,6 +232,11 @@ def samples_server(samples_df, input):
         if seq_ids and "seq_limsid" in df.columns:
             mask = df["seq_limsid"].apply(lambda cell: _seq_limsid_matches(cell, seq_ids))
             df = df[mask].reset_index(drop=True)
+        project_ids = project_filter_ids.get()
+        if project_ids and "Project LIMS ID" in df.columns:
+            df = df[
+                df["Project LIMS ID"].astype(str).isin(project_ids)
+            ].reset_index(drop=True)
         return df
 
     # ── Unified filter status bar ────────────────────────────────────────
@@ -134,6 +255,21 @@ def samples_server(samples_df, input):
             label = run_filter_label.get()
             run_desc = f" (run {label})" if label else ""
             extra.append(f"Run filter{run_desc}: {matched} samples")
+
+        project_ids = project_filter_ids.get()
+        if project_ids:
+            df = samples_df()
+            matched = (
+                df["Project LIMS ID"].astype(str).isin(project_ids).sum()
+                if "Project LIMS ID" in df.columns
+                else 0
+            )
+            label = project_filter_label.get()
+            project_desc = f" ({label})" if label else ""
+            extra.append(
+                f"Related samples from selected projects{project_desc}: "
+                f"{matched} samples"
+            )
 
         ids = batch_filter_ids.get()
         if ids is not None:
@@ -279,6 +415,8 @@ def samples_server(samples_df, input):
         batch_filter_non_matches.set(None)
         run_filter_seq_ids.set(None)
         run_filter_label.set(None)
+        project_filter_ids.set(None)
+        project_filter_label.set(None)
 
     def set_run_filter(seq_ids, label: str | None = None) -> None:
         """Filter the samples table to rows whose seq_limsid is in ``seq_ids``.
@@ -289,8 +427,74 @@ def samples_server(samples_df, input):
         """
         batch_filter_ids.set(None)
         batch_filter_non_matches.set(None)
-        run_filter_seq_ids.set(set(seq_ids) if seq_ids else None)
+        project_filter_ids.set(None)
+        project_filter_label.set(None)
+        normalized_seq_ids = set()
+        for seq_id in seq_ids:
+            normalized_seq_ids.update(_split_seq_limsids(seq_id))
+        run_filter_seq_ids.set(normalized_seq_ids or None)
         run_filter_label.set(label)
+
+    def set_project_filter(project_ids, label: str | None = None) -> None:
+        """Filter Samples to rows belonging to selected projects."""
+        batch_filter_ids.set(None)
+        batch_filter_non_matches.set(None)
+        run_filter_seq_ids.set(None)
+        run_filter_label.set(None)
+        project_filter_ids.set(
+            {
+                str(project_id).strip()
+                for project_id in project_ids
+                if str(project_id).strip()
+            }
+            or None
+        )
+        project_filter_label.set(label)
+
+    def get_selected_sample_links(raw_selection):
+        """Return project IDs, sequencing IDs, and labels for selected sample rows."""
+        selected = None
+        payload_valid = False
+        try:
+            payload = json.loads(raw_selection) if raw_selection else None
+        except (TypeError, ValueError):
+            payload = None
+        if isinstance(payload, dict) and isinstance(payload.get("rows"), list):
+            selected = [
+                index for index in payload["rows"]
+                if isinstance(index, int)
+            ]
+            payload_valid = True
+
+        if not payload_valid:
+            try:
+                selected = list(reactive_read(data_samples.widget, "selected_rows"))
+            except Exception:
+                selected = None
+        if not selected:
+            return None
+
+        dat = combined_samples().reset_index(drop=True)
+        valid = [index for index in selected if 0 <= index < len(dat)]
+        if not valid:
+            return None
+        rows = dat.iloc[valid]
+
+        project_ids = {
+            str(value).strip()
+            for value in rows.get("Project LIMS ID", pd.Series(dtype=object)).dropna()
+            if str(value).strip()
+        }
+        seq_ids = set()
+        if "seq_limsid" in rows.columns:
+            for value in rows["seq_limsid"]:
+                seq_ids.update(_split_seq_limsids(value))
+        labels = [
+            str(value).strip()
+            for value in rows.get("Sample Name", pd.Series(dtype=object)).dropna()
+            if str(value).strip()
+        ]
+        return project_ids, seq_ids, labels
 
     # Step 1 — "Send to SAGA" button (triggered via Shiny.setInputValue from the export dropdown):
     # validate selection, then show credentials modal
@@ -457,6 +661,30 @@ def samples_server(samples_df, input):
                 lengthMenu=[[200, 500, 1000, 2000, -1], [200, 500, 1000, 2000, "All"]],
                 column_filters="header",
                 search={"smart": True},
+                # Navigating to another view unmounts this table (app_content renders one
+                # view at a time), which would otherwise drop the user's search, column
+                # filters, Filter Builder rules and column choices. sessionStorage means
+                # it survives navigation but not a new tab. The server-side batch filter
+                # is separate state and is not restored with it -- the status bar above
+                # the table stays the source of truth for what the server is filtering.
+                stateSave=True,
+                stateSaveCallback=JavascriptFunction(f"""
+                    function(settings, data) {{
+                        try {{
+                            sessionStorage.setItem('{SAMPLES_TABLE_STATE_KEY}', JSON.stringify(data));
+                        }} catch (e) {{}}
+                    }}
+                """),
+                stateLoadCallback=JavascriptFunction(f"""
+                    function(settings) {{
+                        try {{
+                            return JSON.parse(sessionStorage.getItem('{SAMPLES_TABLE_STATE_KEY}'));
+                        }} catch (e) {{ return null; }}
+                    }}
+                """),
+                # stateSaveCallback/stateLoadCallback are valid DataTables options that
+                # itables just doesn't list in its own TypedDict; it forwards them fine.
+                warn_on_undocumented_option=False,
                 classes="nowrap compact hover order-column cell-border",
                 scrollY="84vh",
                 scrollX=True,
@@ -477,16 +705,30 @@ def samples_server(samples_df, input):
                     {
                         "extend": "colvis",
                         "text": "Selection",
+                        # Relabelled "Selection: Custom" by the draw callback
+                        # whenever the visible columns are the user's own pick
+                        # rather than one of the presets below.
+                        "className": "dt-selection-menu",
                         "collectionLayout": "two-column",
                         "columnText": COLVIS_COLUMN_TEXT,
                     },
                     {
                         "extend": "collection",
                         "text": "Presets",
+                        # Relabelled with the active preset by the draw callback.
+                        "className": "dt-preset-menu",
                         "buttons": [
                             select_all_columns_button(),
                             deselect_all_columns_button(),
-                            visibility_preset_button([2, 3, 4, 5, 9, 10, 21]),
+                            *(
+                                visibility_preset_button(
+                                    preset_columns,
+                                    dat.columns,
+                                    text=preset_text,
+                                    table_key="samples",
+                                )
+                                for preset_text, preset_columns in COLUMN_PRESETS
+                            ),
                         ]
                     },
                     {'extend': "spacer",
@@ -514,6 +756,47 @@ def samples_server(samples_df, input):
                     },
                     {'extend': "spacer",
                      'style': 'bar',
+                     'text': 'View'},
+                    {
+                        "extend": "collection",
+                        "text": "View selected",
+                        "buttons": [
+                            {
+                                "text": "📁 Projects",
+                                "titleAttr": "View projects for the selected sample rows.",
+                                "action": JavascriptFunction("""
+                                    function(e, dt, node, config) {
+                                        Shiny.setInputValue(
+                                            'view_sample_projects',
+                                            JSON.stringify({
+                                                rows: dt.rows({selected: true}).indexes().toArray(),
+                                                nonce: Math.random()
+                                            }),
+                                            {priority: 'event'}
+                                        );
+                                    }
+                                """)
+                            },
+                            {
+                                "text": "🧬 Sequencing runs",
+                                "titleAttr": "View sequencing runs for the selected sample rows.",
+                                "action": JavascriptFunction("""
+                                    function(e, dt, node, config) {
+                                        Shiny.setInputValue(
+                                            'view_sample_runs',
+                                            JSON.stringify({
+                                                rows: dt.rows({selected: true}).indexes().toArray(),
+                                                nonce: Math.random()
+                                            }),
+                                            {priority: 'event'}
+                                        );
+                                    }
+                                """)
+                            }
+                        ]
+                    },
+                    {'extend': "spacer",
+                     'style': 'bar',
                      'text': 'Export'},
                     {
                         "extend": "collection",
@@ -521,13 +804,13 @@ def samples_server(samples_df, input):
                         "buttons": [
                             {
                                 "extend": "csvHtml5",
-                                "exportOptions": {"columns": ":visible"},
+                                "exportOptions": export_options(),
                                 "text": "📄 Export to CSV",
                                 "title": "Sample Data Export"
                             },
                             {
                                 "extend": "excelHtml5",
-                                "exportOptions": {"columns": ":visible"},
+                                "exportOptions": export_options(),
                                 "text": "📊 Export to Excel",
                                 "title": "Sample Data Export"
                             },
@@ -552,8 +835,11 @@ def samples_server(samples_df, input):
                      'style': 'bar'},
                 ],
                 order=[[column_index, "desc"]],
-                drawCallback=filter_state_draw_callback("samples"),
-                columnDefs=[
+                drawCallback=filter_state_draw_callback(
+                    "samples",
+                    default_preset=DEFAULT_COLUMN_PRESET,
+                ),
+                columnDefs=preset_column_defs(DEFAULT_PRESET_COLUMNS, dat.columns) + [
                     {"className": "dt-center", "targets": "_all"},
                     {"width": "200px", "targets": "_all"},
                     {
@@ -588,4 +874,8 @@ def samples_server(samples_df, input):
                 ] + searchbuilder_title_defs(dat.columns)
             )
 
-    return {"set_run_filter": set_run_filter}
+    return {
+        "set_run_filter": set_run_filter,
+        "set_project_filter": set_project_filter,
+        "get_selected_sample_links": get_selected_sample_links,
+    }

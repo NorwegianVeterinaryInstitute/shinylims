@@ -218,6 +218,7 @@ def _fetch_sequencing_data_from_postgres() -> tuple[pd.DataFrame, str]:
             "Operator",
             "Species",
             "Experiment Name",
+            "Application",
             "Casette Type",
             "Read Length",
             "Index Cycles",
