@@ -226,6 +226,7 @@ class ActivePrepLot:
     status: str
     sequence_number: int
     reactions_left: int
+    notes: str = ""
 
 
 @dataclass
@@ -257,6 +258,7 @@ class SequencingStockLot:
     expiry_date: str
     status: str
     miseq_kit_type: str | None
+    notes: str = ""
 
 
 @dataclass
@@ -1900,6 +1902,7 @@ def _build_active_prep_sets_result_from_snapshot_lots(
                 status=lot.status,
                 sequence_number=sequence_number,
                 reactions_left=reactions_left,
+                notes=lot.notes,
             )
         )
 
@@ -1995,6 +1998,7 @@ def _build_sequencing_stock_result_from_snapshot_lots(
                 expiry_date=lot.expiry_date,
                 status=status,
                 miseq_kit_type=miseq_kit_type,
+                notes=lot.notes,
             )
         )
 

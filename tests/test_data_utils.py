@@ -184,6 +184,12 @@ def test_format_sequencing_text_columns_are_escaped():
     assert "<MiSeq>" not in result["Instrument"][0]
 
 
+def test_format_sequencing_preserves_application_column():
+    df = pd.DataFrame({"Application": ["WGS (MiSeq v3)"]})
+    result = _format_sequencing_dataframe(df)
+    assert result["Application"].tolist() == ["WGS (MiSeq v3)"]
+
+
 # ── _format_samples_dataframe ────────────────────────────────────────────────
 
 def test_format_samples_storage_box_placed_immediately_before_storage_well():

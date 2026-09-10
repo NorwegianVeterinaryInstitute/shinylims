@@ -14,6 +14,7 @@ from typing import Any
 
 from shinylims.integrations.queries._shared import (
     PROJECT_IDS_EXCLUDED_FROM_APP,
+    ProcessRecord,
     _container_state_label,
     _display_name,
     _load_artifact_udfs,
@@ -25,6 +26,7 @@ from shinylims.integrations.queries.projects import (
     build_project_rows,
 )
 from shinylims.integrations.queries.storage import build_storage_container_rows
+import shinylims.integrations.queries.sequencing as sequencing_queries
 
 
 # ── Fake session infrastructure ──────────────────────────────────────────────
@@ -226,6 +228,67 @@ def test_build_project_rows_submitter_display_name():
     rows = build_project_rows(_FakeSession([_project_row(firstname="Ada", lastname="Lovelace")]))
     assert rows[0]["Submitter"] == "Ada Lovelace"
 
+
+
+
+# ── build_sequencing_run_rows ────────────────────────────────────────────────
+
+def _sequencing_process(processid: int = 1, luid: str = "24-1000") -> ProcessRecord:
+    return ProcessRecord(
+        processid=processid,
+        luid=luid,
+        daterun=datetime(2024, 1, 1),
+        workstatus="COMPLETE",
+        techid=None,
+        typeid=15,
+    )
+
+
+def _sequencing_lineage(processid: int = 1, artifactid: int = 10) -> sequencing_queries.SequencingLineage:
+    return sequencing_queries.SequencingLineage(
+        sequencing_process=_sequencing_process(processid=processid),
+        representative_input_artifactid=artifactid,
+        step7_process=None,
+        step6_process=None,
+        step5_process=None,
+        step7_input_artifactid=None,
+        step6_input_artifactid=None,
+        step5_input_artifactids=(),
+    )
+
+
+def test_build_sequencing_rows_preserves_application_from_representative_input(monkeypatch):
+    monkeypatch.setattr(sequencing_queries, "build_sequencing_lineages", lambda session, type_ids: [_sequencing_lineage()])
+    monkeypatch.setattr(sequencing_queries, "_load_process_udfs", lambda session, ids, names: {})
+    monkeypatch.setattr(
+        sequencing_queries,
+        "_load_artifact_udfs",
+        lambda session, ids, names: {10: {"Application": "WGS (MiSeq v3)"}},
+    )
+    monkeypatch.setattr(sequencing_queries, "_load_operator_initials", lambda session, ids: {})
+    monkeypatch.setattr(sequencing_queries, "_load_artifact_sample_context", lambda session, ids: {})
+
+    rows = sequencing_queries.build_sequencing_run_rows(object(), [15])
+
+    assert rows[0]["Application"] == "WGS (MiSeq v3)"
+    assert rows[0]["Casette Type"] == "MiSeq Reagent kit v3 (600 cycles)"
+
+
+def test_build_sequencing_rows_uses_unknown_for_missing_or_blank_application(monkeypatch):
+    lineages = [_sequencing_lineage(processid=1, artifactid=10), _sequencing_lineage(processid=2, artifactid=20)]
+    monkeypatch.setattr(sequencing_queries, "build_sequencing_lineages", lambda session, type_ids: lineages)
+    monkeypatch.setattr(sequencing_queries, "_load_process_udfs", lambda session, ids, names: {})
+    monkeypatch.setattr(
+        sequencing_queries,
+        "_load_artifact_udfs",
+        lambda session, ids, names: {20: {"Application": "   "}},
+    )
+    monkeypatch.setattr(sequencing_queries, "_load_operator_initials", lambda session, ids: {})
+    monkeypatch.setattr(sequencing_queries, "_load_artifact_sample_context", lambda session, ids: {})
+
+    rows = sequencing_queries.build_sequencing_run_rows(object(), [15])
+
+    assert [row["Application"] for row in rows] == ["Unknown", "Unknown"]
 
 # ── build_storage_container_rows ─────────────────────────────────────────────
 

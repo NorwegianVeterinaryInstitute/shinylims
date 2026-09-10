@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, UTC
+from typing import Any
 
 from shiny import reactive, render, ui
 
@@ -31,6 +33,60 @@ PREP_REAGENT_SHORT_LABELS = {
 }
 
 EXPIRY_WARNING_WINDOW_DAYS = 30
+
+_CRON_EXPIRY_NOTE_RE = re.compile(
+    r"^(?P<log_date>\d{4}-\d{2}-\d{2}):\s*cron endret utløpsdato fra "
+    r"(?P<from_date>\d{4}-\d{2}-\d{2}) til (?P<to_date>\d{4}-\d{2}-\d{2})\s*$"
+)
+
+
+@dataclass(frozen=True)
+class EffectiveExpiry:
+    """Resolved expiry after accounting for cron-driven date pushes."""
+    lims_date: str
+    original_date: str
+    is_cron_adjusted: bool
+
+
+def _resolve_effective_expiry(expiry_date: str | None, notes: str | None) -> EffectiveExpiry:
+    """Resolve the true original expiry from cron-adjustment log lines in notes.
+
+    A cron job pushes an about-to-expire reagent's LIMS expiry-date forward to
+    dodge Clarity's (unrecoverable) auto-archive, logging each push in the
+    lot's notes as ``"{log_date}: cron endret utløpsdato fra {from} til {to}"``.
+    The earliest such line's ``from`` date is the real original expiry.
+    """
+    lims_date = (expiry_date or "").strip()
+    changes = sorted(
+        (match.group("log_date"), match.group("from_date"))
+        for match in (
+            _CRON_EXPIRY_NOTE_RE.match(line.strip())
+            for line in str(notes or "").splitlines()
+        )
+        if match is not None
+    )
+    if not changes:
+        return EffectiveExpiry(lims_date=lims_date, original_date=lims_date, is_cron_adjusted=False)
+
+    original_date = changes[0][1]
+    return EffectiveExpiry(lims_date=lims_date, original_date=original_date, is_cron_adjusted=True)
+
+
+def _cron_adjusted_marker(effective: EffectiveExpiry) -> ui.TagChild:
+    """Return a small asterisk flagging that LIMS' expiry was cron-adjusted, or nothing."""
+    if not effective.is_cron_adjusted:
+        return None
+    return ui.span(
+        "*",
+        class_="index-planner-cron-marker",
+        title=f"LIMS currently shows {effective.lims_date} (auto-pushed to avoid auto-archive).",
+    )
+
+
+CRON_ADJUSTED_FOOTNOTE = (
+    "* A lab cron job pushed this expiry forward in LIMS to avoid Clarity's automatic "
+    "archiving. The date shown is the original expiry recovered from the lot's notes."
+)
 
 
 @dataclass(frozen=True)
@@ -162,13 +218,13 @@ def _sequencing_lot_box_label(lot: SequencingStockLot) -> str:
 
 
 def _prep_set_earliest_expiry_assessment(prep_set: PrepSetSummary, *, today: date | None = None) -> ExpiryAssessment:
-    """Return the earliest valid expiry across all lots in a prep set."""
+    """Return the earliest valid expiry across all lots in a prep set, using the true (cron-corrected) date."""
+    original_dates = [
+        _resolve_effective_expiry(lot.expiry_date, lot.notes).original_date
+        for lot in prep_set.lots_by_type.values()
+    ]
     earliest_raw = min(
-        (
-            lot.expiry_date.strip()
-            for lot in prep_set.lots_by_type.values()
-            if _assess_expiry_date(lot.expiry_date, today=today).days_left is not None
-        ),
+        (raw for raw in original_dates if _assess_expiry_date(raw, today=today).days_left is not None),
         default="",
     )
     return _assess_expiry_date(earliest_raw, today=today)
@@ -190,7 +246,8 @@ def _planner_expiry_warning_items(
                 lot = prep_set.lots_by_type.get(reagent_type)
                 if lot is None:
                     continue
-                assessment = _assess_expiry_date(lot.expiry_date, today=today)
+                effective = _resolve_effective_expiry(lot.expiry_date, lot.notes)
+                assessment = _assess_expiry_date(effective.original_date, today=today)
                 if _expiry_requires_attention(assessment):
                     affected_boxes.append(
                         f"{PREP_REAGENT_SHORT_LABELS[reagent_type]} {assessment.display_date}"
@@ -202,7 +259,8 @@ def _planner_expiry_warning_items(
 
     if sequencing_result is not None and sequencing_result.success:
         for lot in sequencing_result.lots:
-            assessment = _assess_expiry_date(lot.expiry_date, today=today)
+            effective = _resolve_effective_expiry(lot.expiry_date, lot.notes)
+            assessment = _assess_expiry_date(effective.original_date, today=today)
             if not _expiry_requires_attention(assessment):
                 continue
             warning_items.append(
@@ -259,10 +317,12 @@ def _render_prep_expiry_section(
         expiry_cells: list[ui.TagChild] = []
         for reagent_type in PREP_REAGENT_TYPES:
             lot = prep_set.lots_by_type.get(reagent_type)
-            assessment = _assess_expiry_date(lot.expiry_date if lot is not None else "", today=today)
+            effective = _resolve_effective_expiry(lot.expiry_date if lot is not None else "", lot.notes if lot is not None else "")
+            assessment = _assess_expiry_date(effective.original_date, today=today)
             expiry_cells.append(
                 ui.tags.td(
                     assessment.display_date,
+                    _cron_adjusted_marker(effective),
                     class_=f"index-planner-cell {_expiry_cell_class(assessment)}",
                 )
             )
@@ -315,14 +375,19 @@ def _render_sequencing_expiry_section(
 
     rows: list[ui.TagChild] = []
     for lot in sequencing_result.lots:
-        assessment = _assess_expiry_date(lot.expiry_date, today=today)
+        effective = _resolve_effective_expiry(lot.expiry_date, lot.notes)
+        assessment = _assess_expiry_date(effective.original_date, today=today)
         rows.append(
             ui.tags.tr(
                 ui.tags.td(_sequencing_lot_item_label(lot), class_="index-planner-cell"),
                 ui.tags.td(_sequencing_lot_box_label(lot), class_="index-planner-cell"),
                 ui.tags.td(lot.name or "Unnamed lot", class_="index-planner-cell"),
                 ui.tags.td((lot.status or "").title() or "Unknown", class_="index-planner-cell"),
-                ui.tags.td(assessment.display_date, class_=f"index-planner-cell {_expiry_cell_class(assessment)}"),
+                ui.tags.td(
+                    assessment.display_date,
+                    _cron_adjusted_marker(effective),
+                    class_=f"index-planner-cell {_expiry_cell_class(assessment)}",
+                ),
                 ui.tags.td(_format_days_left(assessment), class_=f"index-planner-cell index-planner-cell--number {_expiry_cell_class(assessment)}"),
             )
         )
@@ -369,6 +434,7 @@ def _build_planner_expiry_modal(
                 _render_sequencing_expiry_section(sequencing_result, today=today),
                 class_="index-planner-expiry-section",
             ),
+            ui.p(CRON_ADJUSTED_FOOTNOTE, class_="text-muted small mb-0 mt-2"),
         ),
         title="Prep and Sequencing Expiry Dates",
         footer=ui.modal_button("Close", class_="btn-secondary"),
@@ -442,30 +508,24 @@ def build_index_plate_maps_view_model(
     }
 
 
-def build_index_lot_overview_rows(result: IndexPlateMapsResult) -> list[dict[str, str]]:
+def build_index_lot_overview_rows(result: IndexPlateMapsResult) -> list[dict[str, Any]]:
     """Return active and pending index lots for the manager overview panel."""
-    rows = [
-        {
-            "lot_uri": plate_map.lot.lot_uri,
-            "name": plate_map.lot.name,
-            "set_letter": plate_map.lot.set_letter,
-            "status": "Active",
-            "expiry_date": plate_map.lot.expiry_date or "Not set",
-        }
-        for plate_map in result.plate_maps
-    ]
-    rows.extend(
-        {
+    def _overview_row(lot: ActiveIndexLot, *, status: str) -> dict[str, Any]:
+        effective = _resolve_effective_expiry(lot.expiry_date, lot.notes)
+        return {
             "lot_uri": lot.lot_uri,
             "name": lot.name,
             "set_letter": lot.set_letter,
-            "status": "Pending",
-            "expiry_date": lot.expiry_date or "Not set",
+            "status": status,
+            "expiry_date": effective.original_date or "Not set",
+            "effective_expiry": effective,
+            "expiry_assessment": _assess_expiry_date(effective.original_date),
         }
-        for lot in result.pending_lots
-    )
 
-    def _sort_key(row: dict[str, str]) -> tuple[bool, str, str]:
+    rows = [_overview_row(plate_map.lot, status="Active") for plate_map in result.plate_maps]
+    rows.extend(_overview_row(lot, status="Pending") for lot in result.pending_lots)
+
+    def _sort_key(row: dict[str, Any]) -> tuple[bool, str, str]:
         expiry_date = row["expiry_date"]
         return (row["status"] != "Active", expiry_date == "Not set", expiry_date, row["name"])
 
@@ -513,7 +573,10 @@ def _render_plate_grid(plate_map: IndexPlateMap) -> ui.Tag:
 
 def format_index_plate_selector_label(plate_map: IndexPlateMap) -> str:
     """Format the lot selector label with warning visibility."""
-    expiry_text = plate_map.lot.expiry_date or "No expiry"
+    effective = _resolve_effective_expiry(plate_map.lot.expiry_date, plate_map.lot.notes)
+    expiry_text = effective.original_date or "No expiry"
+    if effective.is_cron_adjusted:
+        expiry_text = f"{expiry_text}*"
     label = (
         f"{plate_map.lot.name} | "
         f"Set {plate_map.lot.set_letter} | "
@@ -608,7 +671,11 @@ def _merge_action_clicks(previous_clicks: dict[str, int], current_clicks: dict[s
     return merged_clicks
 
 
-def _render_prep_sets_section(prep_result: ActivePrepSetsResult | None) -> ui.Tag:
+def _render_prep_sets_section(
+    prep_result: ActivePrepSetsResult | None,
+    *,
+    today: date | None = None,
+) -> ui.Tag:
     if prep_result is None:
         section_body: ui.TagChild = ui.p(
             "Open the tool to load active prep sets.",
@@ -623,6 +690,7 @@ def _render_prep_sets_section(prep_result: ActivePrepSetsResult | None) -> ui.Ta
         for prep_set in prep_result.prep_sets:
             inventory_label, inventory_class = _prep_set_inventory_state(prep_set)
             action_id, action_label, action_style = _prep_set_action(prep_set)
+            is_expired = _prep_set_earliest_expiry_assessment(prep_set, today=today).state == "expired"
             warning_items = None
             if prep_set.warnings:
                 warning_items = ui.div(
@@ -678,7 +746,11 @@ def _render_prep_sets_section(prep_result: ActivePrepSetsResult | None) -> ui.Ta
                         ) if action_id and action_label and action_style else ui.span("Resolve mix", class_="text-muted small"),
                         class_="index-planner-cell index-planner-cell--actions",
                     ),
-                    class_="index-planner-row index-planner-row--warn" if prep_set.warnings else "index-planner-row",
+                    class_=" ".join(
+                        ["index-planner-row"]
+                        + (["index-planner-row--warn"] if prep_set.warnings else [])
+                        + (["index-planner-row--expired"] if is_expired else [])
+                    ),
                 )
             )
 
@@ -816,7 +888,7 @@ def _render_prep_sets_card(
         ),
         ui.card_body(
             ui.div(
-                _render_prep_sets_section(prep_result),
+                _render_prep_sets_section(prep_result, today=today),
                 _render_sequencing_stock_section(sequencing_result),
                 class_="index-planner-side-sections",
             )
@@ -825,8 +897,40 @@ def _render_prep_sets_card(
     )
 
 
+def _plate_map_expiry_banner(effective: EffectiveExpiry, *, today: date | None = None) -> ui.TagChild:
+    """Return a compact warning tag for a selected plate's true expiry, or nothing if it's fine."""
+    assessment = _assess_expiry_date(effective.original_date, today=today)
+    if not _expiry_requires_attention(assessment):
+        return None
+
+    if assessment.state == "expired":
+        days_text = f" ({abs(assessment.days_left)} day(s) ago)" if assessment.days_left is not None else ""
+        text = f"Expired {assessment.display_date}{days_text}"
+        modifier = "expired"
+    elif assessment.state == "expires_today":
+        text = f"Expires today ({assessment.display_date})"
+        modifier = "expired"
+    else:
+        text = f"Expires in {assessment.days_left} day(s) ({assessment.display_date})"
+        modifier = "soon"
+
+    tooltip = (
+        f"LIMS currently shows {effective.lims_date} because a cron job pushed the date "
+        "forward to avoid Clarity's automatic archiving."
+        if effective.is_cron_adjusted
+        else None
+    )
+
+    return ui.span(
+        text,
+        class_=f"index-plate-expiry-banner index-plate-expiry-banner--{modifier}",
+        title=tooltip,
+    )
+
+
 def _render_plate_map_card(plate_map: IndexPlateMap, selector: ui.TagChild | None = None) -> ui.Tag:
-    expiry_text = plate_map.lot.expiry_date or "Not set"
+    effective_expiry = _resolve_effective_expiry(plate_map.lot.expiry_date, plate_map.lot.notes)
+    expiry_text = effective_expiry.original_date or "Not set"
     lot_number_text = plate_map.lot.lot_number or "Not set"
     has_parse_warnings = bool(plate_map.warnings)
     issue_count = index_plate_conflict_count(plate_map)
@@ -866,6 +970,11 @@ def _render_plate_map_card(plate_map: IndexPlateMap, selector: ui.TagChild | Non
         archive_button,
         class_="index-plate-footer-actions",
     )
+    footer_row = ui.div(
+        _plate_map_expiry_banner(effective_expiry),
+        footer_actions,
+        class_="index-plate-summary-row index-plate-summary-row--footer",
+    )
 
     if has_parse_warnings:
         body_children: list[ui.TagChild] = []
@@ -903,19 +1012,11 @@ def _render_plate_map_card(plate_map: IndexPlateMap, selector: ui.TagChild | Non
                 class_="index-plate-preview-details",
             )
         )
-        body_children.append(
-            ui.div(
-                footer_actions,
-                class_="index-plate-summary-row index-plate-summary-row--footer",
-            )
-        )
+        body_children.append(footer_row)
     else:
         body_children = [
             _render_plate_grid(plate_map),
-            ui.div(
-                footer_actions,
-                class_="index-plate-summary-row index-plate-summary-row--footer",
-            ),
+            footer_row,
         ]
 
     return ui.card(
@@ -926,6 +1027,7 @@ def _render_plate_map_card(plate_map: IndexPlateMap, selector: ui.TagChild | Non
                     ui.div(
                         ui.span(
                             f"Set {plate_map.lot.set_letter} | Lot Number: {lot_number_text} | Expiry: {expiry_text}",
+                            _cron_adjusted_marker(effective_expiry),
                             class_="index-plate-card-meta",
                         ),
                         ui.span(
@@ -1036,7 +1138,11 @@ def _render_index_lot_overview_header(result: IndexPlateMapsResult) -> ui.Tag:
                             ),
                         )
                     ),
-                    ui.tags.td(row["expiry_date"]),
+                    ui.tags.td(
+                        row["expiry_date"],
+                        _cron_adjusted_marker(row["effective_expiry"]),
+                        class_=_expiry_cell_class(row["expiry_assessment"]),
+                    ),
                     ui.tags.td(
                         ui.input_action_button(
                             f"{action_prefix}_{index}",

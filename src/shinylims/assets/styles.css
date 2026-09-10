@@ -34,7 +34,10 @@ body {
 
 .form-control,
 .form-select,
-input,
+/* Checkboxes and radios are excluded: this forces a white background to keep text
+   inputs legible under itables' dark mode, but on a toggle it also overrides
+   Bootstrap's :checked fill and leaves the control looking permanently empty. */
+input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea,
 .selectize-input,
@@ -563,6 +566,10 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
   background: linear-gradient(180deg, #fff8ed 0%, #fff3e1 100%);
 }
 
+.index-planner-row--expired .index-planner-cell {
+  color: #a32c19;
+}
+
 .index-planner-cell {
   padding: 0.5rem 0.55rem;
   vertical-align: top;
@@ -669,6 +676,11 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
   margin-top: 1rem;
 }
 
+.modal-body.index-planner-expiry-modal {
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
 .index-planner-expiry-table-wrap {
   overflow-x: auto;
 }
@@ -686,6 +698,15 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
 .index-planner-expiry-cell--expired {
   color: #a32c19;
   font-weight: 800;
+}
+
+.index-planner-cron-marker {
+  margin-left: 0.15rem;
+  color: #8b4b00;
+  font-weight: 800;
+  font-size: 1.3em;
+  line-height: 0;
+  cursor: help;
 }
 
 .index-planner-expiry-trigger {
@@ -1144,6 +1165,14 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
   vertical-align: middle;
 }
 
+.index-plate-stock-table td.index-planner-expiry-cell--expired {
+  color: #a32c19;
+}
+
+.index-plate-stock-table td.index-planner-expiry-cell--soon {
+  color: #8b4b00;
+}
+
 .index-plate-stock-table tbody tr:first-child td {
   border-top: 1px solid rgba(18, 58, 99, 0.12);
 }
@@ -1183,6 +1212,27 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
 .index-plate-invalid-banner-text {
   color: #7a3426;
   font-size: 0.92rem;
+}
+
+.index-plate-expiry-banner {
+  margin-right: auto;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: default;
+}
+
+.index-plate-expiry-banner--soon {
+  border: 1px solid rgba(139, 75, 0, 0.35);
+  background: rgba(139, 75, 0, 0.08);
+  color: #6b3900;
+}
+
+.index-plate-expiry-banner--expired {
+  border: 1px solid #e1a597;
+  background: linear-gradient(180deg, #fff1ee 0%, #ffe3dd 100%);
+  color: #8b1f13;
 }
 
 .index-plate-invalid-details,
@@ -2046,4 +2096,193 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
     flex: 0 0 auto;
   }
 
+}
+
+/* Toggled by the table toolbar's "Run Plots" button, which stands in for the
+   <summary> the panel would otherwise be opened by. */
+.seq-plot-panel {
+  overflow: hidden;
+}
+
+.seq-plot-panel > summary {
+  display: none;
+}
+
+/* Collapsed, the panel has no content and no summary, so it flattens to zero
+   height -- but .card's top and bottom borders still paint, meeting as a stray
+   full-width rule above the table toolbar. Drop the card chrome (and the
+   open-state spacing) until there's actually something to frame. */
+.seq-plot-panel:not([open]) {
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.seq-plot-panel[open] {
+  margin-bottom: 1rem;
+}
+
+.seq-plot-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.seq-plot-panel-title {
+  font-weight: 700;
+}
+
+.seq-plot-hide {
+  padding: 0;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.seq-plot-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+/* min-width:0 lets the figure shrink inside the flex row instead of forcing overflow. */
+.seq-plot-figure {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Plotly sizes its canvas from offsetWidth (unzoomed layout px) but maps pointer
+   and text positions through getBoundingClientRect (zoomed px). Body's `zoom: 0.8`
+   therefore desyncs the two by 1/0.8: hover hit-zones land ~25% right of their
+   points and hover-label backgrounds are drawn too small for their text. Cancel
+   the zoom for the figure subtree so both measurements agree again. */
+@media (min-width: 992px) {
+  .seq-plot-figure {
+    zoom: 1.25;
+  }
+}
+
+.seq-plot-controls {
+  flex: 0 0 15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.seq-plot-controls .shiny-input-container {
+  margin-bottom: 0.35rem;
+  width: 100%;
+}
+
+.seq-plot-controls-hint {
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.seq-plot-controls input[type="checkbox"],
+.seq-plot-controls input[type="radio"] {
+  cursor: pointer;
+}
+
+.seq-plot-controls .checkbox label,
+.seq-plot-controls .radio label {
+  cursor: pointer;
+}
+
+/* The plot/table splitter. Full width so it reads as an edge to pull rather
+   than a corner gripper, and tall enough to hit without precision. */
+.seq-plot-resizer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 14px;
+  cursor: row-resize;
+  /* Keep the pointer on the handle mid-drag: without this a fast drag selects
+     the panel text instead of resizing. */
+  user-select: none;
+  touch-action: none;
+}
+
+.seq-plot-resizer::before {
+  content: "";
+  width: 3.5rem;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.25;
+  transition: opacity 0.15s ease, width 0.15s ease;
+}
+
+.seq-plot-resizer:hover::before,
+.seq-plot-resizer.dragging::before,
+.seq-plot-resizer:focus-visible::before {
+  opacity: 0.6;
+  width: 5rem;
+}
+
+.seq-plot-resizer:focus-visible {
+  outline: 2px solid rgba(28, 79, 185, 0.55);
+  outline-offset: -2px;
+  border-radius: 2px;
+}
+
+@media (max-width: 900px) {
+  .seq-plot-layout {
+    flex-direction: column;
+  }
+
+  .seq-plot-controls {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+}
+
+/* Mark the toolbar button as pressed while the panel is open. */
+.dt-button.seq-plot-toolbar-btn.active {
+  background: rgba(28, 79, 185, 0.12) !important;
+  border-color: rgba(28, 79, 185, 0.45) !important;
+  font-weight: 700;
+}
+
+
+/* Mark whichever column menu the visible columns came from: the Presets menu
+   while one of its presets is applied, or the Selection menu once the user has
+   picked columns by hand. Either way most of the table can be hidden, so the
+   toolbar has to show that -- otherwise the missing columns read as missing
+   data. Matches the pressed plot button above. */
+.dt-button.dt-preset-active,
+.dt-button.dt-selection-custom {
+  background: rgba(28, 79, 185, 0.12) !important;
+  border-color: rgba(28, 79, 185, 0.45) !important;
+  font-weight: 700;
+}
+
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Storage Box Status - status filter bar                          */
+/* ─────────────────────────────────────────────────────────────── */
+
+/* Sits directly above the summary line, so the checkboxes read as part of
+   the table rather than as a stray form. */
+.storage-status-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.storage-status-filters-label {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.storage-status-filters .shiny-input-container {
+  margin-bottom: 0;
+  width: auto;
+}
+
+.storage-status-filters input[type="checkbox"],
+.storage-status-filters .checkbox label {
+  cursor: pointer;
 }

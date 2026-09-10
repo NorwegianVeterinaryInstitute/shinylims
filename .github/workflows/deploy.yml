@@ -8,7 +8,6 @@ on:
   push:
     branches:
       - main  # Trigger when pushing to main
-      - feature/itables-2.9.1
 jobs:
   update-branches:
     env:
@@ -36,7 +35,15 @@ jobs:
         run: uv export --no-hashes -o requirements.txt
 
       - name: Generate rsconnect-python manifest.json
-        run: uvx --from rsconnect-python rsconnect write-manifest shiny . --entrypoint shinylims.app:app
+        # -x keeps developer-local and non-runtime files out of the bundle. A manifest
+        # generated on a dev machine otherwise lists .env, and a local `rsconnect deploy`
+        # would then upload real Clarity credentials to Connect. Kept here rather than in
+        # a local-only file so CI and a hand-run deploy produce the same bundle.
+        run: >
+          uvx --from rsconnect-python rsconnect write-manifest shiny .
+          --entrypoint shinylims.app:app
+          -x '.env' -x '.pytest_cache' -x '.vscode' -x '.claude' -x 'tests'
+          -x 'scripts' -x '*.xlsx'
     
       - name: Commit and push changes based on mode
         run: |
