@@ -24,7 +24,7 @@ dependencies = [
     "shinywidgets==0.8.2",
     "tomli==2.4.1",
     "paramiko==5.1.0",
-    "scp==0.15.0"
+    "scp==0.16.2"
 
 ]
 
