@@ -7,11 +7,11 @@ authors = [
 
 description = "A shiny app to display lab metadata from clarity LIMS"
 readme = "README.md"
-requires-python = ">=3.11.5"
+requires-python = ">=3.14"
 dependencies = [
     "faicons==0.2.2",
     "itables==2.9.1",
-    "pandas==2.2.2",
+    "pandas==2.3.3",
     "pins==0.8.5",
     "psycopg[binary]>=3.3.3,<4",
     "python-dotenv>=1.0.1",
@@ -21,7 +21,7 @@ dependencies = [
     "shinyswatch==0.6.1",
     "sqlalchemy>=2.0,<3",
     "plotly==6.0.1",
-    "shinywidgets==0.8.0",
+    "shinywidgets==0.8.2",
     "tomli==2.4.1",
     "paramiko==4.0.0",
     "scp==0.15.0"
@@ -32,6 +32,9 @@ dependencies = [
 dev = [
     "pytest>=9.0.3,<10",
 ]
+
+[tool.uv]
+required-version = ">=0.13.4"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/shinylims"]

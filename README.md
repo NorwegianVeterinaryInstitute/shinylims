@@ -4,7 +4,7 @@ A Python Shiny app extending Clarity LIMS with reporting and additional tools fo
 
 The app displays live metadata read from the Clarity Postgres database, and communicates with the Clarity API to provide additional tools for lab users.
 
-This python package requires Python 3.11+ and is managed with [uv](https://docs.astral.sh/uv). To run it, clone the repository and install the package with:
+This python package requires Python 3.14+ and is managed with [uv](https://docs.astral.sh/uv). To run it, clone the repository and install the package with:
 
 ```
 uv sync

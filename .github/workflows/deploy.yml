@@ -8,10 +8,9 @@ on:
   push:
     branches:
       - main  # Trigger when pushing to main
+      - chore/python-3.14
 jobs:
   update-branches:
-    env:
-      UV_SYSTEM_PYTHON: true
     runs-on: ubuntu-latest
 
     steps:    
@@ -19,8 +18,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v10
         with:
+          version: "0.13.4"
           enable-cache: true
       
       - name: Read deploy mode from text file
@@ -40,7 +40,7 @@ jobs:
         # would then upload real Clarity credentials to Connect. Kept here rather than in
         # a local-only file so CI and a hand-run deploy produce the same bundle.
         run: >
-          uvx --from rsconnect-python rsconnect write-manifest shiny .
+          uvx --with pip==26.2.2 --from rsconnect-python rsconnect write-manifest shiny .
           --entrypoint shinylims.app:app
           -x '.env' -x '.pytest_cache' -x '.vscode' -x '.claude' -x 'tests'
           -x 'scripts' -x '*.xlsx'
