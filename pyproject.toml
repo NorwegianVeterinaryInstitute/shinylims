@@ -13,17 +13,17 @@ dependencies = [
     "itables==2.9.1",
     "pandas==2.3.3",
     "pins==0.8.5",
-    "psycopg[binary]>=3.3.3,<4",
+    "psycopg[binary]>=3.3.4,<4",
     "python-dotenv>=1.0.1",
     "seaborn==0.13.2",
-    "shiny[theme]==1.4.0",
-    "brand-yml==0.1.1",
+    "shiny[theme]==1.6.4",
+    "brand-yml==0.2.0",
     "shinyswatch==0.6.1",
     "sqlalchemy>=2.0,<3",
     "plotly==6.0.1",
     "shinywidgets==0.8.2",
     "tomli==2.4.1",
-    "paramiko==4.0.0",
+    "paramiko==5.1.0",
     "scp==0.15.0"
 
 ]
