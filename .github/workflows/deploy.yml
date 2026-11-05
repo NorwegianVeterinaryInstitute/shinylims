@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main  # Trigger when pushing to main
+      - feature/links-procedures
 jobs:
   update-branches:
     runs-on: ubuntu-latest
