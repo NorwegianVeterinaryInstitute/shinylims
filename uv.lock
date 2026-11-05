@@ -459,6 +459,15 @@ wheels = [
 ]
 
 [[package]]
+name = "databackend"
+version = "0.0.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5a/fb/0f8c739f42008957e4ba334cbf3d0b512946ed6d120e912d3f63f9f1d550/databackend-0.0.3.tar.gz", hash = "sha256:3f047f21b5d92dcfdc85545c679d024b6595bb10a72bd61ef514d8f5857e22f9", size = 12407, upload-time = "2024-08-21T21:09:42.425Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/84/582e1daf3f2eb296573c11b774abf10223e9858d4c5c5c936180b643a720/databackend-0.0.3-py3-none-any.whl", hash = "sha256:2ded97ff85a0ca272d752fbc0513f70512d2c23325e3c72de15613df7e959ef5", size = 7001, upload-time = "2024-08-21T21:09:41.137Z" },
+]
+
+[[package]]
 name = "eval-type-backport"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1223,10 +1232,11 @@ wheels = [
 
 [[package]]
 name = "pins"
-version = "0.8.5"
+version = "0.9.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "appdirs" },
+    { name = "databackend" },
     { name = "fsspec" },
     { name = "humanize" },
     { name = "importlib-metadata" },
@@ -1236,11 +1246,12 @@ dependencies = [
     { name = "pandas" },
     { name = "pyyaml" },
     { name = "requests" },
+    { name = "typing-extensions" },
     { name = "xxhash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/db/55/0b25cec38963c4b8ec03951c384975781499684e1b188a62a80d018a5f37/pins-0.8.5.tar.gz", hash = "sha256:411ad967c93a6f8283c3a272de89f0a1adef3a0735c56986691c97d88cabb454", size = 111858, upload-time = "2024-04-16T23:17:17.08Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/b3/629867e2a279383974b9ba6569ee95b8710f8d36faa4c3062ccc011fe6d4/pins-0.9.2.tar.gz", hash = "sha256:bea7b10304abb5e06327ce1b47de194ff791b50546378057e3b1809bff35235e", size = 121664, upload-time = "2026-10-13T20:37:28.394Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/10/b553b43d81a04719d3edd3e3f0671cb17ed71d1780a358fec9e686a0cd5f/pins-0.8.5-py2.py3-none-any.whl", hash = "sha256:b0e3d75e2e1c516c37bdbf69ac1cfeab3e11d4520f26210c07086a2b4012c983", size = 114218, upload-time = "2024-04-16T23:17:14.851Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/88/b586cae1a985f6400540fe4e9fee18407cda6aada994f73ac5c9af0b8161/pins-0.9.2-py2.py3-none-any.whl", hash = "sha256:25b88b7b34c6ccfb1fce8b8e8b046c78967327a7d33c3471faadec3c3107b900", size = 122647, upload-time = "2026-10-13T20:37:26.991Z" },
 ]
 
 [[package]]
@@ -1780,7 +1791,7 @@ requires-dist = [
     { name = "itables", specifier = "==2.9.1" },
     { name = "pandas", specifier = "==2.3.3" },
     { name = "paramiko", specifier = "==5.1.0" },
-    { name = "pins", specifier = "==0.8.5" },
+    { name = "pins", specifier = "==0.9.2" },
     { name = "plotly", specifier = "==6.0.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4,<4" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
