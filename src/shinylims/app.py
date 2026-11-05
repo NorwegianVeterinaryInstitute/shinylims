@@ -15,6 +15,7 @@ import pytz
 from faicons import icon_svg
 from shiny import App, reactive, render, ui
 
+from shinylims.features.procedures import procedures_server, procedures_ui
 from shinylims.features.projects import projects_server, projects_ui
 from shinylims.features.reagent_overview import (
     reagent_overview_server,
@@ -142,6 +143,21 @@ DASHBOARD_SECTIONS = [
             },
         ],
     },
+    {
+        "id": "resources",
+        "title": "Resources",
+        "description": "Guidelines, procedures, and useful links for the lab.",
+        "cards": [
+            {
+                "view": "procedures",
+                "button_id": "open_tool_procedures",
+                "icon": "book",
+                "eyebrow": "Resource",
+                "title": "Links & Procedures",
+                "description": "Lab guidelines and procedures from GitHub, EK, and SharePoint.",
+            },
+        ],
+    },
 ]
 
 VIEW_DETAILS = {
@@ -174,6 +190,11 @@ VIEW_DETAILS = {
         "eyebrow": "Lab Tool",
         "title": "Storage Box Status",
         "description": "View populated and discarded DNA for NGS storage containers.",
+    },
+    "procedures": {
+        "eyebrow": "Resource",
+        "title": "Links & Procedures",
+        "description": "Lab guidelines and procedures from GitHub, EK, and SharePoint.",
     },
 }
 
@@ -704,6 +725,7 @@ def server(input, output, session):
     reagents_server(input, output, session)
     reagent_overview_server(input, output, session)
     storage_server(input)
+    procedures_server(input)
 
     projects_controller = projects_server(cache.projects, input)
     samples_controller = samples_server(cache.samples, input)
@@ -1055,6 +1077,11 @@ def server(input, output, session):
         _navigate("storage")
 
     @reactive.Effect
+    @reactive.event(input.open_tool_procedures)
+    def _open_procedures():
+        _navigate("procedures")
+
+    @reactive.Effect
     @reactive.event(input.back_to_dashboard)
     def _back_to_dashboard():
         """Return to the previous view (or the dashboard when history is empty)."""
@@ -1296,6 +1323,9 @@ def server(input, output, session):
                 "reagent_overview",
                 reagent_overview_ui(show_title=False),
             )
+
+        if current_view.get() == "procedures":
+            return _detail_shell("procedures", procedures_ui())
 
         return _detail_shell("storage", storage_ui())
 

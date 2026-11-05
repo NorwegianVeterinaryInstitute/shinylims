@@ -2286,3 +2286,138 @@ div.dt-button-collection:has(.dtsb-searchBuilder) {
 .storage-status-filters .checkbox label {
   cursor: pointer;
 }
+
+/* Categories sit side by side as panels, like the dashboard sections. */
+.procedures-page {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr));
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.procedures-category {
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid rgba(149, 217, 243, 0.7);
+  border-radius: 1.25rem;
+  background-color: var(--surface-section);
+}
+
+.procedures-category-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.procedure-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* Cards are either <a> or a Shiny action button, so undo the .btn styling. */
+.procedure-list .procedure-card {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  background-color: var(--surface-card);
+  color: inherit;
+  font-size: 1rem;
+  text-align: left;
+  text-decoration: none;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.procedure-list .procedure-card:hover,
+.procedure-list .procedure-card:focus-visible,
+.procedure-list .procedure-card:active {
+  border-color: var(--border-strong);
+  background-color: var(--surface-card);
+  color: inherit;
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
+}
+
+.procedure-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  height: 100%;
+  padding: 1rem 1.1rem;
+}
+
+.procedure-card-title {
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-strong);
+}
+
+.procedure-card-description {
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* margin-top: auto keeps the action on the bottom line of every card in a row. */
+.procedure-card-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: auto;
+  padding-top: 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--border-strong);
+}
+
+.procedure-card-action svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.procedure-list .procedure-card:hover .procedure-card-action {
+  text-decoration: underline;
+}
+
+/* Reader for GitHub Markdown: use nearly the full browser height. */
+.modal-dialog:has(.procedure-markdown) {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.procedure-markdown {
+  max-height: calc(100vh - 9rem);
+  overflow-y: auto;
+  padding: 0.5rem 1rem;
+}
+
+/* body has `zoom: 0.8` at these widths, which shrinks vh too; 125vh is the full screen. */
+@media (min-width: 992px) {
+  .procedure-markdown {
+    max-height: calc(125vh - 12rem);
+  }
+}
+
+.procedure-markdown pre {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background-color: var(--surface-section);
+}
+
+.procedure-markdown table {
+  margin-bottom: 1rem;
+  border-collapse: collapse;
+}
+
+.procedure-markdown th,
+.procedure-markdown td {
+  padding: 0.3rem 0.9rem 0.3rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
