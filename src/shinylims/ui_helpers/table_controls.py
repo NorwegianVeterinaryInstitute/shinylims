@@ -293,6 +293,7 @@ def filter_state_draw_callback(
     *,
     report_row_state: bool = False,
     default_preset: str | None = None,
+    reorderable_column_filters: bool = False,
 ) -> JavascriptFunction:
     """Return a drawCallback that stores the DT API on ``window``, reports
     the current filter state to the Shiny server via ``dt_filter_state_<table_key>``,
@@ -317,6 +318,9 @@ def filter_state_draw_callback(
     ``default_preset`` names the preset the table starts on (paired with
     ``preset_column_defs``), shown until the visitor picks another or overrides
     the columns themselves.
+
+    With ``reorderable_column_filters``, header inputs follow their columns
+    when ColReorder changes the column order.
     """
     # Read straight off the raw settings object rather than through the DataTables
     # API, which may be unreachable via the page-level `$` (see the jQuery note in
@@ -370,6 +374,34 @@ def filter_state_draw_callback(
             }}
         """
         if report_row_state
+        else ""
+    )
+    column_filter_js = (
+        """
+            if (!settings.__columnFiltersBound) {
+                settings.__columnFiltersBound = true;
+                // Wait for iTables to attach its handlers during initialization.
+                dt.one('init', function() {
+                    const $ = settings.oInstance.constructor;
+                    dt.columns().every(function() {
+                        const input = this.header().querySelector('input');
+                        if (!input) return;
+
+                        // iTables captures the original index. Resolve the input's
+                        // current column each time so drag-to-reorder keeps it bound.
+                        $(input).off('keyup change clear');
+                        input.value = this.search();
+                        input.addEventListener('input', function() {
+                            const column = dt.column(input.closest('th'));
+                            if (column.search() !== input.value) {
+                                column.search(input.value).draw();
+                            }
+                        });
+                    });
+                });
+            }
+        """
+        if reorderable_column_filters
         else ""
     )
     # The preset buttons only change column visibility client-side, so nothing
@@ -521,7 +553,7 @@ def filter_state_draw_callback(
 
             window.__{table_key}DT = dt;
 
-{selection_js}{preset_js}
+{selection_js}{preset_js}{column_filter_js}
             var globalSearch = dt.search() || '';
             var colFilterCount = 0;
             dt.columns().every(function() {{
