@@ -838,6 +838,7 @@ def samples_server(samples_df, input):
                 drawCallback=filter_state_draw_callback(
                     "samples",
                     default_preset=DEFAULT_COLUMN_PRESET,
+                    reorderable_column_filters=True,
                 ),
                 columnDefs=preset_column_defs(DEFAULT_PRESET_COLUMNS, dat.columns) + [
                     {"className": "dt-center", "targets": "_all"},
